@@ -1,8 +1,8 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
-namespace Solace.ApiServer.Models;
+namespace Solace.DB.Models;
 
-public class Account
+public sealed class Account
 {
     public required string Id { get; set; }
 

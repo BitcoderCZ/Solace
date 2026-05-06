@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 using Solace.ApiServer.Models;
 using Solace.Common.Utils;
+using Solace.DB.Models;
+using Solace.DB;
 
 namespace Solace.ApiServer.Controllers.XboxLive;
 

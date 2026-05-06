@@ -6,6 +6,7 @@ using Serilog;
 using Serilog.Events;
 using Solace.ApiServer.Authentication;
 using Solace.ApiServer.Utils;
+using Solace.DB;
 
 namespace Solace.ApiServer;
 

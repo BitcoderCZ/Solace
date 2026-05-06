@@ -6,6 +6,7 @@ using Solace.ApiServer.Models;
 using Solace.ApiServer.Models.Playfab;
 using Solace.ApiServer.Utils;
 using Solace.Common.Utils;
+using Solace.DB;
 
 namespace Solace.ApiServer.Controllers.PlayfabApi;
 

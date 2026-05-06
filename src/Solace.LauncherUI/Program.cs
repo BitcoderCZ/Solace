@@ -76,12 +76,19 @@ public partial class Program
         builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         builder.Services.AddScoped<IAuthorizationHandler, PermissionHandler>();
 
-        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+        var launcherConnectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
         builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-            options.UseSqlite(connectionString));
+            options.UseSqlite(launcherConnectionString));
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlite(connectionString));
+            options.UseSqlite(launcherConnectionString));
+
+        string liveConnectionString = "Data Source=" + Settings.Instance.LiveDatabaseConnectionString!;
+
+        builder.Services.AddDbContextFactory<LiveDbContext>(options =>
+            options.UseSqlite(liveConnectionString));
+        builder.Services.AddDbContext<LiveDbContext>(options =>
+            options.UseSqlite(liveConnectionString));
         builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
         builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -157,9 +164,10 @@ public partial class Program
         {
             // make sure Data dir exists
             Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "Data"));
+            Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), Path.GetDirectoryName(Settings.Instance.LiveDatabaseConnectionString)!));
 
-            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            await dbContext.Database.MigrateAsync();
+            var appDbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await appDbContext.Database.MigrateAsync();
 
             var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
             await EnsureBuiltInRolesAsync(roleManager);

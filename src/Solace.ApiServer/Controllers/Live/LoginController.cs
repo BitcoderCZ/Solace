@@ -12,6 +12,8 @@ using System.Xml;
 using Solace.ApiServer.Models;
 using Solace.ApiServer.Utils;
 using Solace.Common.Utils;
+using Solace.DB.Models;
+using Solace.DB;
 
 namespace Solace.ApiServer.Controllers.Live;
 

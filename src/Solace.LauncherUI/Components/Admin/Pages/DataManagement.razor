@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using System.Security.Claims
 @using Microsoft.Data.Sqlite
+@using Microsoft.EntityFrameworkCore
 @using Serilog
 @using Solace.Common.Utils
 @using Solace.DB
@@ -15,6 +16,7 @@
 @inject NavigationManager NavigationManager
 @inject ServerManager ServerManager
 @inject IJSRuntime JS
+@inject LiveDbContext LiveDb
 
 <PageTitle>Data - Solace</PageTitle>
 
@@ -499,8 +501,7 @@
             var liveDbEntry = liveDbFile is null ? null : archive.GetEntry(liveDbFile);
             if (liveDbEntry is not null)
             {
-                // todo: merge
-                await liveDbEntry.ExtractToFileAsync(_liveDB.FullName, overwrite: true);
+                await ImportLiveDb(liveDbEntry);
             }
 
             foreach (var entry in archive.Entries)
@@ -512,6 +513,8 @@
                     await entry.ExtractToFileAsync(destinationFileName, overwrite: true);
                 }
             }
+
+            Log.Information("Imported server data");
         }
         catch (Exception ex)
         {
@@ -754,7 +757,7 @@
 
             var name = liveDb is null ? null : await DataUtils.GetUsername(userId, liveDb);
 
-            var mergeAction = await PromptMergeConflictAsync($"{propertyName} is different in imported data (user id: {userId}{(name is null ? "" : $", username: {name}")})", currentValue?.ToString() ?? "null", importValue?.ToString() ?? "null", getAuto is not null);
+            var mergeAction = await PromptMergeConflictAsync($"{propertyName} (user id: {userId}{(name is null ? "" : $", username: {name}")})", currentValue?.ToString() ?? "null", importValue?.ToString() ?? "null", getAuto is not null);
 
             return mergeAction switch
             {
@@ -842,6 +845,79 @@ objectType)
                     }
                 }
             }
+        }
+    }
+
+    private async Task ImportLiveDb(ZipArchiveEntry liveDbEntry)
+    {
+        if (!_liveDB.Exists)
+        {
+            await liveDbEntry.ExtractToFileAsync(_liveDB.FullName, overwrite: false);
+        }
+
+        using var liveDb = DataUtils.OpenLiveDB(Settings.Instance);
+
+        var importDbPath = Path.GetTempFileName();
+        await liveDbEntry.ExtractToFileAsync(importDbPath, overwrite: true);
+
+        var optionsBuilder = new DbContextOptionsBuilder<LiveDbContext>();
+        optionsBuilder.UseSqlite("Data Source=" + importDbPath);
+
+        using var importDb = new LiveDbContext(optionsBuilder.Options);
+
+        try
+        {
+            foreach (var importValue in importDb.Accounts.AsNoTracking())
+            {
+                var currentValue = await LiveDb.Accounts.FirstOrDefaultAsync(account => account.Id == importValue.Id);
+
+                if (currentValue is null)
+                {
+                    LiveDb.Accounts.Add(importValue);
+                    continue;
+                }
+
+                currentValue.CreatedDate = await AutoMerge(currentValue.CreatedDate, importValue.CreatedDate, "Created date", importValue.Id, long.Min);
+                currentValue.Username = await AutoMerge(currentValue.Username, importValue.Username, "Username", importValue.Id, null);
+                currentValue.FirstName = await AutoMerge(currentValue.FirstName!, importValue.FirstName!, "First name", importValue.Id, null);
+                currentValue.LastName = await AutoMerge(currentValue.LastName!, importValue.LastName!, "Last name", importValue.Id, null);
+
+                if (!currentValue.PasswordSalt.SequenceEqual(importValue.PasswordSalt) || !currentValue.PasswordHash.SequenceEqual(importValue.PasswordHash))
+                {
+                    if (await AutoMerge("?current?", "?import?", "Password", importValue.Id, null) == "?import?")
+                    {
+                        currentValue.PasswordSalt = importValue.PasswordSalt;
+                        currentValue.PasswordHash = importValue.PasswordHash;
+                    }
+                }
+            }
+
+            await LiveDb.SaveChangesAsync();
+        }
+        finally
+        {
+            File.Delete(importDbPath);
+        }
+
+        async Task<TValue> AutoMerge<TValue>(TValue currentValue, TValue importValue, string propertyName, string userId, Func<TValue, TValue, TValue>? getAuto)
+            where TValue : IEquatable<TValue>
+        {
+            if (currentValue?.Equals(importValue) ?? importValue is null)
+            {
+                return currentValue!;
+            }
+
+            var name = liveDb is null ? null : await DataUtils.GetUsername(userId, liveDb);
+
+            var mergeAction = await PromptMergeConflictAsync($"{propertyName} (user id: {userId}{(name is null ? "" : $", username: {name}")})", currentValue?.ToString() ?? "null", importValue?.ToString() ?? "null", getAuto is not null);
+
+            return mergeAction switch
+            {
+                MergeAction.KeepCurrent => currentValue!,
+                MergeAction.KeepIncoming => importValue!,
+                MergeAction.Auto => getAuto!(currentValue!, importValue!),
+                _ => currentValue!,
+            };
         }
     }
 

@@ -1,7 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Solace.ApiServer.Models;
+using Solace.DB.Models;
 
-namespace Solace.ApiServer;
+namespace Solace.DB;
 
 public class LiveDbContext : DbContext
 {
