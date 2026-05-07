@@ -28,5 +28,44 @@ public sealed class CraftingSlot : IEquatable<CraftingSlot>
         int TotalRounds,
         int CollectedRounds,
         bool FinishedEarly
-    );
+    )
+    {
+        // efcore json needs this
+        private ActiveJobR()
+            : this(default!, default!, default!, default!, default!, default!, default!)
+        {
+        }
+    }
+}
+
+public sealed class CraftingSlotEF
+{
+    public ActiveJobR? ActiveJob { get; set; }
+    public bool Locked { get; set; }
+
+    public sealed record InputRow(InputItem[] Items)
+    {
+        // efcore json needs this
+        public InputRow()
+            : this((InputItem[])default!)
+        {
+        }
+    }
+
+    public sealed record ActiveJobR(
+        string SessionId,
+        string RecipeId,
+        long StartTime,
+        InputRow[] Input,
+        int TotalRounds,
+        int CollectedRounds,
+        bool FinishedEarly
+    )
+    {
+        // efcore json needs this
+        private ActiveJobR()
+            : this(default!, default!, default!, default!, default!, default!, default!)
+        {
+        }
+    }
 }

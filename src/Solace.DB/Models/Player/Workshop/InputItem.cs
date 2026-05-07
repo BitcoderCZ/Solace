@@ -6,4 +6,11 @@ public sealed record InputItem(
      string Id,
      int Count,
      NonStackableItemInstance[] Instances
-);
+)
+{
+     // efcore json needs this
+     private InputItem()
+          : this(default!, default!, default!)
+     {
+     }
+}

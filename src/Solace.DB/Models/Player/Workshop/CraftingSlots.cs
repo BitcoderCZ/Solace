@@ -36,5 +36,5 @@ public sealed class CraftingSlotsEF : IVersionedEntity
 
     public Account Account { get; set; } = null!;
 
-    public CraftingSlot[] Slots { get; set; } = [new CraftingSlot(), new CraftingSlot(), new CraftingSlot()];
+    public CraftingSlotEF[] Slots { get; set; } = [new CraftingSlotEF(), new CraftingSlotEF(), new CraftingSlotEF()];
 }

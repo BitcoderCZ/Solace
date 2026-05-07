@@ -33,16 +33,35 @@ public sealed class SmeltingSlot : IEquatable<SmeltingSlot>
         int TotalRounds,
         int CollectedRounds,
         bool FinishedEarly
-    );
+    )
+    {
+        // efcore json needs this
+        private ActiveJobR()
+            : this(default!, default!, default!, default!, default!, default!, default!, default!)
+        {
+        }
+    }
 
     public sealed record Fuel(
         InputItem Item,
         int BurnDuration,
         int HeatPerSecond
-    );
+    )
+    {
+        private Fuel()
+            : this(default!, default!, default!)
+        {
+        }
+    }
 
     public sealed record BurningR(
         Fuel Fuel,
         int RemainingHeat
-    );
+    )
+    {
+        private BurningR()
+            : this(default!, default!)
+        {
+        }
+    }
 }

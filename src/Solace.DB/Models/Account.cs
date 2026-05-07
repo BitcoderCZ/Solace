@@ -28,7 +28,7 @@ public sealed class Account
     public ProfileEF? Profile { get; set; }
 
     public ActivityLogEF? ActivityLog { get; set; }
-    
+
     public BoostsEF? Boosts { get; set; }
 
     public ICollection<BuildplateEF> Buildplates { get; set; } = [];
@@ -44,8 +44,29 @@ public sealed class Account
     public TokensEF? Tokens { get; set; }
 
     public CraftingSlotsEF? CraftingSlots { get; set; }
-    
+
     public SmeltingSlotsEF? SmeltingSlots { get; set; }
-    
-    public ICollection<SharedBuildplateEF>? SharedBuildplates { get; set; }
+
+    public ICollection<SharedBuildplateEF> SharedBuildplates { get; set; } = [];
+
+    public sealed class Old
+    {
+        public required string Id { get; set; }
+
+        public required long CreatedDate { get; set; }
+
+        public required string Username { get; set; }
+
+        public required string ProfilePictureUrl { get; set; }
+
+        public string? FirstName { get; set; }
+
+        public string? LastName { get; set; }
+
+        [MaxLength(16)]
+        public required byte[] PasswordSalt { get; set; }
+
+        [MaxLength(64)]
+        public required byte[] PasswordHash { get; set; }
+    }
 }

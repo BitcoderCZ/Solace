@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Solace.DB.Models;
+using Solace.DB.Models.Common;
 using Solace.DB.Models.Global;
 using Solace.DB.Models.Player;
 using Solace.DB.Models.Player.Workshop;
@@ -138,24 +140,52 @@ public sealed class EarthDbContext : DbContext
 
         // activity log
         modelBuilder.Entity<ActivityLogEF>()
-            .OwnsOne(x => x.Entries, builder => builder.ToJson());
+            .Property(x => x.Entries)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<List<ActivityLogEF.Entry>>(v, (JsonSerializerOptions)null!) 
+                    ?? new List<ActivityLogEF.Entry>()
+            )
+            .HasColumnType("nvarchar(max)");
 
         // boosts
         modelBuilder.Entity<BoostsEF>()
-            .OwnsOne(x => x.ActiveBoosts, builder => builder.ToJson());
+            .OwnsMany(x => x.ActiveBoosts, builder => builder.ToJson());
 
         // hotbar
         modelBuilder.Entity<HotbarEF>()
-            .OwnsOne(x => x.Items, builder => builder.ToJson());
+            .OwnsMany(x => x.Items, builder => builder.ToJson());
 
         // inventory
+        modelBuilder.Ignore<NonStackableItemInstance>();
+
         modelBuilder.Entity<InventoryEF>()
-            .OwnsOne(x => x.StackableItemsData, builder => builder.ToJson())
-            .OwnsOne(x => x.NonStackableItemsData, builder => builder.ToJson());
+            .Property(x => x.StackableItemsData)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<Dictionary<string, int?>>(v, (JsonSerializerOptions)null!) 
+                    ?? new Dictionary<string, int?>()
+            )
+            .HasColumnType("nvarchar(max)");
+
+        modelBuilder.Entity<InventoryEF>()
+            .Property(x => x.NonStackableItemsData)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, NonStackableItemInstance>>>(v, (JsonSerializerOptions)null!) 
+                    ?? new Dictionary<string, Dictionary<string, NonStackableItemInstance>>()
+            )
+            .HasColumnType("nvarchar(max)");
 
         // journal
         modelBuilder.Entity<JournalEF>()
-            .OwnsOne(x => x.Items, builder => builder.ToJson());
+            .Property(x => x.Items)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<Dictionary<string, JournalEF.ItemJournalEntry>>(v, (JsonSerializerOptions)null!) 
+                    ?? new Dictionary<string, JournalEF.ItemJournalEntry>()
+            )
+            .HasColumnType("nvarchar(max)");
 
         // redeemed tappables
         modelBuilder.Entity<RedeemedTappablesEF>()
@@ -163,15 +193,31 @@ public sealed class EarthDbContext : DbContext
 
         // tokens
         modelBuilder.Entity<TokensEF>()
-            .OwnsOne(x => x.Tokens, builder => builder.ToJson());
+            .Property(x => x.Tokens)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<Dictionary<string, TokensEF.Token>>(v, (JsonSerializerOptions)null!) 
+                    ?? new Dictionary<string, TokensEF.Token>()
+            )
+            .HasColumnType("nvarchar(max)");
 
         // crafting slots
+        modelBuilder.Ignore<CraftingSlotEF.ActiveJobR>();
+
         modelBuilder.Entity<CraftingSlotsEF>()
-            .OwnsOne(x => x.Slots, builder => builder.ToJson());
+            .OwnsMany(x => x.Slots, builder => builder.ToJson());
 
         // smelting slots
+        modelBuilder.Ignore<SmeltingSlot.ActiveJobR>();
+        modelBuilder.Ignore<SmeltingSlot.BurningR>();
+        modelBuilder.Ignore<SmeltingSlot.Fuel >();
+
         modelBuilder.Entity<SmeltingSlotsEF>()
-            .OwnsOne(x => x.Slots, builder => builder.ToJson());
+            .OwnsMany(x => x.Slots, builder => builder.ToJson());
+
+        // shared buildplates
+        modelBuilder.Entity<SharedBuildplateEF>()
+            .OwnsMany(x => x.Hotbar, builder => builder.ToJson());
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

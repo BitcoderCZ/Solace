@@ -78,17 +78,17 @@ public partial class Program
 
         var launcherConnectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-        builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-            options.UseSqlite(launcherConnectionString));
+        // builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+        //     options.UseSqlite(launcherConnectionString));
         builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlite(launcherConnectionString));
 
-        string liveConnectionString = "Data Source=" + Settings.Instance.LiveDatabaseConnectionString!;
+        string earthConnectionString = "Data Source=" + Settings.Instance.EarthDatabaseConnectionString!;
 
-        builder.Services.AddDbContextFactory<LiveDbContext>(options =>
-            options.UseSqlite(liveConnectionString));
-        builder.Services.AddDbContext<LiveDbContext>(options =>
-            options.UseSqlite(liveConnectionString));
+        // builder.Services.AddDbContextFactory<EarthDbContext>(options =>
+        //     options.UseSqlite(earthConnectionString));
+        builder.Services.AddDbContext<EarthDbContext>(options =>
+            options.UseSqlite(earthConnectionString));
         builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
         builder.Services.AddIdentityCore<ApplicationUser>(options =>
