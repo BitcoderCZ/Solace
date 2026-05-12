@@ -53,7 +53,7 @@ public sealed class Importer : IAsyncDisposable
                 .AsTracking()
                 .FirstOrDefaultAsync(template => template.Id == templateId, cancellationToken);
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex)
         {
             Logger.Error($"Failed to fetch template {templateId}: {ex}");
             return false;
@@ -117,7 +117,7 @@ public sealed class Importer : IAsyncDisposable
 
             return true;
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex)
         {
             Logger.Error($"Failed to update template buidplate in database: {ex}");
             await ObjectStoreClient.DeleteAsync(newPreviewObjectId);
@@ -136,7 +136,7 @@ public sealed class Importer : IAsyncDisposable
                 .AsTracking()
                 .FirstOrDefaultAsync(template => template.Id == templateId, cancellationToken);
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex)
         {
             Logger.Error($"Failed to fetch template {templateId}: {ex}");
             return false;
@@ -179,7 +179,7 @@ public sealed class Importer : IAsyncDisposable
 
             await EarthDB.SaveChangesAsync(cancellationToken);
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex)
         {
             Logger.Error($"Failed to remove template {templateId} from DB: {ex}");
             return false;
@@ -208,7 +208,7 @@ public sealed class Importer : IAsyncDisposable
                 .AsNoTracking()
                 .FirstOrDefaultAsync(template => template.Id == templateId, cancellationToken);
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex)
         {
             Logger.Error($"Failed to get template buildplate '{templateId}': {ex}");
             return null;
@@ -256,7 +256,7 @@ public sealed class Importer : IAsyncDisposable
                 .AsTracking()
                 .FirstOrDefaultAsync(buildplate => buildplate.Id == buildplateId && buildplate.AccountId == accountId, cancellationToken);
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex)
         {
             Logger.Error(ex, $"Failed to remove buildplate '{buildplateId}' from player '{accountId}': {ex.Message}");
             return false;
@@ -320,7 +320,7 @@ public sealed class Importer : IAsyncDisposable
 
             return true;
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex)
         {
             Logger.Error($"Failed to update player buildplates in database: {ex}");
             await ObjectStoreClient.DeleteAsync(newPreviewObjectId);
@@ -361,14 +361,14 @@ public sealed class Importer : IAsyncDisposable
 
             return true;
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex) when (ex is DbUpdateException or DbUpdateConcurrencyException)
         {
-            Logger.Error($"Failed to remove buildplate '{buildplateId}' from database for player '{accountId}': {ex}");
+            Logger.Error(ex, $"Failed to remove buildplate '{buildplateId}' from database for player '{accountId}': {ex.Message}");
             return false;
         }
         catch (Exception ex)
         {
-            Logger.Error($"An unexpected error occurred while removing buildplate '{buildplateId}': {ex}");
+            Logger.Error(ex, $"An unexpected error occurred while removing buildplate '{buildplateId}': {ex.Message}");
             return false;
         }
     }
@@ -417,7 +417,7 @@ public sealed class Importer : IAsyncDisposable
                 .AsNoTracking()
                 .FirstOrDefaultAsync(template => template.Id == templateId, cancellationToken);
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex)
         {
             Logger.Error($"Failed to get template buildplate: {ex}");
             return false;
@@ -516,7 +516,7 @@ public sealed class Importer : IAsyncDisposable
                 EarthDB.TemplateBuildplates.Add(template);
                 await EarthDB.SaveChangesAsync(cancellationToken);
             }
-            catch (EarthDB.DatabaseException ex)
+            catch (Exception ex)
             {
                 Logger.Error($"Failed to store template buidplate in database: {ex}");
                 await ObjectStoreClient.DeleteAsync(serverDataObjectId);
@@ -570,7 +570,7 @@ public sealed class Importer : IAsyncDisposable
 
             return true;
         }
-        catch (EarthDB.DatabaseException ex)
+        catch (Exception ex)
         {
             Logger.Error($"Failed to store buildplate in database: {ex}");
             await ObjectStoreClient.DeleteAsync(serverDataObjectId);

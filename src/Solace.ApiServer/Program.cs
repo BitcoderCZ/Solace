@@ -14,6 +14,10 @@ using Solace.EventBus.Client;
 using Solace.ObjectStore.Client;
 using Solace.StaticData;
 using SData = Solace.StaticData.StaticData;
+using Microsoft.AspNetCore.Authentication;
+using Asp.Versioning;
+using Solace.ApiServer.Authentication;
+using Microsoft.AspNetCore.ResponseCompression;
 
 namespace Solace.ApiServer;
 
@@ -22,14 +26,6 @@ public static class Program
     // initialized in main
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     internal static Config config;
-
-    internal static EarthDB DB;
-    internal static SData staticData;
-    internal static EventBusClient eventBus;
-    private static string objectStoreClientConnectionString;
-    internal static TappablesManager tappablesManager;
-    internal static BuildplateInstancesManager buildplateInstancesManager;
-    internal static Importer importer;
 
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     private sealed class Options
@@ -160,21 +156,8 @@ public static class Program
 
         Log.Information("Loaded configuration");
 
-        Log.Information("Connecting to earth database");
-        try
-        {
-            DB = EarthDB.Open(options.EarthDatabaseConnectionString);
-        }
-        catch (EarthDB.DatabaseException ex)
-        {
-            Log.Fatal($"Could not connect to database: {ex}");
-            Log.CloseAndFlush();
-            return 1;
-        }
-
-        Log.Information("Connected to earth database");
-
         Log.Information("Connecting to event bus");
+        EventBusClient eventBus;
         try
         {
             eventBus = await EventBusClient.ConnectAsync(options.EventBusConnectionString);
@@ -192,7 +175,6 @@ public static class Program
         try
         {
             objectStore = await ObjectStoreClient.ConnectAsync(options.ObjectStoreConnectionString);
-            objectStoreClientConnectionString = options.ObjectStoreConnectionString;
         }
         catch (ObjectStoreClientException ex)
         {
@@ -204,6 +186,7 @@ public static class Program
         Log.Information("Connected to object storage");
 
         Log.Information("Loading static data");
+        SData staticData;
         try
         {
             staticData = new SData(options.StaticDataPath);
@@ -219,95 +202,150 @@ public static class Program
 
         Log.Information("Importing shop buildplates");
 
-        EarthDB.ObjectResults? currentShopBuildplates = null;
-        try
-        {
-            currentShopBuildplates = await new EarthDB.ObjectQuery(true)
-                .GetBuildplates(staticData.Buildplates.ShopBuildplates.Select(buildplate => buildplate.Id))
-                .ExecuteAsync(DB);
-        }
-        catch (EarthDB.DatabaseException ex)
-        {
-            Log.Error($"Failed to get current shop buildplates: {ex}");
-        }
+        string earthDbConnectionString = "Data Source=" + options.EarthDatabaseConnectionString!;
+        var earthDbOptionsBuilder = new DbContextOptionsBuilder<EarthDbContext>();
+        earthDbOptionsBuilder.UseSqlite(earthDbConnectionString);
 
-        importer = new Importer(DB, eventBus, objectStore, Log.Logger);
-        if (currentShopBuildplates is not null)
+        using (var earthDbContext = new EarthDbContext(earthDbOptionsBuilder.Options))
         {
-            foreach (var buidplate in staticData.Buildplates.ShopBuildplates)
+            EarthDB.ObjectResults? currentShopBuildplates = null;
+            try
             {
-                if (currentShopBuildplates.GetBuildplate(buidplate.Id) is not null)
-                {
-                    Log.Debug($"Shop buildplate {buidplate.Id} already exists");
-                    continue;
-                }
+                currentShopBuildplates = await new EarthDB.ObjectQuery(true)
+                    .GetBuildplates(staticData.Buildplates.ShopBuildplates.Select(buildplate => buildplate.Id))
+                    .ExecuteAsync(DB);
+            }
+            catch (EarthDB.DatabaseException ex)
+            {
+                Log.Error($"Failed to get current shop buildplates: {ex}");
+            }
 
-                try
+            importer = new Importer(DB, eventBus, objectStore, Log.Logger);
+            if (currentShopBuildplates is not null)
+            {
+                foreach (var buidplate in staticData.Buildplates.ShopBuildplates)
                 {
-                    Log.Information($"Importing shop buildplate {buidplate.Id}");
-
-                    string name = buidplate.Id;
-                    if (Guid.TryParse(buidplate.Id, out var buidplateGuid))
+                    if (currentShopBuildplates.GetBuildplate(buidplate.Id) is not null)
                     {
-                        var bpPlayfabItem = staticData.Playfab.Items.Values.FirstOrDefault(item => item.Data is Playfab.Item.BuildplateData bpData && bpData.Id == buidplateGuid);
-                        if (bpPlayfabItem is not null)
+                        Log.Debug($"Shop buildplate {buidplate.Id} already exists");
+                        continue;
+                    }
+
+                    try
+                    {
+                        Log.Information($"Importing shop buildplate {buidplate.Id}");
+
+                        string name = buidplate.Id;
+                        if (Guid.TryParse(buidplate.Id, out var buidplateGuid))
                         {
-                            name = bpPlayfabItem.Title;
+                            var bpPlayfabItem = staticData.Playfab.Items.Values.FirstOrDefault(item => item.Data is Playfab.Item.BuildplateData bpData && bpData.Id == buidplateGuid);
+                            if (bpPlayfabItem is not null)
+                            {
+                                name = bpPlayfabItem.Title;
+                            }
+                        }
+
+                        using (var buidplateData = buidplate.OpenRead())
+                        {
+                            await importer.ImportTemplateAsync(buidplate.Id, $"[SHOP] {name}", buidplateData);
                         }
                     }
-
-                    using (var buidplateData = buidplate.OpenRead())
+                    catch (Exception ex)
                     {
-                        await importer.ImportTemplateAsync(buidplate.Id, $"[SHOP] {name}", buidplateData);
+                        Log.Fatal($"Failed to import shop buidplate {buidplate.Id}: {ex}");
+                        Log.CloseAndFlush();
+                        return 1;
                     }
-                }
-                catch (Exception ex)
-                {
-                    Log.Fatal($"Failed to import shop buidplate {buidplate.Id}: {ex}");
-                    Log.CloseAndFlush();
-                    return 1;
                 }
             }
         }
 
         Log.Information("Imported shop buidplates");
 
-        tappablesManager = await TappablesManager.CreateAsync(eventBus);
-        buildplateInstancesManager = await BuildplateInstancesManager.CreateAsync(eventBus);
+        var tappablesManager = await TappablesManager.CreateAsync(eventBus);
+        var buildplateInstancesManager = await BuildplateInstancesManager.CreateAsync(eventBus);
 
         BuildplateInstanceRequestHandler.Start(DB, eventBus, objectStore, staticData.Catalog);
 
-        var host = CreateHostBuilder(args, options.HttpPort, options.LiveDatabaseConnectionString).Build();
+        var builder = WebApplication.CreateBuilder(args);
 
-        Log.Information("Updating live db");
-        using (var scope = host.Services.CreateScope())
+        builder.Host.UseSerilog();
+
+        builder.WebHost.UseUrls($"http://*:{options.HttpPort}/");
+
+        builder.Services.AddControllers()
+           .ConfigureApplicationPartManager(manager =>
+           {
+               manager.FeatureProviders.Add(new InternalControllerFeatureProvider());
+           });
+
+        builder.Services.AddResponseCompression(options =>
         {
-            var liveDb = scope.ServiceProvider.GetRequiredService<LiveDbContext>();
-            liveDb.Database.Migrate();
-        }
+            options.Providers.Add<GzipCompressionProvider>();
+        });
 
-        Log.Information("Updated live db");
+        builder.Services.AddResponseCaching();
 
-        host.Run();
+        builder.Services.AddApiVersioning(config =>
+        {
+            config.DefaultApiVersion = new ApiVersion(1, 1);
+            config.AssumeDefaultVersionWhenUnspecified = true;
+            config.ReportApiVersions = true;
+        });
+
+        builder.Services.AddAuthentication("GenoaAuth")
+            .AddScheme<AuthenticationSchemeOptions, GenoaAuthenticationHandler>("GenoaAuth", null);
+
+        builder.Services.AddDbContext<EarthDbContext>(options => options.UseSqlite(earthDbConnectionString));
+
+        var app = builder.Build();
+
+        app.Use(async (context, next) =>
+       {
+           context.Items.Add(RequestUtils.TimestampKey, DateTimeOffset.UtcNow);
+           await next();
+       });
+
+        app.UseSerilogRequestLogging(options =>
+        {
+            // Customize the message template
+            options.MessageTemplate = "{RemoteIpAddress} {RequestMethod} {RequestScheme}://{RequestHost}{RequestPath}{RequestQuery} responded {StatusCode} in {Elapsed:0.0000} ms";
+
+            // Emit debug-level events instead of the defaults
+            options.GetLevel = (httpContext, elapsed, ex) => LogEventLevel.Verbose;
+
+            // Attach additional properties to the request completion event
+            options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+            {
+                diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+                diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
+                diagnosticContext.Set("RemoteIpAddress", httpContext.Connection.RemoteIpAddress);
+                diagnosticContext.Set("RequestQuery", httpContext.Request.QueryString);
+            };
+        });
+
+        app.UseETagger();
+        //app.UseHttpsRedirection();
+
+        app.UseRouting();
+
+        app.UseStaticFiles();
+
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        //app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TransactionManager.MaximumTimeout });
+
+        app.UseResponseCaching();
+
+        app.UseResponseCompression();
+
+        //app.UseSession();
+
+        app.MapControllers();
+
+        await app.RunAsync();
 
         return 0;
     }
-
-    public static IHostBuilder CreateHostBuilder(string[] args, int httpPort, string liveDbConnectionString)
-        => Host.CreateDefaultBuilder(args)
-            .UseSerilog()
-            .ConfigureAppConfiguration((hostingContext, config) =>
-            {
-                config.AddInMemoryCollection([
-                    new("ConnectionStrings:LiveDBConnection", "Data Source=" + liveDbConnectionString)
-                ]);
-            })
-            .ConfigureWebHostDefaults(webBuilder =>
-            {
-                webBuilder.UseStartup<Startup>();
-                webBuilder.UseUrls($"http://*:{httpPort}/");
-            });
-
-    public static async Task<ObjectStoreClient> GetObjectStoreClient()
-        => await ObjectStoreClient.ConnectAsync(objectStoreClientConnectionString);
 }
