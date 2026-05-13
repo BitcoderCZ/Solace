@@ -27,15 +27,9 @@ public sealed class TokensEF : IVersionedEntity
 
     public Token? RemoveToken(string id)
     {
-        Token? res = null;
-        if (Tokens.TryGetValue(id, out Token? t))
-        {
-            res = t;
-        }
+        Tokens.Remove(id, out var token);
 
-        Tokens.Remove(id);
-
-        return res;
+        return token;
     }
 
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
