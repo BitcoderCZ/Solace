@@ -38,7 +38,7 @@ internal sealed partial class SigninController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        // TODO: check credentials
+        // TODO: check credentials - we can at least validate local (non-microsoft) accounts
 
         // TODO: generate secure session token
         string token = userId.ToUpperInvariant();
