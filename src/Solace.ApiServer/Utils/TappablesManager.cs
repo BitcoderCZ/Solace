@@ -149,11 +149,11 @@ public sealed class TappablesManager
         return true;
     }
 
-    public async Task NotifyTileActiveAsync(string playerId, double lat, double lon)
+    public async Task NotifyTileActiveAsync(Guid accountId, double lat, double lon)
     {
         int tileX = XToTile(LonToX(lon));
         int tileY = YToTile(LatToY(lat));
-        string? response = await _requestSender.RequestAsync("tappables", "activeTile", Json.Serialize(new ActiveTileNotification(tileX, tileY, playerId)));
+        string? response = await _requestSender.RequestAsync("tappables", "activeTile", Json.Serialize(new ActiveTileNotification(tileX, tileY, accountId.ToString())));
         if (response is null)
         {
             Log.Warning("Active tile notification event was rejected/ignored");
