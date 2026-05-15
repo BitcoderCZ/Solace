@@ -33,10 +33,17 @@ internal sealed class ResourcePackController : ControllerBase
 [Route("cdn/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35")]
 public class ResourcePackCdnController : ControllerBase
 {
+    private readonly StaticData.StaticData _staticData;
+
+    public ResourcePackCdnController(StaticData.StaticData staticData)
+    {
+        _staticData = staticData;
+    }
+
     [HttpGet, HttpHead]
     public async Task<Results<BadRequest, FileContentHttpResult>> Get()
     {
-        string resourcePackFilePath = Path.Combine(Program.staticData.Directory, @"resourcepacks/vanilla.zip"); //resource packs are distributed as renamed zip files containing an MCpack
+        string resourcePackFilePath = Path.Combine(_staticData.Directory, "resourcepacks", "vanilla.zip"); //resource packs are distributed as renamed zip files containing an MCpack
 
         if (!System.IO.File.Exists(resourcePackFilePath))
         {
