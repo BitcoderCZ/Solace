@@ -70,9 +70,9 @@
 </div>
 
 @code {
-    [Parameter, EditorRequired] public required string BuildplateId { get; set; }
+    [Parameter, EditorRequired] public required Guid BuildplateId { get; set; }
     [Parameter, EditorRequired] public required bool IsTemplate { get; set; }
-    [Parameter] public string? PlayerId { get; set; }
+    [Parameter] public Guid? PlayerId { get; set; }
     [Parameter] public int Size { get; set; }
     [Parameter] public int BlocksPerMeter { get; set; }
     [Parameter] public bool IsNight { get; set; }
