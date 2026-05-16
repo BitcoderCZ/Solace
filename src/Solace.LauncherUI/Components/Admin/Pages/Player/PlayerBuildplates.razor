@@ -456,7 +456,7 @@ _playerPageSize));
         try
         {
             int skip = (_currentPage - 1) * _pageSize;
-            string? searchFilter = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm;
+            string? searchFilter = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm.Trim();
 
             var query = (IQueryable<DB.Models.Global.TemplateBuildplateEF>)EarthDb.TemplateBuildplates;
 
