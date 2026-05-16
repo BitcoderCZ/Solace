@@ -60,12 +60,24 @@ public partial class Program
 
         Log.Logger = log;
 
-        bool isLegacyDb = await IsLegacyEarthDbAsync(Settings.Instance.EarthDatabaseConnectionString!);
-        string legacyDbPath = "";
-        if (isLegacyDb)
+        // bool isLegacyDb = await IsLegacyEarthDbAsync(Settings.Instance.EarthDatabaseConnectionString!);
+        // string legacyDbPath = "";
+        // if (isLegacyDb)
+        // {
+        //     Log.Information("Detected legacy db format, backing up db");
+        //     legacyDbPath = Path.GetUniqueFilePath(Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old")));
+        //     File.Move(Settings.Instance.EarthDatabaseConnectionString!, legacyDbPath);
+        //     Log.Debug($"Moved legacy db to '{legacyDbPath}'");
+        // }
+        bool isLegacyDb = true;
+        string legacyDbPath = Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old"));
+        Log.Information("Detected legacy db format, backing up db");
+        if (File.Exists(legacyDbPath))
         {
-            Log.Information("Detected legacy db format, backing up db");
-            legacyDbPath = Path.GetUniqueFilePath(Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old")));
+            File.Delete(Settings.Instance.EarthDatabaseConnectionString!);
+        }
+        else
+        {
             File.Move(Settings.Instance.EarthDatabaseConnectionString!, legacyDbPath);
             Log.Debug($"Moved legacy db to '{legacyDbPath}'");
         }

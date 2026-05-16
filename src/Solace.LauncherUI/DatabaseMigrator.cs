@@ -338,7 +338,17 @@ internal sealed class DatabaseMigrator
                     var redeemedTappables = (await _earthDb.GetOrCreateAccount(id, query => query.Include(account => account.RedeemedTappables)))
                         .RedeemedTappables!;
 
-                    redeemedTappables.Tappables = value.Tappables;
+                    foreach (var item in value.Tappables)
+                    {
+                        if (Guid.TryParse(item.Key, out var tappableId))
+                        {
+                            redeemedTappables.Tappables[tappableId] = item.Value;
+                        }
+                        else
+                        {
+                            Log.Warning($"Failed to parse tappable id '{item.Key}' as UUID");
+                        }
+                    }
                 }
 
                 break;
