@@ -1,4 +1,6 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
+using Solace.Common;
 using Solace.Common.Utils;
 using Solace.DB.Models.Common;
 
@@ -46,7 +48,7 @@ public sealed class TokensEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
     [JsonDerivedType(typeof(LevelUpToken), "LEVEL_UP")]
     [JsonDerivedType(typeof(JournalItemUnlockedToken), "JOURNAL_ITEM_UNLOCKED")]
-    public abstract class Token : IEquatable<Token>
+    public abstract class Token : IEquatable<Token>, ICloneable<Token>
     {
         [JsonIgnore]
         public TypeE Type { get; init; }
@@ -71,6 +73,23 @@ public sealed class TokensEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
             => Equals(obj as Token);
 
         public abstract override int GetHashCode();
+
+        public abstract Token DeepCopy();
+
+        public sealed class Comparer : IEqualityComparer<Token>
+        {
+            public static Comparer Instance { get; } = new Comparer();
+
+            private Comparer()
+            {
+            }
+
+            public bool Equals(Token? x, Token? y)
+                => x == y || (x?.Equals(y) ?? false);
+
+            public int GetHashCode([DisallowNull] Token obj)
+                => obj.GetHashCode();
+        }
     }
 
     public sealed class LevelUpToken : Token
@@ -90,6 +109,9 @@ public sealed class TokensEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
 
         public override int GetHashCode()
             => HashCode.Combine(Level, Rewards);
+
+        public override LevelUpToken DeepCopy()
+            => new LevelUpToken(Level, Rewards.DeepCopy());
     }
 
     public sealed class JournalItemUnlockedToken : Token
@@ -107,6 +129,9 @@ public sealed class TokensEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
 
         public override int GetHashCode()
             => HashCode.Combine(ItemId);
+
+        public override JournalItemUnlockedToken DeepCopy()
+            => new JournalItemUnlockedToken(ItemId);
     }
 
     public sealed class Legacy : IEquatable<Legacy>

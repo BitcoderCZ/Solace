@@ -1,6 +1,8 @@
 ﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json.Serialization;
+using Solace.Common;
 using Solace.Common.Utils;
 using Solace.DB.Models.Common;
 
@@ -78,7 +80,7 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
     [JsonDerivedType(typeof(CraftingCompletedEntry), "CRAFTING_COMPLETED")]
     [JsonDerivedType(typeof(SmeltingCompletedEntry), "SMELTING_COMPLETED")]
     [JsonDerivedType(typeof(BoostActivatedEntry), "BOOST_ACTIVATED")]
-    public abstract class Entry : IEquatable<Entry>
+    public abstract class Entry : IEquatable<Entry>, ICloneable<Entry>
     {
         public long Timestamp { get; init; }
 
@@ -110,6 +112,23 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
             => Equals(obj as Entry);
 
         public abstract override int GetHashCode();
+
+        public abstract Entry DeepCopy();
+
+        public sealed class Comparer : IEqualityComparer<Entry>
+        {
+            public static Comparer Instance { get; } = new Comparer();
+
+            private Comparer()
+            {
+            }
+
+            public bool Equals(Entry? x, Entry? y)
+                => x == y || (x?.Equals(y) ?? false);
+
+            public int GetHashCode([DisallowNull] Entry obj)
+                => obj.GetHashCode();
+        }
     }
 
     public sealed class LevelUpEntry : Entry
@@ -127,6 +146,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
         public override int GetHashCode()
             => HashCode.Combine(Timestamp, Level);
+
+        public override LevelUpEntry DeepCopy()
+            => new LevelUpEntry(Timestamp, Level);
     }
 
     public sealed class TappableEntry : Entry
@@ -144,6 +166,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
         public override int GetHashCode()
             => HashCode.Combine(Timestamp, Rewards);
+
+        public override TappableEntry DeepCopy()
+            => new TappableEntry(Timestamp, Rewards.DeepCopy());
     }
 
     public sealed class JournalItemUnlockedEntry : Entry
@@ -161,6 +186,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
         public override int GetHashCode()
             => HashCode.Combine(Timestamp, ItemId);
+
+        public override JournalItemUnlockedEntry DeepCopy()
+            => new JournalItemUnlockedEntry(Timestamp, ItemId);
     }
 
     public sealed class CraftingCompletedEntry : Entry
@@ -178,6 +206,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
         public override int GetHashCode()
             => HashCode.Combine(Timestamp, Rewards);
+
+        public override CraftingCompletedEntry DeepCopy()
+            => new CraftingCompletedEntry(Timestamp, Rewards.DeepCopy());
     }
 
     public sealed class SmeltingCompletedEntry : Entry
@@ -195,6 +226,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
         public override int GetHashCode()
             => HashCode.Combine(Timestamp, Rewards);
+
+        public override SmeltingCompletedEntry DeepCopy()
+            => new SmeltingCompletedEntry(Timestamp, Rewards.DeepCopy());
     }
 
     public sealed class BoostActivatedEntry : Entry
@@ -212,6 +246,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
         public override int GetHashCode()
             => HashCode.Combine(Timestamp, ItemId);
+
+        public override BoostActivatedEntry DeepCopy()
+            => new BoostActivatedEntry(Timestamp, ItemId);
     }
 
     public sealed class Legacy : IEquatable<Legacy>

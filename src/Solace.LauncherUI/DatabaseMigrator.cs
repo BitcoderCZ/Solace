@@ -65,10 +65,17 @@ internal sealed class DatabaseMigrator
                     catch (Exception ex)
                     {
                         Log.Error(ex, $"Failed to migrate object '{type}', id: '{id}': {ex.Message}");
+
+                        _earthDb.ChangeTracker.Clear();
+
+                        saveCounter = 0;
                     }
                 }
             }
         }
+
+        await _earthDb.SaveChangesAsync();
+        _earthDb.ChangeTracker.Clear();
 
         // tiles
         using (var command = _legacyEarthDb.CreateCommand())
@@ -92,6 +99,9 @@ internal sealed class DatabaseMigrator
                 }
             }
         }
+
+        await _earthDb.SaveChangesAsync();
+        _earthDb.ChangeTracker.Clear();
 
         // template buildplates
         using (var command = _legacyEarthDb.CreateCommand())
@@ -125,13 +135,14 @@ internal sealed class DatabaseMigrator
         }
 
         await _earthDb.SaveChangesAsync();
+        _earthDb.ChangeTracker.Clear();
 
         // live
         if (_liveDb is not null)
         {
             foreach (var oldAccount in _liveDb.Accounts)
             {
-                var account = await _earthDb.GetOrCreateAccount(GetId(oldAccount.Id), query => query.AsNoTracking());
+                var account = await _earthDb.GetOrCreateAccount(GetId(oldAccount.Id), query => query);
 
                 account.CreatedDate = oldAccount.CreatedDate;
                 account.Username = oldAccount.Username;
@@ -142,7 +153,8 @@ internal sealed class DatabaseMigrator
                 account.PasswordHash = oldAccount.PasswordHash;
             }
 
-            await _liveDb.SaveChangesAsync();
+            await _earthDb.SaveChangesAsync();
+            _earthDb.ChangeTracker.Clear();
         }
 
         async Task SaveEarthChanges()
@@ -152,6 +164,7 @@ internal sealed class DatabaseMigrator
             if (saveCounter >= 100)
             {
                 await _earthDb.SaveChangesAsync();
+                _earthDb.ChangeTracker.Clear();
                 saveCounter = 0;
             }
         }

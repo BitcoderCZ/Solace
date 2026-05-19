@@ -1,5 +1,7 @@
 ﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
+using Solace.Common;
 using Solace.Common.Utils;
 
 namespace Solace.DB.Models.Global;
@@ -130,7 +132,7 @@ public sealed class SharedBuildplateEF : IEntityWithId<Guid>, IMergeable<SharedB
         Hotbar = other.Hotbar;
         ServerDataObjectId = other.ServerDataObjectId;
     }
-    
+
     private string GetInfoString()
         => $"Scale: {Scale}, Night: {Night}, Last modified: {DateTimeOffset.FromUnixTimeMilliseconds(BuildplateLastModifed).UtcDateTime:s}";
 
@@ -139,5 +141,24 @@ public sealed class SharedBuildplateEF : IEntityWithId<Guid>, IMergeable<SharedB
         int Count,
         string? InstanceId,
         int Wear
-    );
+    ) : ICloneable<HotbarItem>
+    {
+        public HotbarItem DeepCopy()
+            => new HotbarItem(this);
+
+        public sealed class Comparer : IEqualityComparer<HotbarItem>
+        {
+            public static Comparer Instance { get; } = new Comparer();
+
+            private Comparer()
+            {
+            }
+
+            public bool Equals(HotbarItem? x, HotbarItem? y)
+                => x == y || (x?.Equals(y) ?? false);
+
+            public int GetHashCode([DisallowNull] HotbarItem obj)
+                => obj.GetHashCode();
+        }
+    }
 }

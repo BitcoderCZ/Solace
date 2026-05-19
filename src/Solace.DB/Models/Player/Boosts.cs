@@ -1,4 +1,6 @@
-﻿using Solace.Common.Utils;
+﻿using System.Diagnostics.CodeAnalysis;
+using Solace.Common;
+using Solace.Common.Utils;
 
 namespace Solace.DB.Models.Player;
 
@@ -54,7 +56,26 @@ public sealed class BoostsEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
         string ItemId,
         long StartTime,
         long Duration
-    );
+    ) : ICloneable<ActiveBoost>
+    {
+        public ActiveBoost DeepCopy()
+            => new ActiveBoost(this);
+
+        public sealed class Comparer : IEqualityComparer<ActiveBoost>
+        {
+            public static Comparer Instance { get; } = new Comparer();
+
+            private Comparer()
+            {
+            }
+
+            public bool Equals(ActiveBoost? x, ActiveBoost? y)
+                => x == y || (x?.Equals(y) ?? false);
+
+            public int GetHashCode([DisallowNull] ActiveBoost obj)
+                => obj.GetHashCode();
+        }
+    }
 
     public sealed class Legacy : IEquatable<Legacy>
     {

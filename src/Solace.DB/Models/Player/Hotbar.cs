@@ -1,4 +1,6 @@
-﻿using BitcoderCZ.Utils;
+﻿using System.Diagnostics.CodeAnalysis;
+using BitcoderCZ.Utils;
+using Solace.Common;
 using Solace.Common.Utils;
 
 namespace Solace.DB.Models.Player;
@@ -84,7 +86,26 @@ public sealed class HotbarEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
         string Uuid,
         int Count,
         string? InstanceId
-    );
+    ) : ICloneable<Item>
+    {
+        public Item DeepCopy()
+            => new Item(this);
+
+        public sealed class Comparer : IEqualityComparer<Item>
+        {
+            public static Comparer Instance { get; } = new Comparer();
+
+            private Comparer()
+            {
+            }
+
+            public bool Equals(Item? x, Item? y)
+                => x == y || (x?.Equals(y) ?? false);
+
+            public int GetHashCode([DisallowNull] Item obj)
+                => obj.GetHashCode();
+        }
+    }
 
     public sealed class Legacy : IEquatable<Legacy>
     {

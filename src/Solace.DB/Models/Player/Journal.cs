@@ -1,4 +1,6 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
+using Solace.Common;
 using Solace.Common.Utils;
 
 namespace Solace.DB.Models.Player;
@@ -62,7 +64,26 @@ public sealed class JournalEF : IEntityWithId<Guid>, IVersionedEntity, IMergeabl
         long FirstSeen,
         long LastSeen,
         int AmountCollected
-    );
+    ) : ICloneable<ItemJournalEntry>
+    {
+        public ItemJournalEntry DeepCopy()
+            => new ItemJournalEntry(this);
+
+        public sealed class Comparer : IEqualityComparer<ItemJournalEntry>
+        {
+            public static Comparer Instance { get; } = new Comparer();
+
+            private Comparer()
+            {
+            }
+
+            public bool Equals(ItemJournalEntry? x, ItemJournalEntry? y)
+                => x == y || (x?.Equals(y) ?? false);
+
+            public int GetHashCode([DisallowNull] ItemJournalEntry obj)
+                => obj.GetHashCode();
+        }
+    }
 
     public sealed class Legacy : IEquatable<Legacy>
     {
