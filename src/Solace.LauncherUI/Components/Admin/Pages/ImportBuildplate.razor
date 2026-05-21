@@ -1,6 +1,7 @@
 @page "/Admin/ImportBuildplate"
 @implements IDisposable
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
 @using Serilog
 @using System.Buffers
 @using System.Text.Json
@@ -15,6 +16,7 @@
 @inject NavigationManager NavManager
 @inject ServerManager ServerManager
 @inject EarthDbContext EarthDb
+@inject IDbContextFactory<EarthDbContext> EarthDbFactory
 
 <PageTitle>Import Buildplate(s) - Solace</PageTitle>
 
@@ -308,7 +310,7 @@ BuildplateLauncher.ExeName))
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, EarthDb, Log.Logger);
+            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, ownsEarthDb: true);
             int successCount = 0;
 
             foreach (var fileState in filesToImport)

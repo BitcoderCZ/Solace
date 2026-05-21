@@ -187,7 +187,12 @@ internal sealed class ShopController : SolaceControllerBase
             return null;
         }
 
-        var importer = new Importer(_earthDB, _eventBus, _objectStore, Log.Logger);
+        await using var importer = new Importer(_earthDB, _eventBus, _objectStore, Log.Logger)
+        {
+            OwnsEarthDb = false,
+            OwnsEventBusClient = false,
+            OwnsObjectStoreClient = false,
+        };
 
         Rubies? rubies = null;
 

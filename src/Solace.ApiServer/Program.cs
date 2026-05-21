@@ -203,7 +203,13 @@ public static class Program
                 .AsNoTracking()
                 .ToListAsync();
 
-            var importer = new Importer(earthDbContext, eventBus, objectStore, Log.Logger);
+            await using var importer = new Importer(earthDbContext, eventBus, objectStore, Log.Logger)
+            {
+                OwnsEarthDb = false,
+                OwnsEventBusClient = false,
+                OwnsObjectStoreClient = false,
+            };
+
             foreach (var buidplate in staticData.Buildplates.ShopBuildplates)
             {
                 if (earthDbContext.TemplateBuildplates.Any(bp => bp.Id == buidplate.Id))

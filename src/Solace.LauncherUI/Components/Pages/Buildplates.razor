@@ -28,6 +28,7 @@
 @inject ServerManager ServerManager
 @inject IJSRuntime JSRuntime
 @inject EarthDbContext EarthDb
+@inject IDbContextFactory<EarthDbContext> EarthDbFactory
 
 <PageTitle>Buildplates - Solace</PageTitle>
 
@@ -376,7 +377,7 @@ BuildplateLauncher.ExeName))
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, EarthDb, Log.Logger);
+            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, ownsEarthDb: true);
 
             if (!await importer.RegenerateTemplatePreviewAsync(bp.Id, default))
             {
@@ -476,7 +477,7 @@ BuildplateLauncher.ExeName))
                 _isDeleting = true;
                 StateHasChanged();
 
-                await using var importer = await Importer.CreateFromSettings(Settings.Instance, EarthDb, Log.Logger);
+                await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, ownsEarthDb: true);
 
                 if (!await importer.RemoveTemplateAsync(_bpToDelete.Id, _removeTemplateFromPlayers, default))
                 {

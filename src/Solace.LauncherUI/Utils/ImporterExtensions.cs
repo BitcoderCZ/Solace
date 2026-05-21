@@ -20,12 +20,17 @@ public static class ImporterExtensions
 {
     extension(Importer)
     {
-        public static async Task<Importer> CreateFromSettings(Settings settings, EarthDbContext earthDb, Serilog.ILogger logger, bool createEventBus = true)
+        public static async Task<Importer> CreateFromSettings(Settings settings, EarthDbContext earthDb, Serilog.ILogger logger, bool createEventBus = true, bool ownsEarthDb = false)
         {
             var eventBus = createEventBus ? await EventBusClient.ConnectAsync($"localhost:{settings.EventBusPort}") : null;
             var objectStore = await ObjectStoreClient.ConnectAsync($"localhost:{settings.ObjectStorePort}");
 
-            return new Importer(earthDb, eventBus, objectStore, logger);
+            return new Importer(earthDb, eventBus, objectStore, logger)
+            {
+                OwnsEarthDb = ownsEarthDb,
+                OwnsEventBusClient = true,
+                OwnsObjectStoreClient = true,
+            };
         }
     }
 

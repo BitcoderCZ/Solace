@@ -30,6 +30,12 @@ public sealed class Importer : IAsyncDisposable
         Logger = logger;
     }
 
+    public required bool OwnsEarthDb { get; init; }
+
+    public required bool OwnsEventBusClient { get; init; }
+
+    public required bool OwnsObjectStoreClient { get; init; }
+
     public async Task<bool> ImportTemplateAsync(Guid templateId, string name, Stream stream, CancellationToken cancellationToken = default)
     {
         var worldData = await WorldData.LoadFromZipAsync(stream, Logger, cancellationToken);
@@ -375,13 +381,20 @@ public sealed class Importer : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        EarthDB.Dispose();
-        if (EventBusClient is not null)
+        if (OwnsEarthDb)
+        {
+            EarthDB.Dispose();
+        }
+
+        if (OwnsEventBusClient && EventBusClient is not null)
         {
             await EventBusClient.DisposeAsync();
         }
 
-        await ObjectStoreClient.DisposeAsync();
+        if (OwnsObjectStoreClient)
+        {
+            await ObjectStoreClient.DisposeAsync();
+        }
     }
 
     private async Task<byte[]> GeneratePreview(WorldData worldData)
