@@ -9,6 +9,7 @@ using Solace.DB.Models.Common;
 using Solace.DB.Models.Global;
 using Solace.DB.Models.Player;
 using Solace.DB.Models.Player.Workshop;
+using Solace.DB.Utils;
 
 namespace Solace.DB;
 
@@ -50,6 +51,20 @@ public sealed class EarthDbContext : DbContext
     public DbSet<TemplateBuildplateEF> TemplateBuildplates { get; set; }
 
     public DbSet<Tile> Tiles { get; set; }
+
+    public static EarthDbContext Create(string path)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<EarthDbContext>();
+        ConfigureBuilder(optionsBuilder, "Data Source=" + Path.GetFullPath(path));
+
+        return new EarthDbContext(optionsBuilder.Options);
+    }
+
+    public static void ConfigureBuilder(DbContextOptionsBuilder optionsBuilder, string connectionString)
+    {
+        optionsBuilder.UseSqlite(connectionString);
+        optionsBuilder.AddInterceptors(new VersioningInterceptor());
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -262,37 +277,6 @@ public sealed class EarthDbContext : DbContext
                     ?? new SharedBuildplateEF.HotbarItem?[7]
             )
             .Metadata.SetValueComparer(new ArrayValueComparer<SharedBuildplateEF.HotbarItem>(SharedBuildplateEF.HotbarItem.Comparer.Instance));
-    }
-
-    public override int SaveChanges(bool acceptAllChangesOnSuccess)
-    {
-        ApplyVersioning();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
-    }
-
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
-    {
-        ApplyVersioning();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
-    }
-
-    private void ApplyVersioning()
-    {
-        var entries = ChangeTracker.Entries<IVersionedEntity>();
-
-        foreach (var entry in entries)
-        {
-            switch (entry.State)
-            {
-                case EntityState.Added:
-                    entry.Property(nameof(IVersionedEntity.Version)).CurrentValue = 1;
-                    break;
-                case EntityState.Modified:
-                    var versionProp = entry.Property(nameof(IVersionedEntity.Version));
-                    versionProp.CurrentValue = (versionProp.CurrentValue is int currentVersion ? currentVersion : 1) + 1;
-                    break;
-            }
-        }
     }
 
     public async Task EnsureAccountExists(Guid id)

@@ -6,11 +6,13 @@ using Solace.DB.Models.Player.Workshop;
 
 namespace Solace.DB.Models;
 
-public sealed class Account : IEntityWithId<Guid>, IMergeable<Account>
+public sealed class Account : IEntityWithId<Guid>, IVersionedEntity, IMergeable<Account>
 {
     public const string DefaultPictureUrl = "images/default_pfp.png";
 
     public required Guid Id { get; set; }
+
+    public int Version { get; set; } = 1;
 
     public required long CreatedDate { get; set; }
 

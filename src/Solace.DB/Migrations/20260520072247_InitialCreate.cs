@@ -49,7 +49,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     Name = table.Column<string>(type: "TEXT", nullable: false),
                     Size = table.Column<int>(type: "INTEGER", nullable: false),
                     Offset = table.Column<int>(type: "INTEGER", nullable: false),
@@ -81,7 +81,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     Entries = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -100,7 +100,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     ActiveBoosts = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -119,7 +119,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     Slots = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -138,7 +138,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     Items = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -157,7 +157,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     StackableItemsData = table.Column<string>(type: "TEXT", nullable: false),
                     NonStackableItemsData = table.Column<string>(type: "TEXT", nullable: false)
                 },
@@ -177,7 +177,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     Items = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -196,7 +196,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     AccountId = table.Column<Guid>(type: "TEXT", nullable: false),
                     TemplateId = table.Column<Guid>(type: "TEXT", nullable: true),
                     Name = table.Column<string>(type: "TEXT", nullable: false),
@@ -224,7 +224,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     Health = table.Column<int>(type: "INTEGER", nullable: false),
                     Experience = table.Column<int>(type: "INTEGER", nullable: false),
                     Level = table.Column<int>(type: "INTEGER", nullable: false),
@@ -246,7 +246,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     Tappables = table.Column<string>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
@@ -293,7 +293,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     Slots = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -312,7 +312,7 @@ namespace Solace.DB.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false, defaultValue: 1),
                     Tokens = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>

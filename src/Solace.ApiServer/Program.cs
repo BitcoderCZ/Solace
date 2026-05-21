@@ -196,10 +196,8 @@ public static class Program
         Log.Information("Importing shop buildplates");
 
         string earthDbConnectionString = "Data Source=" + options.EarthDatabaseConnectionString!;
-        var earthDbOptionsBuilder = new DbContextOptionsBuilder<EarthDbContext>();
-        earthDbOptionsBuilder.UseSqlite(earthDbConnectionString);
 
-        using (var earthDbContext = new EarthDbContext(earthDbOptionsBuilder.Options))
+        using (var earthDbContext = EarthDbContext.Create(options.EarthDatabaseConnectionString!))
         {
             var currentShopBuildplates = await earthDbContext.TemplateBuildplates
                 .AsNoTracking()
@@ -244,7 +242,7 @@ public static class Program
         var tappablesManager = await TappablesManager.CreateAsync(eventBus);
         var buildplateInstancesManager = await BuildplateInstancesManager.CreateAsync(eventBus);
 
-        using var birhEarthDb = new EarthDbContext(earthDbOptionsBuilder.Options);
+        using var birhEarthDb = EarthDbContext.Create(options.EarthDatabaseConnectionString!);
         BuildplateInstanceRequestHandler.Start(birhEarthDb, eventBus, objectStore, staticData.Catalog, buildplateInstancesManager);
 
         var builder = WebApplication.CreateBuilder(args);
@@ -282,7 +280,7 @@ public static class Program
         builder.Services.AddAuthentication("GenoaAuth")
             .AddScheme<AuthenticationSchemeOptions, GenoaAuthenticationHandler>("GenoaAuth", null);
 
-        builder.Services.AddDbContext<EarthDbContext>(options => options.UseSqlite(earthDbConnectionString));
+        builder.Services.AddDbContext<EarthDbContext>(options => EarthDbContext.ConfigureBuilder(options, earthDbConnectionString));
 
         var app = builder.Build();
 

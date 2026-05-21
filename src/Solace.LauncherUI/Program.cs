@@ -81,6 +81,9 @@ public partial class Program
             if (File.Exists(legacyDbPath))
             {
                 File.Delete(Settings.Instance.EarthDatabaseConnectionString!);
+                File.Delete(Settings.Instance.EarthDatabaseConnectionString! + "-shm");
+                File.Delete(Settings.Instance.EarthDatabaseConnectionString! + "-wal");
+                File.Create(Settings.Instance.EarthDatabaseConnectionString!);
             }
             else
             {
@@ -116,10 +119,11 @@ public partial class Program
         // builder.Services.AddDbContext<ApplicationDbContext>(options =>
         //     options.UseSqlite(launcherConnectionString));
 
-        string earthConnectionString = "Data Source=" + Settings.Instance.EarthDatabaseConnectionString!;
+        Console.WriteLine(Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!));
+        string earthConnectionString = "Data Source=" + Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!);
 
         builder.Services.AddDbContextFactory<EarthDbContext>(options =>
-            options.UseSqlite(earthConnectionString));
+            EarthDbContext.ConfigureBuilder(options, earthConnectionString));
         // builder.Services.AddDbContext<EarthDbContext>(options =>
         //     options.UseSqlite(earthConnectionString));
         builder.Services.AddDatabaseDeveloperPageExceptionFilter();

@@ -106,7 +106,7 @@ internal sealed class DatabaseMigrator
         // template buildplates
         using (var command = _legacyEarthDb.CreateCommand())
         {
-            command.CommandText = "SELECT id, value FROM tiles";
+            command.CommandText = "SELECT id, value FROM buildplates";
 
             using (var reader = command.ExecuteReader())
             {
@@ -423,12 +423,11 @@ internal sealed class DatabaseMigrator
 
                     var id = GetId(idString);
 
-                    var buildplates = (await _earthDb.GetOrCreateAccount(id, query => query.Include(account => account.Buildplates)))
-                        .Buildplates!;
+                    await _earthDb.EnsureAccountExists(id);
 
                     foreach (var (buildplateId, buildplate) in value.Buildplates)
                     {
-                        buildplates.Add(new BuildplateEF()
+                        _earthDb.PlayerBuildplates.Add(new BuildplateEF()
                         {
                             Id = Guid.Parse(buildplateId),
                             AccountId = id,
@@ -456,10 +455,9 @@ internal sealed class DatabaseMigrator
                     {
                         var accountId = GetId(buildplate.PlayerId);
 
-                        var sharedBuildplates = (await _earthDb.GetOrCreateAccount(accountId, query => query.Include(account => account.SharedBuildplates)))
-                            .SharedBuildplates!;
+                        await _earthDb.EnsureAccountExists(accountId);
 
-                        sharedBuildplates.Add(new SharedBuildplateEF()
+                        _earthDb.SharedBuildplates.Add(new SharedBuildplateEF()
                         {
                             Id = Guid.Parse(buildplateId),
                             AccountId = accountId,

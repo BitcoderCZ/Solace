@@ -512,10 +512,7 @@
         {
             await earthDbEntry.ExtractToFileAsync(_earthDB.FullName, overwrite: false);
 
-            var optionsBuilder = new DbContextOptionsBuilder<EarthDbContext>();
-            optionsBuilder.UseSqlite("Data Source=" + _earthDB.FullName);
-
-            await using var importDb = new EarthDbContext(optionsBuilder.Options);
+            await using var importDb = EarthDbContext.Create(_earthDB.FullName);
 
             await importDb.Database.MigrateAsync();
 
@@ -530,10 +527,7 @@
         
             if (isSolace)
             {
-                var optionsBuilder = new DbContextOptionsBuilder<EarthDbContext>();
-                optionsBuilder.UseSqlite("Data Source=" + importDbPath);
-
-                await using var importDb = new EarthDbContext(optionsBuilder.Options);
+                await using var importDb = EarthDbContext.Create(importDbPath);
 
                 await importDb.Database.MigrateAsync();
 
@@ -624,10 +618,7 @@
 
         try
         {
-            var optionsBuilder = new DbContextOptionsBuilder<EarthDbContext>();
-            optionsBuilder.UseSqlite("Data Source=" + tempDbPath);
-
-            await using var tempDb = new EarthDbContext(optionsBuilder.Options);
+            await using var tempDb = EarthDbContext.Create(tempDbPath);
 
             await tempDb.Database.MigrateAsync();
 
