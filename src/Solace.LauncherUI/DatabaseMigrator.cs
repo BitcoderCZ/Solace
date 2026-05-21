@@ -78,24 +78,38 @@ internal sealed class DatabaseMigrator
         _earthDb.ChangeTracker.Clear();
 
         // tiles
-        using (var command = _legacyEarthDb.CreateCommand())
+        using (var existsCommand = _legacyEarthDb.CreateCommand())
         {
-            command.CommandText = "SELECT id, value FROM tiles";
+            existsCommand.CommandText = """
+                SELECT name 
+                FROM sqlite_master 
+                WHERE type='table' AND name='tiles'
+                """;
 
-            using (var reader = command.ExecuteReader())
+            bool tableExists = (await existsCommand.ExecuteScalarAsync()) is not null;
+
+            if (tableExists)
             {
-                while (await reader.ReadAsync())
+                using (var command = _legacyEarthDb.CreateCommand())
                 {
-                    ulong id = (ulong)reader.GetInt64(0);
-                    string value = reader.GetString(1);
+                    command.CommandText = "SELECT id, value FROM tiles";
 
-                    _earthDb.Tiles.Add(new Tile()
+                    using (var reader = command.ExecuteReader())
                     {
-                        Id = id,
-                        ObjectStoreId = value,
-                    });
+                        while (await reader.ReadAsync())
+                        {
+                            ulong id = (ulong)reader.GetInt64(0);
+                            string value = reader.GetString(1);
 
-                    await SaveEarthChanges();
+                            _earthDb.Tiles.Add(new Tile()
+                            {
+                                Id = id,
+                                ObjectStoreId = value,
+                            });
+
+                            await SaveEarthChanges();
+                        }
+                    }
                 }
             }
         }
@@ -104,32 +118,46 @@ internal sealed class DatabaseMigrator
         _earthDb.ChangeTracker.Clear();
 
         // template buildplates
-        using (var command = _legacyEarthDb.CreateCommand())
+        using (var existsCommand = _legacyEarthDb.CreateCommand())
         {
-            command.CommandText = "SELECT id, value FROM buildplates";
+            existsCommand.CommandText = """
+                SELECT name 
+                FROM sqlite_master 
+                WHERE type='table' AND name='buildplates'
+                """;
 
-            using (var reader = command.ExecuteReader())
+            bool tableExists = (await existsCommand.ExecuteScalarAsync()) is not null;
+
+            if (tableExists)
             {
-                while (await reader.ReadAsync())
+                using (var command = _legacyEarthDb.CreateCommand())
                 {
-                    string idString = reader.GetString(0);
-                    string valueString = reader.GetString(1);
+                    command.CommandText = "SELECT id, value FROM buildplates";
 
-                    var template = ReadLegacyDbJson<TemplateBuildplateEF.Legacy>(valueString);
-
-                    _earthDb.TemplateBuildplates.Add(new TemplateBuildplateEF()
+                    using (var reader = command.ExecuteReader())
                     {
-                        Id = Guid.Parse(idString),
-                        Name = template.Name,
-                        Size = template.Size,
-                        Offset = template.Offset,
-                        Scale = template.Scale,
-                        Night = template.Night,
-                        ServerDataObjectId = template.ServerDataObjectId,
-                        PreviewObjectId = template.PreviewObjectId,
-                    });
+                        while (await reader.ReadAsync())
+                        {
+                            string idString = reader.GetString(0);
+                            string valueString = reader.GetString(1);
 
-                    await SaveEarthChanges();
+                            var template = ReadLegacyDbJson<TemplateBuildplateEF.Legacy>(valueString);
+
+                            _earthDb.TemplateBuildplates.Add(new TemplateBuildplateEF()
+                            {
+                                Id = Guid.Parse(idString),
+                                Name = template.Name,
+                                Size = template.Size,
+                                Offset = template.Offset,
+                                Scale = template.Scale,
+                                Night = template.Night,
+                                ServerDataObjectId = template.ServerDataObjectId,
+                                PreviewObjectId = template.PreviewObjectId,
+                            });
+
+                            await SaveEarthChanges();
+                        }
+                    }
                 }
             }
         }
