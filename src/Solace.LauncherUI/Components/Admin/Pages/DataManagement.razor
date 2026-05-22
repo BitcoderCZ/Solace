@@ -541,7 +541,7 @@
             where TEntity : class, IEntityWithId<TId>, IMergeable<TEntity>
             where TId : notnull
         {
-            List<TEntity>? importedEntities = await processQuery(importSet).ToListAsync();
+            List<TEntity>? importedEntities = await processQuery(importSet.AsNoTracking()).ToListAsync();
 
             if (!importedEntities.Any())
             {
@@ -556,19 +556,24 @@
                 .Where(e => importIds.Contains(e.Id))
                 .ToDictionaryAsync(e => e.Id);
 
+            var localEntities = currentSet.Local
+                .Where(e => importIds.Contains(e.Id))
+                .ToDictionary(e => e.Id);
+
             foreach (var importEntity in importedEntities)
             {
-                if (existingEntities.TryGetValue(importEntity.Id, out var currentEntity))
-                {
-                    await currentEntity.MergeWith(importEntity, merger);
-                }
-                else
+                if (!existingEntities.TryGetValue(importEntity.Id, out var currentEntity) && !localEntities.TryGetValue(importEntity.Id, out currentEntity))
                 {
                     var modelEntityType = EarthDb.Model.FindEntityType(typeof(TEntity));
                     if (modelEntityType is not null)
                     {
                         foreach (var navigation in modelEntityType.GetNavigations())
                         {
+                            if (navigation.ForeignKey.IsOwnership)
+                            {
+                                continue;
+                            }
+
                             var property = typeof(TEntity).GetProperty(navigation.Name);
                             if (property is not null && property.CanWrite)
                             {
@@ -578,6 +583,11 @@
                     }
 
                     currentSet.Add(importEntity);
+                }
+
+                if (currentEntity is not null)
+                {
+                    await currentEntity.MergeWith(importEntity, merger);
                 }
             }
 

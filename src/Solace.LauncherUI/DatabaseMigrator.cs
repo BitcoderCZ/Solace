@@ -26,8 +26,6 @@ internal sealed class DatabaseMigrator
     private readonly LiveDbContext? _liveDb;
 #pragma warning restore CS0618 // Type or member is obsolete
 
-    private readonly Dictionary<string, Guid> _oldToNewId = [];
-
 #pragma warning disable CS0618 // Type or member is obsolete - needed for migration
     public DatabaseMigrator(EarthDbContext earthDb, SqliteConnection legacyEarthDb, LiveDbContext? liveDb)
 #pragma warning restore CS0618 // Type or member is obsolete
@@ -39,8 +37,6 @@ internal sealed class DatabaseMigrator
 
     public async Task MigrateAsync()
     {
-        _oldToNewId.Clear();
-
         int saveCounter = 0;
 
         // objects
@@ -537,17 +533,6 @@ internal sealed class DatabaseMigrator
         }
     }
 
-    private Guid GetId(string idString)
-    {
-        if (Guid.TryParse(idString, out var id) || _oldToNewId.TryGetValue(idString, out id))
-        {
-            return id;
-        }
-
-        id = Guid.CreateVersion7();
-
-        _oldToNewId.Add(idString, id);
-
-        return id;
-    }
+    private static Guid GetId(string idString)
+        => IdTranslator.ToGuid(idString);
 }
