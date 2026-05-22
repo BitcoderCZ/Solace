@@ -16,7 +16,6 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
 @inject ServerManager ServerManager
-@inject EarthDbContext EarthDb
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
 
 <PageTitle>Player Buildplates - Solace</PageTitle>
@@ -32,7 +31,7 @@
                 Buildplates for Player @(string.IsNullOrEmpty(_username) ? $"with id {AccountId}" : $"{_username} (ID: {AccountId})")
             </h2>
         </div>
-        
+
         <button class="btn btn-primary fw-bold" @onclick="OpenAddModal">
             <i class="bi bi-plus-lg"></i> Add Buildplate
         </button>
@@ -96,7 +95,7 @@
                 <div class="col-12 col-md-6 col-lg-4 col-xl-3" @key="@bp.Id">
                     <div class="card h-100 shadow-sm @(bp.IsBusy ? "opacity-50" : "")">
                         <BuildplatePreview BuildplateId="@bp.Id" IsTemplate=false PlayerId="@AccountId" Size="@bp.Size" BlocksPerMeter="@bp.BlocksPerMeter" IsNight="@bp.IsNight" ResourcePackManager="@_resourcePackManager" />
-                        
+
                         <div class="card-body">
                             @if (!string.IsNullOrEmpty(bp.ErrorMessage))
                             {
@@ -106,7 +105,7 @@
                                     <button type="button" class="btn-close small" style="padding: 0.75rem" @onclick="() => bp.ErrorMessage = null"></button>
                                 </div>
                             }
-                            
+
                             <div class="mb-3">
                                 <label class="form-label visually-hidden">Buildplate Name</label>
                                 <input type="text" minlength="1" maxlength="100" class="form-control fw-bold border-0 bg-light" @bind="bp.Name" @bind:event="oninput" disabled="@(!HasPermission(Permissions.ManagePlayers) || bp.IsBusy)" />
@@ -140,7 +139,7 @@
                                     </button>
                                 }
                             </div>
-                            
+
                             <button class="btn btn-outline-primary btn-sm w-100 fw-bold" @onclick="() => RegeneratePreview(bp)" disabled="@bp.IsBusy">
                                 @if (bp.IsRegeneratingPreview)
                                 {
@@ -225,7 +224,7 @@
                                         </div>
                                         <div class="card-body p-3 d-flex flex-column">
                                             <h6 class="mb-1 fw-bold text-truncate" title="@template.Name">@template.Name</h6>
-                
+
                                             @if (!string.IsNullOrEmpty(template.ErrorMessage))
                                             {
                                                 <div class="alert alert-danger py-1 px-2 small d-flex justify-content-between align-items-center mb-2">
@@ -385,7 +384,10 @@ _playerPageSize));
 
         try
         {
-            _username = (await EarthDb.Accounts.AsNoTracking().FirstOrDefaultAsync(account => account.Id == AccountId))?.Username;
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            _username = (await earthDb.Accounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(account => account.Id == AccountId))?.Username;
         }
         catch (Exception ex)
         {
@@ -400,7 +402,8 @@ _playerPageSize));
     {
         _errorMessage = null; // Clear previous errors
 
-        var buildplates = EarthDb.PlayerBuildplates
+        await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+        var buildplates = earthDb.PlayerBuildplates
             .AsNoTracking()
             .Where(buildplate => buildplate.AccountId == AccountId);
 
@@ -443,7 +446,7 @@ _playerPageSize));
         {
             return;
         }
-        
+
         _currentPage = newPage;
         await LoadBuildplateTemplates();
     }
@@ -451,7 +454,7 @@ _playerPageSize));
     private async Task LoadBuildplateTemplates()
     {
         _isLoadingTemplates = true;
-        
+
         StateHasChanged();
 
         try
@@ -459,11 +462,12 @@ _playerPageSize));
             int skip = (_currentPage - 1) * _pageSize;
             string? searchFilter = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm.Trim();
 
-            var query = (IQueryable<DB.Models.Global.TemplateBuildplateEF>)EarthDb.TemplateBuildplates;
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            var query = (IQueryable<DB.Models.Global.TemplateBuildplateEF>)earthDb.TemplateBuildplates;
 
             if (!string.IsNullOrWhiteSpace(searchFilter))
             {
-                query = query.Where(buildplate => buildplate.Name.Contains(searchFilter));
+                query = query.Where(buildplate => EF.Functions.Like(buildplate.Name, $"%{searchFilter}%"));
             }
 
             _totalCount = await query.CountAsync();
@@ -540,7 +544,8 @@ BuildplateLauncher.ExeName))
 
             var buildplateId = buildplateIdNullable.Value;
 
-            var dbBuildplate = await EarthDb.PlayerBuildplates
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            var dbBuildplate = await earthDb.PlayerBuildplates
                 .AsNoTracking()
                 .FirstAsync(buildplate => buildplate.Id == buildplateId && buildplate.AccountId == AccountId);
 
@@ -560,12 +565,12 @@ BuildplateLauncher.ExeName))
             _playerBuildplates.Add(buildplate);
 
             template.SuccessMessage = "Added successfully!";
-            
+
             _ = Task.Delay(3000).ContinueWith(_ =>
-            {
-                template.SuccessMessage = null;
-                InvokeAsync(StateHasChanged);
-            });
+                        {
+                            template.SuccessMessage = null;
+                            InvokeAsync(StateHasChanged);
+                        });
         }
         catch (Exception ex)
         {
@@ -610,7 +615,7 @@ BuildplateLauncher.ExeName))
                     if (await RemoveBuildplate(_idToDelete.Value))
                     {
                         _playerBuildplates.Remove(item);
-                        
+
                         // Handle edge case where deleting leaves the current page empty
                         if (_playerCurrentPage > TotalPlayerPages)
                         {
@@ -667,7 +672,8 @@ BuildplateLauncher.ExeName))
 
         try
         {
-            var dbBuildplate = await EarthDb.PlayerBuildplates
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            var dbBuildplate = await earthDb.PlayerBuildplates
                 .AsTracking()
                 .FirstOrDefaultAsync(buildplate => buildplate.Id == bp.Id && buildplate.AccountId == AccountId);
 
@@ -676,10 +682,10 @@ BuildplateLauncher.ExeName))
                 dbBuildplate.Name = bp.Name;
                 dbBuildplate.Scale = bp.BlocksPerMeter;
 
-                await EarthDb.SaveChangesAsync();
+                await earthDb.SaveChangesAsync();
 
                 await Task.Delay(250);
-                
+
                 bp.AcceptChanges();
                 Log.Information($"Successfully updated buildplate {bp.Id} for player {AccountId}");
             }
@@ -727,7 +733,8 @@ BuildplateLauncher.ExeName))
                 return;
             }
 
-            var buildplate = await EarthDb.PlayerBuildplates
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            var buildplate = await earthDb.PlayerBuildplates
                 .AsNoTracking()
                 .FirstAsync(buildplate => buildplate.Id == bp.Id && buildplate.AccountId == AccountId);
 
@@ -786,9 +793,9 @@ BuildplateLauncher.ExeName))
         public int Size { get; set; }
         public int BlocksPerMeter { get; set; }
         public bool IsNight { get; set; }
-        
+
         public required string ServerDataObjectId { get; set; }
-        
+
         public bool IsAdding { get; set; }
         public string? ErrorMessage { get; set; }
         public string? SuccessMessage { get; set; }

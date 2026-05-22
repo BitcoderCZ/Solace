@@ -60,51 +60,56 @@ public partial class Program
 
         Log.Logger = log;
 
-        // bool isLegacyDb = await IsLegacyEarthDbAsync(Settings.Instance.EarthDatabaseConnectionString!);
-        // string legacyDbPath = "";
-        // if (isLegacyDb)
-        // {
-        //     Log.Information("Detected legacy db format, backing up db");
-        //     legacyDbPath = Path.GetUniqueFilePath(Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old")));
-        //     File.Move(Settings.Instance.EarthDatabaseConnectionString!, legacyDbPath);
-        //     Log.Debug($"Moved legacy db to '{legacyDbPath}'");
-        // }
-        bool isLegacyDb = true;
-        string legacyDbPath = Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old"));
-        if (EF.IsDesignTime)
-        {
-            isLegacyDb = false;
-        }
-        else
+        bool isLegacyDb = await IsLegacyEarthDbAsync(Settings.Instance.EarthDatabaseConnectionString!);
+        string legacyDbPath = "";
+        string liveDbPath = "";
+        if (isLegacyDb)
         {
             Log.Information("Detected legacy db format, backing up db");
-            if (File.Exists(legacyDbPath))
-            {
-                File.Delete(Settings.Instance.EarthDatabaseConnectionString!);
-                File.Delete(Settings.Instance.EarthDatabaseConnectionString! + "-shm");
-                File.Delete(Settings.Instance.EarthDatabaseConnectionString! + "-wal");
-                await File.Create(Settings.Instance.EarthDatabaseConnectionString!).DisposeAsync(); // create and close it
+            legacyDbPath = Path.GetUniqueFilePath(Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old")));
+            File.Move(Settings.Instance.EarthDatabaseConnectionString!, legacyDbPath);
+            Log.Debug($"Moved legacy earth db to '{legacyDbPath}'");
 
-                try
-                {
-                    var dbFile = new FileInfo(Settings.Instance.EarthDatabaseConnectionString!);
-                    if (dbFile.Exists)
-                    {
-                        dbFile.IsReadOnly = false;
-                        File.SetAttributes(dbFile.FullName, FileAttributes.Normal);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Warning(ex, "Failed to normalize database file permissions");
-                }
-            }
-            else
-            {
-                File.Move(Settings.Instance.EarthDatabaseConnectionString!, legacyDbPath);
-                Log.Debug($"Moved legacy db to '{legacyDbPath}'");
-            }
+            liveDbPath = Path.GetUniqueFilePath(Path.GetFullPath(Path.Combine(DataDirRelative, "live.db.old")));
+            File.Move(Settings.Instance.LiveDatabaseConnectionString!, liveDbPath);
+            Log.Debug($"Moved legacy live db to '{liveDbPath}'");
         }
+        // bool isLegacyDb = true;
+        // string legacyDbPath = Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old"));
+        // if (EF.IsDesignTime)
+        // {
+        //     isLegacyDb = false;
+        // }
+        // else
+        // {
+        //     Log.Information("Detected legacy db format, backing up db");
+        //     if (File.Exists(legacyDbPath))
+        //     {
+        //         File.Delete(Settings.Instance.EarthDatabaseConnectionString!);
+        //         File.Delete(Settings.Instance.EarthDatabaseConnectionString! + "-shm");
+        //         File.Delete(Settings.Instance.EarthDatabaseConnectionString! + "-wal");
+        //         await File.Create(Settings.Instance.EarthDatabaseConnectionString!).DisposeAsync(); // create and close it
+
+        //         try
+        //         {
+        //             var dbFile = new FileInfo(Settings.Instance.EarthDatabaseConnectionString!);
+        //             if (dbFile.Exists)
+        //             {
+        //                 dbFile.IsReadOnly = false;
+        //                 File.SetAttributes(dbFile.FullName, FileAttributes.Normal);
+        //             }
+        //         }
+        //         catch (Exception ex)
+        //         {
+        //             Log.Warning(ex, "Failed to normalize database file permissions");
+        //         }
+        //     }
+        //     else
+        //     {
+        //         File.Move(Settings.Instance.EarthDatabaseConnectionString!, legacyDbPath);
+        //         Log.Debug($"Moved legacy db to '{legacyDbPath}'");
+        //     }
+        // }
 
         builder.Services.AddSingleton<ServerManager>();
 
@@ -232,7 +237,7 @@ public partial class Program
                 {
 #pragma warning disable CS0618 // Type or member is obsolete - needed for migration
                     var optionsBuilder = new DbContextOptionsBuilder<LiveDbContext>();
-                    optionsBuilder.UseSqlite("Data Source=" + Settings.Instance.LiveDatabaseConnectionString!);
+                    optionsBuilder.UseSqlite("Data Source=" + liveDbPath!);
 
                     using var liveDbContext = new LiveDbContext(optionsBuilder.Options);
 #pragma warning restore CS0618 // Type or member is obsolete
@@ -344,9 +349,17 @@ public partial class Program
 
         Log.Information($"Begining database migration from '{legacyDbPath}' to '{Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!)}'");
 
-        await migrator.MigrateAsync();
+        try
+        {
+            await migrator.MigrateAsync();
 
-        Log.Information("Database migrated");
+            Log.Information("Database migrated");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"Failed to migrate database. To retry, delete earth.db and rename (earth/live).db.old to (earth/live).db. Error: {ex.Message}");
+            throw;
+        }
     }
 
     private sealed class PermissionPolicyProvider(IOptions<AuthorizationOptions> options)

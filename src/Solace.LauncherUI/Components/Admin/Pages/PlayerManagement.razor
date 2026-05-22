@@ -11,7 +11,7 @@
 @rendermode InteractiveServer
 @inject IJSRuntime JS
 @inject AuthenticationStateProvider AuthStateProvider
-@inject EarthDbContext EarthDb
+@inject IDbContextFactory<EarthDbContext> EarthDbFactory
 
 <PageTitle>Player Management - Solace</PageTitle>
 
@@ -149,7 +149,7 @@
                             <div class="mb-1">
                                 <small class="text-muted d-block">ID: @player.Id</small>
                             </div>
-                            
+
                             <div class="mb-2">
                                 @if (player.Username is not null)
                                 {
@@ -164,7 +164,7 @@
                                     </span>
                                 }
                             </div>
-                            
+
                             <div class="row mb-3">
                                 <div class="col-6">
                                     <label class="form-label small text-muted mb-0">Level</label>
@@ -178,7 +178,7 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="d-flex justify-content-end gap-2 mt-3">
                                 <button class="btn btn-sm btn-outline-secondary w-50" @onclick="CancelEdit"><i class="bi bi-x-lg me-1"></i>Cancel</button>
                                 <button class="btn btn-sm btn-success w-50" @onclick="() => SaveEditAsync(player)"><i class="bi bi-check-lg me-1"></i>Save</button>
@@ -237,7 +237,7 @@
     private ClaimsPrincipal? _user;
     private List<DB.Models.Account>? _players;
     private string? _errorMessage;
-    
+
     // Edit State
     private Guid? _editingId;
     private string? _editUsername;
@@ -251,7 +251,8 @@
 
         try
         {
-            _players = await EarthDb.Accounts
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            _players = await earthDb.Accounts
                 .AsNoTracking()
                 .Include(account => account.Profile)
                 .ToListAsync();
@@ -301,7 +302,7 @@
         _editTotalRubies = int.Max(_editTotalRubies, 0);
 
         int difference = _editTotalRubies - player.Profile.Rubies.Total;
-        
+
         if (difference > 0)
         {
             player.Profile.Rubies.Purchased += difference;
@@ -309,7 +310,7 @@
         else if (difference < 0)
         {
             int removeAmount = -difference;
-            
+
             int takeFromPurchased = Math.Min(player.Profile.Rubies.Purchased, removeAmount);
             player.Profile.Rubies.Purchased -= takeFromPurchased;
             removeAmount -= takeFromPurchased;
@@ -326,8 +327,9 @@
             _players[pIdx] = player;
         }
 
-        EarthDb.Update(player);
-        await EarthDb.SaveChangesAsync();
+        await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+        earthDb.Update(player);
+        await earthDb.SaveChangesAsync();
 
         _editingId = null;
     }
@@ -356,12 +358,13 @@
 
         try
         {
-            var player = EarthDb.Accounts.FirstOrDefaultAsync(player => player.Id == id);
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            var player = earthDb.Accounts.FirstOrDefaultAsync(player => player.Id == id);
 
             if (player is not null)
             {
-                EarthDb.Remove(player);
-                await EarthDb.SaveChangesAsync();
+                earthDb.Remove(player);
+                await earthDb.SaveChangesAsync();
             }
 
             if (_players != null)

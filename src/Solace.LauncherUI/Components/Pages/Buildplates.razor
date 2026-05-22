@@ -27,7 +27,6 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject ServerManager ServerManager
 @inject IJSRuntime JSRuntime
-@inject EarthDbContext EarthDb
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
 
 <PageTitle>Buildplates - Solace</PageTitle>
@@ -274,11 +273,12 @@
             int skip = (_currentPage - 1) * _pageSize;
             string? searchFilter = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm;
 
-            var query = (IQueryable<DB.Models.Global.TemplateBuildplateEF>)EarthDb.TemplateBuildplates;
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            var query = (IQueryable<DB.Models.Global.TemplateBuildplateEF>)earthDb.TemplateBuildplates;
 
             if (!string.IsNullOrWhiteSpace(searchFilter))
             {
-                query = query.Where(buildplate => buildplate.Name.Contains(searchFilter));
+                query = query.Where(buildplate => EF.Functions.Like(buildplate.Name, $"%{searchFilter}%"));
             }
 
             _totalItems = await query.CountAsync();
@@ -419,14 +419,16 @@ BuildplateLauncher.ExeName))
 
         try
         {
-            var template = await EarthDb.TemplateBuildplates
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+
+            var template = await earthDb.TemplateBuildplates
                 .AsTracking()
                 .FirstAsync(template => template.Id == bp.Id);
 
             template.Name = bp.Name;
             template.Scale = bp.BlocksPerMeter;
 
-            await EarthDb.SaveChangesAsync();
+            await earthDb.SaveChangesAsync();
 
             await Task.Delay(250);
 

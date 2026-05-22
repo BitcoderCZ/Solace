@@ -16,7 +16,7 @@
 @inject NavigationManager NavigationManager
 @inject ServerManager ServerManager
 @inject IJSRuntime JS
-@inject EarthDbContext EarthDb
+@inject IDbContextFactory<EarthDbContext> EarthDbFactory
 
 <PageTitle>Data - Solace</PageTitle>
 
@@ -384,7 +384,8 @@
 
     private async Task ExecuteDelete()
     {
-        await EarthDb.ClearAsync();
+        await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+        await earthDb.ClearAsync();
         _objectStore.SafeDelete(recursive: true);
 
         LoadSizes();
@@ -518,24 +519,26 @@
 
     private async Task ImportSolaceEarthDbAsync(EarthDbContext importDb)
     {
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+
         var merger = new DelegateValueMerger(PromptMergeConflictAsync);
 
-        await MigrateEntity<DB.Models.Account, Guid>(EarthDb.Accounts, importDb.Accounts, query => query);
-        await MigrateEntity<DB.Models.Player.ProfileEF, Guid>(EarthDb.Profiles, importDb.Profiles, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.ActivityLogEF, Guid>(EarthDb.ActivityLogs, importDb.ActivityLogs, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.BoostsEF, Guid>(EarthDb.Boosts, importDb.Boosts, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.BuildplateEF, Guid>(EarthDb.PlayerBuildplates, importDb.PlayerBuildplates, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.HotbarEF, Guid>(EarthDb.Hotbars, importDb.Hotbars, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.InventoryEF, Guid>(EarthDb.Inventories, importDb.Inventories, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.JournalEF, Guid>(EarthDb.Journals, importDb.Journals, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.RedeemedTappablesEF, Guid>(EarthDb.RedeemedTappables, importDb.RedeemedTappables, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.TokensEF, Guid>(EarthDb.Tokens, importDb.Tokens, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.Workshop.CraftingSlotsEF, Guid>(EarthDb.CraftingSlots, importDb.CraftingSlots, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Player.Workshop.SmeltingSlotsEF, Guid>(EarthDb.SmeltingSlots, importDb.SmeltingSlots, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Global.EncounterBuildplateEF, Guid>(EarthDb.EncounterBuildplates, importDb.EncounterBuildplates, query => query);
-        await MigrateEntity<DB.Models.Global.SharedBuildplateEF, Guid>(EarthDb.SharedBuildplates, importDb.SharedBuildplates, query => query.Include(item => item.Account));
-        await MigrateEntity<DB.Models.Global.TemplateBuildplateEF, Guid>(EarthDb.TemplateBuildplates, importDb.TemplateBuildplates, query => query);
-        await MigrateEntity<DB.Models.Global.Tile, ulong>(EarthDb.Tiles, importDb.Tiles, query => query);
+        await MigrateEntity<DB.Models.Account, Guid>(earthDb.Accounts, importDb.Accounts, query => query);
+        await MigrateEntity<DB.Models.Player.ProfileEF, Guid>(earthDb.Profiles, importDb.Profiles, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.ActivityLogEF, Guid>(earthDb.ActivityLogs, importDb.ActivityLogs, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.BoostsEF, Guid>(earthDb.Boosts, importDb.Boosts, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.BuildplateEF, Guid>(earthDb.PlayerBuildplates, importDb.PlayerBuildplates, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.HotbarEF, Guid>(earthDb.Hotbars, importDb.Hotbars, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.InventoryEF, Guid>(earthDb.Inventories, importDb.Inventories, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.JournalEF, Guid>(earthDb.Journals, importDb.Journals, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.RedeemedTappablesEF, Guid>(earthDb.RedeemedTappables, importDb.RedeemedTappables, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.TokensEF, Guid>(earthDb.Tokens, importDb.Tokens, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.Workshop.CraftingSlotsEF, Guid>(earthDb.CraftingSlots, importDb.CraftingSlots, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Player.Workshop.SmeltingSlotsEF, Guid>(earthDb.SmeltingSlots, importDb.SmeltingSlots, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Global.EncounterBuildplateEF, Guid>(earthDb.EncounterBuildplates, importDb.EncounterBuildplates, query => query);
+        await MigrateEntity<DB.Models.Global.SharedBuildplateEF, Guid>(earthDb.SharedBuildplates, importDb.SharedBuildplates, query => query.Include(item => item.Account));
+        await MigrateEntity<DB.Models.Global.TemplateBuildplateEF, Guid>(earthDb.TemplateBuildplates, importDb.TemplateBuildplates, query => query);
+        await MigrateEntity<DB.Models.Global.Tile, ulong>(earthDb.Tiles, importDb.Tiles, query => query);
 
         async Task MigrateEntity<TEntity, TId>(DbSet<TEntity> currentSet, DbSet<TEntity> importSet, Func<IQueryable<TEntity>, IQueryable<TEntity>> processQuery)
             where TEntity : class, IEntityWithId<TId>, IMergeable<TEntity>
@@ -564,7 +567,7 @@
             {
                 if (!existingEntities.TryGetValue(importEntity.Id, out var currentEntity) && !localEntities.TryGetValue(importEntity.Id, out currentEntity))
                 {
-                    var modelEntityType = EarthDb.Model.FindEntityType(typeof(TEntity));
+                    var modelEntityType = earthDb.Model.FindEntityType(typeof(TEntity));
                     if (modelEntityType is not null)
                     {
                         foreach (var navigation in modelEntityType.GetNavigations())
@@ -591,7 +594,7 @@
                 }
             }
 
-            await EarthDb.SaveChangesAsync();
+            await earthDb.SaveChangesAsync();
         }
     }
 
