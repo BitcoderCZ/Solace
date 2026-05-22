@@ -186,7 +186,7 @@
                 </div>
                 <div class="modal-body">
                     <p>A collision was detected for: <strong>@_conflictContext</strong></p>
-                    
+
                     <div class="row mb-3 text-center">
                         <div class="col-6 border-end">
                             <h6 class="text-muted small text-uppercase">Current Server</h6>
@@ -524,7 +524,7 @@
         try
         {
             await earthDbEntry.ExtractToFileAsync(importDbPath, overwrite: true);
-        
+
             if (isSolace)
             {
                 await using var importDb = EarthDbContext.Create(importDbPath);
@@ -602,10 +602,23 @@
                 }
                 else
                 {
+                    var modelEntityType = EarthDb.Model.FindEntityType(typeof(TEntity));
+                    if (modelEntityType is not null)
+                    {
+                        foreach (var navigation in modelEntityType.GetNavigations())
+                        {
+                            var property = typeof(TEntity).GetProperty(navigation.Name);
+                            if (property is not null && property.CanWrite)
+                            {
+                                property.SetValue(importEntity, null);
+                            }
+                        }
+                    }
+
                     currentSet.Add(importEntity);
                 }
             }
-            
+
             await EarthDb.SaveChangesAsync();
         }
     }

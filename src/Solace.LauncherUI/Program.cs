@@ -83,7 +83,21 @@ public partial class Program
                 File.Delete(Settings.Instance.EarthDatabaseConnectionString!);
                 File.Delete(Settings.Instance.EarthDatabaseConnectionString! + "-shm");
                 File.Delete(Settings.Instance.EarthDatabaseConnectionString! + "-wal");
-                File.Create(Settings.Instance.EarthDatabaseConnectionString!);
+                await File.Create(Settings.Instance.EarthDatabaseConnectionString!).DisposeAsync(); // create and close it
+
+                try
+                {
+                    var dbFile = new FileInfo(Settings.Instance.EarthDatabaseConnectionString!);
+                    if (dbFile.Exists)
+                    {
+                        dbFile.IsReadOnly = false;
+                        File.SetAttributes(dbFile.FullName, FileAttributes.Normal);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to normalize database file permissions");
+                }
             }
             else
             {
