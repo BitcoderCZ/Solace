@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Solace.Buildplate.Model;
@@ -106,10 +107,7 @@ public static class ImporterExtensions
                 PreviewData = [.. buffer],
             };
 
-            appDbContext.BuildplatePreviews.Add(dbBuildplatePreview);
-            await appDbContext.SaveChangesAsync(cancellationToken);
-
-            return buffer;
+            return await SaveBuildplatePreviewAsync(appDbContext, dbBuildplatePreview, cancellationToken);
         }
 
         public async Task<ArraySegment<byte>?> GetPlayerBuildplateLauncherPreviewAsync(Guid accountId, Guid buildplateId, ApplicationDbContext appDbContext, ResourcePackManager resourcePackManager, bool getFromCache = true, CancellationToken cancellationToken = default)
@@ -182,10 +180,33 @@ public static class ImporterExtensions
                 PreviewData = [.. buffer],
             };
 
-            appDbContext.BuildplatePreviews.Add(dbBuildplatePreview);
-            await appDbContext.SaveChangesAsync(cancellationToken);
+            return await SaveBuildplatePreviewAsync(appDbContext, dbBuildplatePreview, cancellationToken);
+        }
 
-            return buffer;
+        private static async Task<ArraySegment<byte>?> SaveBuildplatePreviewAsync(ApplicationDbContext appDbContext, DbBuildplatePreview dbBuildplatePreview, CancellationToken cancellationToken)
+        {
+            appDbContext.BuildplatePreviews.Add(dbBuildplatePreview);
+
+            try
+            {
+                await appDbContext.SaveChangesAsync(cancellationToken);
+                return dbBuildplatePreview.PreviewData;
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 19)
+            {
+                appDbContext.ChangeTracker.Clear();
+
+                var existingPreview = await appDbContext.BuildplatePreviews
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(preview => preview.PlayerId == dbBuildplatePreview.PlayerId && preview.BuildplateId == dbBuildplatePreview.BuildplateId, cancellationToken: cancellationToken);
+
+                if (existingPreview is not null)
+                {
+                    return existingPreview.PreviewData;
+                }
+
+                throw;
+            }
         }
     }
 }
