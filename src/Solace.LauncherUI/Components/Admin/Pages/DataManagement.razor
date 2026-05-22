@@ -135,30 +135,6 @@
     }
 </div>
 
-@if (_showImportWarning)
-{
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-warning">
-                    <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Merge Warning</h5>
-                    <button type="button" class="btn-close" @onclick="CancelImport"></button>
-                </div>
-                <div class="modal-body">
-                    <p>
-                        Data already exists on this server. Importing a new dataset will <strong>merge</strong> the incoming
-                        data with the existing records.
-                    </p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="CancelImport">Cancel</button>
-                    <button type="button" class="btn btn-warning" @onclick="ConfirmImport">Proceed with Merge</button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
-
 @if (_isProcessing)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.7); z-index: 1060;">
@@ -264,7 +240,6 @@
     private int _countdown = 5;
 
     // View states - Import/Export
-    private bool _showImportWarning = false;
     private bool _isProcessing = false;
     private string _processingAction = "";
 
@@ -344,20 +319,8 @@
             return;
         }
 
-        if (_totalSpaceB > 0)
-        {
-            _showImportWarning = true;
-        }
-        else
-        {
-            ConfirmImport()
-                .Forget();
-        }
-    }
-
-    private void CancelImport()
-    {
-        _showImportWarning = false;
+        ConfirmImport()
+            .Forget();
     }
 
     private async Task ConfirmImport()
@@ -367,7 +330,6 @@
             return;
         }
 
-        _showImportWarning = false;
         _isProcessing = true;
         _fallbackAction = MergeAction.KeepIncoming;
         _globalMergePreference = null;
@@ -422,7 +384,7 @@
 
     private async Task ExecuteDelete()
     {
-        _earthDB.SafeDelete();
+        await EarthDb.ClearAsync();
         _objectStore.SafeDelete(recursive: true);
 
         LoadSizes();

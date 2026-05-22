@@ -279,6 +279,15 @@ public sealed class EarthDbContext : DbContext
             .Metadata.SetValueComparer(new ArrayValueComparer<SharedBuildplateEF.HotbarItem>(SharedBuildplateEF.HotbarItem.Comparer.Instance));
     }
 
+    public async Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        await Accounts.ExecuteDeleteAsync(cancellationToken);
+
+        await EncounterBuildplates.ExecuteDeleteAsync(cancellationToken);
+        await TemplateBuildplates.ExecuteDeleteAsync(cancellationToken);
+        await Tiles.ExecuteDeleteAsync(cancellationToken);
+    }
+
     public async Task EnsureAccountExists(Guid id)
     {
         if (await Accounts.AnyAsync(account => account.Id == id))
