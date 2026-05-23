@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.Authentication;
 using Asp.Versioning;
 using Solace.ApiServer.Authentication;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.HttpOverrides;
 
 namespace Solace.ApiServer;
 
@@ -293,11 +294,21 @@ public static class Program
 
         var app = builder.Build();
 
+        var forwardedHeadersOptions = new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+        };
+
+        forwardedHeadersOptions.KnownIPNetworks.Clear();
+        forwardedHeadersOptions.KnownProxies.Clear();
+
+        app.UseForwardedHeaders(forwardedHeadersOptions);
+
         app.Use(async (context, next) =>
-       {
-           context.Items.Add(RequestUtils.TimestampKey, DateTimeOffset.UtcNow);
-           await next();
-       });
+        {
+            context.Items.Add(RequestUtils.TimestampKey, DateTimeOffset.UtcNow);
+            await next();
+        });
 
         app.UseSerilogRequestLogging(options =>
         {
@@ -317,23 +328,17 @@ public static class Program
             };
         });
 
-        app.UseETagger();
-        //app.UseHttpsRedirection();
-
-        app.UseRouting();
-
         app.UseStaticFiles();
+        
+        app.UseRouting();
 
         app.UseAuthentication();
         app.UseAuthorization();
 
-        //app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TransactionManager.MaximumTimeout });
+        app.UseETagger();
 
         app.UseResponseCaching();
-
         app.UseResponseCompression();
-
-        //app.UseSession();
 
         app.MapControllers();
 
