@@ -73,6 +73,9 @@ public static class Program
         {
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
+                Directory.CreateDirectory("logs/api_server");
+                File.WriteAllText("logs/api_server/_crash.txt", e.ExceptionObject.ToString());
+
                 Log.Fatal($"Unhandeled exception: {e.ExceptionObject}");
                 Log.CloseAndFlush();
                 Environment.Exit(1);
