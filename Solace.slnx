@@ -7,6 +7,11 @@
     <Project Path="src/Solace.KillHelper/Solace.KillHelper.csproj" />
     <Project Path="src/Solace.LauncherUI/Solace.LauncherUI.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Solace.Common.Tests/Solace.Common.Tests.csproj" />
+    <Project Path="tests/Solace.LauncherUI.Tests/Solace.LauncherUI.Tests.csproj" />
+    <Project Path="tests/Solace.ApiServer.Tests/Solace.ApiServer.Tests.csproj" />
+  </Folder>
   <Project Path="src/Solace.ApiServer/Solace.ApiServer.csproj">
   </Project>
   <Project Path="src/Solace.Buildplate/Solace.Buildplate.csproj">
