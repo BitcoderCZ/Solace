@@ -69,8 +69,6 @@ public sealed class ActiveTiles
         async () =>
         {
             Log.Error("Event bus subscriber error");
-            Log.CloseAndFlush();
-            Environment.Exit(1);
         }));
 
         return tiles;

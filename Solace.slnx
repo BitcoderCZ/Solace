@@ -9,6 +9,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Solace.Common.Tests/Solace.Common.Tests.csproj" />
+    <Project Path="tests/Solace.Integration.Tests/Solace.Integration.Tests.csproj" />
     <Project Path="tests/Solace.LauncherUI.Tests/Solace.LauncherUI.Tests.csproj" />
     <Project Path="tests/Solace.ApiServer.Tests/Solace.ApiServer.Tests.csproj" />
   </Folder>

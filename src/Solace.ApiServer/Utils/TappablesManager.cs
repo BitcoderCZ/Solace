@@ -31,8 +31,6 @@ public sealed class TappablesManager
             async () =>
             {
                 Log.Fatal("Tappables event bus subscriber error");
-                Log.CloseAndFlush();
-                Environment.Exit(1);
             }));
         tappablesManager._requestSender = await eventBusClient.AddRequestSenderAsync();
 
