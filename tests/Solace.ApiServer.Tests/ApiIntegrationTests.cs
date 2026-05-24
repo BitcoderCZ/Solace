@@ -59,7 +59,7 @@ public class ApiIntegrationTests
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync(new[] { typeof(UserController) }, connection);
+        await using var app = await BuildTestHostAsync([typeof(UserController)], connection);
         var client = app.GetTestClient();
 
         var userId = Guid.NewGuid();
@@ -103,7 +103,7 @@ public class ApiIntegrationTests
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync(new[] { typeof(XstsController) }, connection);
+        await using var app = await BuildTestHostAsync([typeof(XstsController)], connection);
         var client = app.GetTestClient();
 
         var userId = Guid.NewGuid();
@@ -146,7 +146,7 @@ public class ApiIntegrationTests
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync(new[] { typeof(LoginController), typeof(XstsController) }, connection);
+        await using var app = await BuildTestHostAsync([typeof(LoginController), typeof(XstsController)], connection);
         var client = app.GetTestClient();
 
         using (var scope = app.Services.CreateScope())
@@ -221,7 +221,7 @@ public class ApiIntegrationTests
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync(new[] { typeof(AuthenticationController) }, connection);
+        await using var app = await BuildTestHostAsync([typeof(AuthenticationController)], connection);
         var client = app.GetTestClient();
 
         var entityId = Guid.NewGuid();
@@ -257,7 +257,7 @@ public class ApiIntegrationTests
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync(new[] { typeof(SigninController) }, connection);
+        await using var app = await BuildTestHostAsync([typeof(SigninController)], connection);
         var client = app.GetTestClient();
 
         var sessionTicket = "0123456789ABCDEF-test-token";
@@ -275,7 +275,7 @@ public class ApiIntegrationTests
     }
 
     private static Task<WebApplication> BuildTestHostAsync(Type controllerType)
-        => BuildTestHostAsync(new[] { controllerType }, null);
+        => BuildTestHostAsync([controllerType], null);
 
     private static async Task<WebApplication> BuildTestHostAsync(Type[] controllerTypes, SqliteConnection? connection)
     {

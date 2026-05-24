@@ -16,9 +16,9 @@ public class ServerManagerTests
         manager.RefreshComponentStatuses(detectRunning: false);
 
         await Assert.That(manager.Status).IsEqualTo(ServerStatus.Offline);
-        await Assert.That(manager.AnyOnline).IsEqualTo(false);
-        await Assert.That(manager.CanStart).IsEqualTo(true);
-        await Assert.That(manager.CanStop).IsEqualTo(false);
+        await Assert.That(manager.AnyOnline).IsFalse();
+        await Assert.That(manager.CanStart).IsTrue();
+        await Assert.That(manager.CanStop).IsFalse();
     }
 
     [Test]
@@ -31,7 +31,7 @@ public class ServerManagerTests
         manager.RefreshComponentStatuses(detectRunning: false);
 
         await Assert.That(manager.Status).IsEqualTo(ServerStatus.PartiallyOnline);
-        await Assert.That(manager.AnyOnline).IsEqualTo(true);
+        await Assert.That(manager.AnyOnline).IsTrue();
     }
 
     [Test]
@@ -46,7 +46,7 @@ public class ServerManagerTests
         manager.RefreshComponentStatuses(detectRunning: false);
         var lockHandle = manager.AcquireStartLock();
 
-        await Assert.That(lockHandle).IsEqualTo(null);
+        await Assert.That(lockHandle).IsNull();
     }
 
     [Test]
@@ -60,10 +60,10 @@ public class ServerManagerTests
         var lockHandle = manager.AcquireStartLock();
 
         await Assert.That(lockHandle).IsNotEqualTo(null);
-        await Assert.That(manager.StartLocked).IsEqualTo(true);
+        await Assert.That(manager.StartLocked).IsTrue();
 
         lockHandle?.Dispose();
-        await Assert.That(manager.StartLocked).IsEqualTo(false);
+        await Assert.That(manager.StartLocked).IsFalse();
     }
 
     [Test]
@@ -89,6 +89,6 @@ public class ServerManagerTests
 
         manager.RefreshComponentStatuses(detectRunning: false);
 
-        await Assert.That(manager.CanRestart).IsEqualTo(false);
+        await Assert.That(manager.CanRestart).IsFalse();
     }
 }
