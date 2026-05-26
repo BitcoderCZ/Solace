@@ -38,6 +38,15 @@ internal static class Permissions
     [PermissionInfo("Buildplates", "Manage buildplates - import, edit, delete")]
     public const string ManageBuildplates = "buildplate.manage";
 
+    [PermissionInfo("Data", "View server data - space usage")]
+    public const string ViewData = "data.view";
+
+    [PermissionInfo("Data", "Export server data")]
+    public const string ExportData = "data.export";
+
+    [PermissionInfo("Data", "Upload and delete all server data")]
+    public const string EditData = "data.edit";
+
     public static readonly ImmutableArray<string> All;
     public static readonly ImmutableArray<PermissionDescriptor> AllWithInfo;
 

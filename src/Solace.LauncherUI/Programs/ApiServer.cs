@@ -31,7 +31,6 @@ internal static class ApiServer
         [
             $"--port={settings.ApiPort}",
             $"--earth-db={settings.EarthDatabaseConnectionString}",
-            $"--live-db={settings.LiveDatabaseConnectionString}",
             $"--eventbus=localhost:{settings.EventBusPort}",
             $"--objectstore=localhost:{settings.ObjectStorePort}",
             $"--logger-url={Program.LoggerAddress}",

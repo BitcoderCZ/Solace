@@ -12,6 +12,8 @@ using System.Xml;
 using Solace.ApiServer.Models;
 using Solace.ApiServer.Utils;
 using Solace.Common.Utils;
+using Solace.DB.Models;
+using Solace.DB;
 
 namespace Solace.ApiServer.Controllers.Live;
 
@@ -21,9 +23,9 @@ internal sealed partial class LoginController : SolaceControllerBase
 {
     private static readonly RandomNumberGenerator _rng = RandomNumberGenerator.Create();
 
-    private static Config config => Program.config;
+    private static Config Config => Program.config;
 
-    private readonly LiveDbContext _dbContext;
+    private readonly EarthDbContext _dbContext;
 
     private static readonly (string, string)[] namespaces =
     [
@@ -41,7 +43,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         ("ns1", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"),
     ];
 
-    public LoginController(LiveDbContext context)
+    public LoginController(EarthDbContext context)
     {
         _dbContext = context;
     }
@@ -55,7 +57,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         => TypedResults.VirtualFile("/reauthenticate.html", "text/html");
 
     private sealed record LoginResponse(
-        string UserId,
+        Guid UserId,
         string Username,
         string FirstName,
         string LastName,
@@ -144,7 +146,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.BadRequest("Account with the specified username already exists");
         }
 
-        string userId = GenerateUserId(username);
+        var userId = GenerateUserId(username);
 
         byte[] passwordSalt = new byte[16];
         _rng.GetBytes(passwordSalt);
@@ -156,7 +158,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             Id = userId,
             CreatedDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             Username = username,
-            ProfilePictureUrl = $"images/default_pfp.png", // TODO
+            ProfilePictureUrl = Account.DefaultPictureUrl, // TODO
             FirstName = firstName,
             LastName = lastName,
             PasswordSalt = passwordSalt,
@@ -220,11 +222,11 @@ internal sealed partial class LoginController : SolaceControllerBase
                 return TypedResults.BadRequest();
             }
 
-            var headerValidity = ValidityDatePair.Create(config.Login.SoapHeaderValidityMinutes);
+            var headerValidity = ValidityDatePair.Create(Config.Login.SoapHeaderValidityMinutes);
 
-            var deviceTokenValidity = ValidityDatePair.Create(config.Login.DeviceTokenValidityMinutes);
+            var deviceTokenValidity = ValidityDatePair.Create(Config.Login.DeviceTokenValidityMinutes);
             var deviceToken = new Tokens.Live.DeviceToken();
-            string deviceTokenString = JwtUtils.Sign(deviceToken, config.Login.DeviceTokenSecretBytes, deviceTokenValidity);
+            string deviceTokenString = JwtUtils.Sign(deviceToken, Config.Login.DeviceTokenSecretBytes, deviceTokenValidity);
 
             var response = new XmlDocument();
 
@@ -394,9 +396,10 @@ internal sealed partial class LoginController : SolaceControllerBase
                 return TypedResults.BadRequest();
             }
 
-            var userToken = JwtUtils.Verify<Tokens.Live.UserToken>(userTokenString, config.Login.UserTokenSecretBytes, allowExpired: true);
+            // todo: why do we allowExpired?
+            var userToken = JwtUtils.Verify<Tokens.Live.UserToken>(userTokenString, Config.Login.UserTokenSecretBytes, allowExpired: true);
 #pragma warning disable IDE0059 // Unnecessary assignment of a value
-            var deviceToken = JwtUtils.Verify<Tokens.Live.DeviceToken>(deviceTokenString, config.Login.DeviceTokenSecretBytes, allowExpired: true);
+            var deviceToken = JwtUtils.Verify<Tokens.Live.DeviceToken>(deviceTokenString, Config.Login.DeviceTokenSecretBytes, allowExpired: true);
 #pragma warning restore IDE0059 // Unnecessary assignment of a value
 
             if (userToken is null || userToken.Expired is true)
@@ -406,18 +409,18 @@ internal sealed partial class LoginController : SolaceControllerBase
             }
             else
             {
-                var headerValidity = ValidityDatePair.Create(config.Login.SoapHeaderValidityMinutes);
+                var headerValidity = ValidityDatePair.Create(Config.Login.SoapHeaderValidityMinutes);
                 string nonce = GenerateNonce();
 
-                var nextUserTokenValidity = ValidityDatePair.Create(config.Login.UserTokenValidityMinutes);
+                var nextUserTokenValidity = ValidityDatePair.Create(Config.Login.UserTokenValidityMinutes);
                 var nextUserToken = userToken.Data;
-                string nextUserTokenString = JwtUtils.Sign(nextUserToken, config.Login.UserTokenSecretBytes, nextUserTokenValidity);
+                string nextUserTokenString = JwtUtils.Sign(nextUserToken, Config.Login.UserTokenSecretBytes, nextUserTokenValidity);
 
-                var xboxTokenValidity = ValidityDatePair.Create(config.Login.XboxTokenValidityMinutes);
+                var xboxTokenValidity = ValidityDatePair.Create(Config.Login.XboxTokenValidityMinutes);
                 var xboxToken = new Tokens.Shared.XboxTicketToken(userToken.Data.UserId, userToken.Data.Username);
-                string xboxTokenString = JwtUtils.Sign(xboxToken, config.Login.XboxTokenSecretBytes, xboxTokenValidity);
+                string xboxTokenString = JwtUtils.Sign(xboxToken, Config.Login.XboxTokenSecretBytes, xboxTokenValidity);
 
-                string nextSessionKey = config.Login.UserTokenSessionKey;
+                string nextSessionKey = Config.Login.UserTokenSessionKey;
 
                 var tokenDocument = new XmlDocument();
 
@@ -506,7 +509,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                 tokenDocument.AppendChild(requestSecurityTokenResponseCollection);
                 string tokenDocumentString = tokenDocument.OuterXml;
 
-                string tokenDocumentCipherText = DoAESEncryption(config.Login.UserTokenSessionKeyBytes, nonce, tokenDocumentString);
+                string tokenDocumentCipherText = DoAESEncryption(Config.Login.UserTokenSessionKeyBytes, nonce, tokenDocumentString);
 
                 var response = new XmlDocument();
                 var envelope = CreateElement(response, "S", "Envelope");
@@ -625,14 +628,16 @@ internal sealed partial class LoginController : SolaceControllerBase
 
     private static LoginResponse CreateLoginResponse(Account account)
     {
-        var tokenValidity = ValidityDatePair.Create(config.Login.UserTokenValidityMinutes);
+        Debug.Assert(account.Username is not null);
+
+        var tokenValidity = ValidityDatePair.Create(Config.Login.UserTokenValidityMinutes);
         var token = new Tokens.Live.UserToken(
             account.Id,
             account.Username,
             Convert.ToBase64String(account.PasswordSalt),
             Convert.ToBase64String(account.PasswordHash)
         );
-        string tokenString = JwtUtils.Sign(token, config.Login.UserTokenSecretBytes, tokenValidity);
+        string tokenString = JwtUtils.Sign(token, Config.Login.UserTokenSecretBytes, tokenValidity);
 
         return new LoginResponse(
             account.Id,
@@ -642,7 +647,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             tokenString,
             tokenValidity.IssuedStr,
             tokenValidity.ExpiresStr,
-            config.Login.UserTokenSessionKey
+            Config.Login.UserTokenSessionKey
         );
     }
 
@@ -659,7 +664,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         return base64;
     }
 
-    private static string GenerateUserId(string username)
+    private static Guid GenerateUserId(string username)
     {
         Span<byte> usernameUTF8 = stackalloc byte[51]; //Encoding.UTF8.GetMaxByteCount(16)
         int usernameUTF8Length = Encoding.UTF8.GetBytes(username, usernameUTF8);
@@ -668,7 +673,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         Span<byte> usernameHash = stackalloc byte[32];
         SHA256.HashData(usernameUTF8, usernameHash);
 
-        return Convert.ToHexStringLower(usernameHash[..8]);
+        return new Guid(usernameHash, false);//Convert.ToHexStringLower(usernameHash[..8]);
     }
 
     private static byte[] HashPassword(string password, byte[] salt)

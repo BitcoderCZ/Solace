@@ -27,6 +27,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject ServerManager ServerManager
 @inject IJSRuntime JSRuntime
+@inject IDbContextFactory<EarthDbContext> EarthDbFactory
 
 <PageTitle>Buildplates - Solace</PageTitle>
 
@@ -40,8 +41,7 @@
         </div>
    
         <div class="input-group" style="max-width: 400px;">
-            <input type="text" class="form-control" placeholder="Search by name..." @bind="_searchTerm"
-                   @bind:event="oninput" @onkeyup="HandleSearchKeyPress" />
+            <input type="text" class="form-control" placeholder="Search by name..." @bind="_searchTerm" @bind:event="oninput" @onkeyup="HandleSearchKeyPress" />
             <button class="btn btn-outline-secondary" type="button" @onclick="DoSearch">
                 <i class="bi bi-search"></i> Search
             </button>
@@ -77,9 +77,7 @@
 
                 <div class="col-12 col-md-6 col-lg-4 col-xl-3" @key="bp.Id">
                     <div class="card h-100 shadow-sm @(bp.IsBusy ? "opacity-50" : "")">
-                        <BuildplatePreview BuildplateId="@bp.Id" IsTemplate=true Size="@bp.Size"
-                                           BlocksPerMeter="@bp.BlocksPerMeter" IsNight="@bp.IsNight"
-                                           ResourcePackManager="@_resourcePackManager" />
+                        <BuildplatePreview BuildplateId="@bp.Id" IsTemplate=true Size="@bp.Size" BlocksPerMeter="@bp.BlocksPerMeter" IsNight="@bp.IsNight" ResourcePackManager="@_resourcePackManager" />
                         
                         <div class="card-body">
                             @if (!string.IsNullOrEmpty(bp.ErrorMessage))
@@ -87,15 +85,12 @@
                                 <div class="alert alert-danger alert-dismissible fade show small py-2" role="alert">
                                     <i class="bi bi-exclamation-triangle-fill me-2"></i>
                                     @bp.ErrorMessage
-                                    <button type="button" class="btn-close small" style="padding: 0.75rem"
-                                            @onclick="() => bp.ErrorMessage = null"></button>
+                                    <button type="button" class="btn-close small" style="padding: 0.75rem" @onclick="() => bp.ErrorMessage = null"></button>
                                 </div>
                             }
                             <div class="mb-3">
                                 <label class="form-label visually-hidden">Buildplate Name</label>
-                                <input type="text" minlength="1" maxlength="100" class="form-control fw-bold border-0 bg-light"
-                                       @bind="bp.Name" @bind:event="oninput"
-                                       disabled="@(!HasPermission(Permissions.ManageBuildplates) || bp.IsBusy)" />
+                                <input type="text" minlength="1" maxlength="100" class="form-control fw-bold border-0 bg-light" @bind="bp.Name" @bind:event="oninput" disabled="@(!HasPermission(Permissions.ManageBuildplates) || bp.IsBusy)" />
                             </div>
 
                             <div class="row text-muted small">
@@ -105,10 +100,7 @@
                                 </div>
                                 <div class="col-6 mb-2">
                                     <span class="d-block fw-bold text-uppercase">Blocks per meter</span>
-                                    <input type="number" min="1" max="100"
-                                           class="form-control form-control-sm border-0 bg-light" @bind="bp.BlocksPerMeter"
-                                           @bind:event="oninput"
-                                           disabled="@(!HasPermission(Permissions.ManageBuildplates) || bp.IsBusy)" />
+                                    <input type="number" min="1" max="100" class="form-control form-control-sm border-0 bg-light" @bind="bp.BlocksPerMeter" @bind:event="oninput" disabled="@(!HasPermission(Permissions.ManageBuildplates) || bp.IsBusy)" />
                                 </div>
                                 <div class="col-12">
                                     <span class="d-block fw-bold text-uppercase">Offset</span>
@@ -121,15 +113,13 @@
                         {
                             <div class="card-footer bg-transparent border-top-0 pb-3 d-flex flex-column gap-2">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => RequestDelete(bp)"
-                                            disabled="@bp.IsBusy">
+                                    <button class="btn btn-outline-danger btn-sm" @onclick="() => RequestDelete(bp)" disabled="@bp.IsBusy">
                                         Delete
                                     </button>
 
                                     @if (bp.IsDirty || bp.IsSaving)
                                     {
-                                        <button class="btn btn-success btn-sm fw-bold" @onclick="() => SaveBuildplate(bp)"
-                                                disabled="@bp.IsBusy">
+                                        <button class="btn btn-success btn-sm fw-bold" @onclick="() => SaveBuildplate(bp)" disabled="@bp.IsBusy">
                                             @if (bp.IsSaving)
                                             {
                                                 <span class="spinner-border spinner-border-sm me-1"></span>
@@ -139,8 +129,7 @@
                                     }
                                 </div>
                             
-                                <button class="btn btn-outline-primary btn-sm w-100 fw-bold" @onclick="() => RegeneratePreview(bp)"
-                                        disabled="@bp.IsBusy">
+                                <button class="btn btn-outline-primary btn-sm w-100 fw-bold" @onclick="() => RegeneratePreview(bp)" disabled="@bp.IsBusy">
                                     @if (bp.IsRegeneratingPreview)
                                     {
                                         <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
@@ -193,18 +182,15 @@
                     <p>Are you sure you want to delete <strong>@_bpToDelete?.Name</strong>?</p>
                 
                     <div class="form-check form-switch mt-3">
-                        <input class="form-check-input" type="checkbox" id="removeTemplateCheckbox"
-                               @bind="_removeTemplateFromPlayers" />
+                        <input class="form-check-input" type="checkbox" id="removeTemplateCheckbox" @bind="_removeTemplateFromPlayers" />
                         <label class="form-check-label text-danger" for="removeTemplateToggle">
                             Also remove this template from all players inventories
                         </label>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete"
-                            disabled="@_isDeleting">Cancel</button>
-                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting"
-                            style="min-width: 100px;">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDelete" disabled="@_isDeleting">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_isDeleting" style="min-width: 100px;">
                         @if (_isDeleting)
                         {
                             <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -284,33 +270,39 @@
     {
         try
         {
-            using var earthDB = EarthDB.Open(Settings.Instance.EarthDatabaseConnectionString ?? "");
-
             int skip = (_currentPage - 1) * _pageSize;
             string? searchFilter = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm;
 
-            var results = await new EarthDB.ObjectQuery(false)
-                .SearchBuildplates(out var searchArguments, true, true, skip: skip, take: _pageSize, name: searchFilter?.Trim())
-                .ExecuteAsync(earthDB, default);
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            var query = (IQueryable<DB.Models.Global.TemplateBuildplateEF>)earthDb.TemplateBuildplates;
 
-            var (buildplates, buildplatesCount, totalCount) = results.GetBuildplates(searchArguments);
-        
-            Debug.Assert(totalCount is not null);
-            _totalItems = totalCount.Value;
+            if (!string.IsNullOrWhiteSpace(searchFilter))
+            {
+                query = query.Where(buildplate => EF.Functions.Like(buildplate.Name, $"%{searchFilter}%"));
+            }
+
+            _totalItems = await query.CountAsync();
+
+            var buildplates = await query
+                .Skip(skip)
+                .Take(_pageSize)
+                .ToListAsync();
+
             if (string.IsNullOrWhiteSpace(searchFilter))
             {
-                _totalBuildplateCount = totalCount.Value;
+                _totalBuildplateCount = _totalItems;
             }
 
             _buildplates.Clear(); // Clear current page data
+            _buildplates.EnsureCapacity(buildplates.Count);
 
-            foreach (var (buildplateId, dbBuildplate) in buildplates)
+            foreach (var dbBuildplate in buildplates)
             {
                 Debug.Assert(dbBuildplate is not null);
         
                 var buildplate = new Buildplate()
                 {
-                    Id = buildplateId,
+                    Id = dbBuildplate.Id,
                     Name = dbBuildplate.Name,
                     Size = dbBuildplate.Size,
                     Offset = dbBuildplate.Offset,
@@ -385,7 +377,7 @@ BuildplateLauncher.ExeName))
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, Log.Logger);
+            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, ownsEarthDb: true);
 
             if (!await importer.RegenerateTemplatePreviewAsync(bp.Id, default))
             {
@@ -427,12 +419,16 @@ BuildplateLauncher.ExeName))
 
         try
         {
-            var earthDB = EarthDB.Open(Settings.Instance.EarthDatabaseConnectionString ?? "");
-        
-            await new EarthDB.ObjectQuery(true)
-                .UpdateBuildplate(bp.Id, new DB.Models.Global.TemplateBuildplate(bp.Name, bp.Size, bp.Offset, bp.BlocksPerMeter,
-        bp.IsNight, bp.ServerDataObjectId, bp.PreviewObjectId))
-                .ExecuteAsync(earthDB, default);
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+
+            var template = await earthDb.TemplateBuildplates
+                .AsTracking()
+                .FirstAsync(template => template.Id == bp.Id);
+
+            template.Name = bp.Name;
+            template.Scale = bp.BlocksPerMeter;
+
+            await earthDb.SaveChangesAsync();
 
             await Task.Delay(250);
 
@@ -483,7 +479,7 @@ BuildplateLauncher.ExeName))
                 _isDeleting = true;
                 StateHasChanged();
 
-                await using var importer = await Importer.CreateFromSettings(Settings.Instance, Log.Logger);
+                await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, ownsEarthDb: true);
 
                 if (!await importer.RemoveTemplateAsync(_bpToDelete.Id, _removeTemplateFromPlayers, default))
                 {
@@ -516,7 +512,7 @@ BuildplateLauncher.ExeName))
 
     public sealed class Buildplate
     {
-        public required string Id { get; set; }
+        public required Guid Id { get; set; }
     
         public required string Name { get; set; }
         public int BlocksPerMeter { get; set; }

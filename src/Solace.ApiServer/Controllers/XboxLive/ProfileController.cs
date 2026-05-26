@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 using Solace.ApiServer.Models;
 using Solace.Common.Utils;
+using Solace.DB.Models;
+using Solace.DB;
 
 namespace Solace.ApiServer.Controllers.XboxLive;
 
@@ -11,9 +13,9 @@ namespace Solace.ApiServer.Controllers.XboxLive;
 [Route("profile.xboxlive.com/users")]
 internal sealed partial class ProfileController : SolaceControllerBase
 {
-    private readonly LiveDbContext _dbContext;
+    private readonly EarthDbContext _dbContext;
 
-    public ProfileController(LiveDbContext context)
+    public ProfileController(EarthDbContext context)
     {
         _dbContext = context;
     }
@@ -23,15 +25,15 @@ internal sealed partial class ProfileController : SolaceControllerBase
     );
 
     private sealed record ProfileUser(
-        string Id,
-        string HostId,
+        Guid Id,
+        Guid HostId,
         IEnumerable<ProfileSetting> Settings,
         bool IsSponsoredUser
     );
 
     internal sealed record BatchProfileSettingsRequest(
         string[] Settings,
-        string[] UserIds
+        Guid[] UserIds
     );
 
     [HttpPost("batch/profile/settings")]
@@ -54,7 +56,7 @@ internal sealed partial class ProfileController : SolaceControllerBase
 
         var token = authUnion.A;
 
-        foreach (string userId in request.UserIds)
+        foreach (var userId in request.UserIds)
         {
             if (userId != token.UserId)
             {
@@ -139,9 +141,9 @@ internal sealed partial class ProfileController : SolaceControllerBase
         => new Dictionary<string, string>()
         {
             ["AppDisplayName"] = account.Username,
-            ["AppDisplayPicRaw"] = $"{(Request.IsHttps ? "https://" : "http://")}{Request.Host.Value}/{account.ProfilePictureUrl}",
+            ["AppDisplayPicRaw"] = $"{(Request.IsHttps ? "https://" : "http://")}{Request.Host.Value}/{account.ProfilePictureUrl ?? Account.DefaultPictureUrl}",
             ["GameDisplayName"] = account.Username,
-            ["GameDisplayPicRaw"] = $"{(Request.IsHttps ? "https://" : "http://")}{Request.Host.Value}/{account.ProfilePictureUrl}",
+            ["GameDisplayPicRaw"] = $"{(Request.IsHttps ? "https://" : "http://")}{Request.Host.Value}/{account.ProfilePictureUrl ?? Account.DefaultPictureUrl}",
             ["Gamertag"] = account.Username,
             ["Gamerscore"] = "69",
             ["FirstName"] = account.FirstName ?? account.Username,

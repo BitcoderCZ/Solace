@@ -16,6 +16,7 @@ using CICIUseType = Solace.StaticData.Catalog.ItemsCatalogR.Item.UseTypeE;
 using CIJGCJGParentCollection = Solace.StaticData.Catalog.ItemJournalGroupsCatalogR.JournalGroup.ParentCollectionE;
 using CRCCRCategory = Solace.StaticData.Catalog.RecipesCatalogR.CraftingRecipe.CategoryE;
 using ItemsCatalog = Solace.ApiServer.Types.Catalog.ItemsCatalog;
+using Solace.ApiServer.Types.Common;
 
 namespace Solace.ApiServer.Controllers.EarthApi;
 
@@ -24,23 +25,28 @@ namespace Solace.ApiServer.Controllers.EarthApi;
 [Route("1/api/v{version:apiVersion}")]
 internal sealed class CatalogController : SolaceControllerBase
 {
-    private static Catalog catalog => Program.staticData.Catalog;
+    private readonly Catalog _catalog;
+
+    public CatalogController(StaticData.StaticData staticData)
+    {
+        _catalog = staticData.Catalog;
+    }
 
     [HttpGet("inventory/catalogv3")]
     public ContentHttpResult GetItemsCatalog()
-        => EarthJson(MakeItemsCatalogApiResponse(catalog));
+        => EarthJson(MakeItemsCatalogApiResponse(_catalog));
 
     [HttpGet("recipes")]
     public ContentHttpResult GetRecipeCatalog()
-        => EarthJson(MakeRecipesCatalogApiResponse(catalog));
+        => EarthJson(MakeRecipesCatalogApiResponse(_catalog));
 
     [HttpGet("journal/catalog")]
     public ContentHttpResult GetJournalCatalog()
-        => EarthJson(MakeJournalCatalogApiResponse(catalog));
+        => EarthJson(MakeJournalCatalogApiResponse(_catalog));
 
     [HttpGet("products/catalog")]
     public ContentHttpResult GetNFCBoostsCatalog()
-        => EarthJson(MakeNFCBoostsCatalogApiResponse(catalog));
+        => EarthJson(MakeNFCBoostsCatalogApiResponse(_catalog));
 
     // TODO: cache these?
     private static ItemsCatalog MakeItemsCatalogApiResponse(Catalog catalog)
@@ -295,7 +301,7 @@ internal sealed class CatalogController : SolaceControllerBase
                     new Dictionary<string, object>()
                 ),
                 categoryString,
-                Enum.Parse<Types.Common.Rarity>(item.Rarity.ToString()),
+                Types.Common.Rarity.FromStaticData(item.Rarity),
                 1,
                 item.Stackable,
                 item.FuelInfo is not null ? new Types.Common.BurnRate(item.FuelInfo.BurnTime, item.FuelInfo.HeatPerSecond) : null,
