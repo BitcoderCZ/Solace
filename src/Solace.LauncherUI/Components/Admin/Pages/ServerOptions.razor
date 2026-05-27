@@ -17,16 +17,13 @@
 
         <ul class="nav nav-tabs" id="settingsTabs" role="tablist">
             <li class="nav-item">
-                <button class="nav-link @(activeTab == "network" ? "active" : "")"
-                        @onclick='() => activeTab = "network"'>Network</button>
+                <button class="nav-link @(activeTab == "network" ? "active" : "")" @onclick='() => activeTab = "network"'>Network</button>
             </li>
             <li class="nav-item">
-                <button class="nav-link @(activeTab == "map" ? "active" : "")"
-                        @onclick='() => activeTab = "map"'>Map</button>
+                <button class="nav-link @(activeTab == "map" ? "active" : "")" @onclick='() => activeTab = "map"'>Map</button>
             </li>
             <li class="nav-item">
-                <button class="nav-link @(activeTab == "database" ? "active" : "")"
-                        @onclick='() => activeTab = "database"'>Databases</button>
+                <button class="nav-link @(activeTab == "database" ? "active" : "")" @onclick='() => activeTab = "database"'>Databases</button>
             </li>
             <li class="nav-item">
                 <button class="nav-link @(activeTab == "data" ? "active" : "")" @onclick='() => activeTab = "data"'>Data
@@ -58,14 +55,25 @@
                             <InputText @bind-Value="SettingsModel.IPv4" class="form-control" placeholder="192.168.x.x" />
                             <ValidationMessage For="@(() => SettingsModel.IPv4)" />
                         </div>
+
+                        <div class="col-12 mt-3">
+                            <div class="form-check form-switch">
+                                <InputCheckbox @bind-Value="SettingsModel.OnlyAllowLocalLogin" class="form-check-input" id="onlyAllowLocalLogin" />
+                                <label class="form-check-label" for="onlyAllowLocalLogin">
+                                    Only Allow Local Login
+                                    <span class="text-secondary" style="cursor: help;" title="Only APKs patched for custom login servers can connect. Microsoft login is unsupported.">
+                                        ⓘ
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 @* --- Map Tab --- *@
                 <div class="tab-pane fade show @(activeTab == "map" ? "active" : "")">
                     <div class="mb-3 form-check form-switch">
-                        <InputCheckbox @bind-Value="SettingsModel.EnableTileRendering" class="form-check-input"
-                                       id="enableRendering" />
+                        <InputCheckbox @bind-Value="SettingsModel.EnableTileRendering" class="form-check-input" id="enableRendering" />
                         <label class="form-check-label" for="enableRendering">Enable Tile Rendering</label>
                     </div>
 
@@ -116,13 +124,11 @@
                 @* --- Data Tab --- *@
                 <div class="tab-pane fade show @(activeTab == "data" ? "active" : "")">
                     <div class="mb-3 form-check">
-                        <InputCheckbox @bind-Value="SettingsModel.GeneratePreviewOnImport" class="form-check-input"
-                                       id="genPreview" />
+                        <InputCheckbox @bind-Value="SettingsModel.GeneratePreviewOnImport" class="form-check-input" id="genPreview" />
                         <label class="form-check-label" for="genPreview">Generate Preview On Import</label>
                     </div>
                     <div class="mb-3 form-check">
-                        <InputCheckbox @bind-Value="SettingsModel.SkipFileChecks" class="form-check-input"
-                                       id="skipChecks" />
+                        <InputCheckbox @bind-Value="SettingsModel.SkipFileChecks" class="form-check-input" id="skipChecks" />
                         <label class="form-check-label" for="skipChecks">Skip File Validation</label>
                     </div>
 
@@ -135,8 +141,7 @@
                     <hr />
 
                     <div class="mb-3 form-check form-switch">
-                        <InputCheckbox @bind-Value="SettingsModel.LauncherBuildplatePreview" class="form-check-input"
-                                       id="buildPreview" />
+                        <InputCheckbox @bind-Value="SettingsModel.LauncherBuildplatePreview" class="form-check-input" id="buildPreview" />
                         <label class="form-check-label" for="buildPreview">Enable Buildplate Preview in Launcher</label>
                         <ValidationMessage For="@(() => SettingsModel.LauncherBuildplatePreview)" />
                     </div>
@@ -153,8 +158,6 @@
 @code {
     private string activeTab = "network";
 
-    // Using a wrapper or the class directly.
-    // For validation, we ensure the properties have the Required attribute.
     private SettingsViewModel SettingsModel { get; set; } = new();
 
     protected override async Task OnInitializedAsync()
@@ -178,6 +181,7 @@
         SettingsModel.SkipFileChecks = source.SkipFileChecks ?? false;
         SettingsModel.StaticDataPath = source.StaticDataPath;
         SettingsModel.LauncherBuildplatePreview = source.LauncherBuildplatePreview ?? false;
+        SettingsModel.OnlyAllowLocalLogin = source.OnlyAllowLocalLogin ?? false;
     }
 
     private void HandleSave()
@@ -198,6 +202,7 @@
             SkipFileChecks = SettingsModel.SkipFileChecks,
             StaticDataPath = SettingsModel.StaticDataPath,
             LauncherBuildplatePreview = SettingsModel.LauncherBuildplatePreview,
+            OnlyAllowLocalLogin = SettingsModel.OnlyAllowLocalLogin,
         };
 
         Settings.Instance = settings;
@@ -219,21 +224,13 @@
     public class SettingsViewModel : IValidatableObject
     {
         [Required, Range(1, ushort.MaxValue, ErrorMessage = $"Port must be between 1 and 65535")]
-        public int? ApiPort
-        {
-            get;
-            set;
-        }
+        public int? ApiPort { get; set; }
+
         [Required, Range(1, ushort.MaxValue, ErrorMessage = $"Port must be between 1 and 65535")]
-        public int? EventBusPort
-        {
-            get; set;
-        }
+        public int? EventBusPort { get; set; }
+
         [Required, Range(1, ushort.MaxValue, ErrorMessage = $"Port must be between 1 and 65535")]
-        public int? ObjectStorePort
-        {
-            get; set;
-        }
+        public int? ObjectStorePort { get; set; }
 
         [Required(AllowEmptyStrings = false)]
         public string? IPv4 { get; set; }
@@ -258,27 +255,26 @@
 
         public bool LauncherBuildplatePreview { get; set; }
 
+        public bool OnlyAllowLocalLogin { get; set; }
+
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
             UriHostNameType nameType = Uri.CheckHostName(IPv4);
             if (nameType is not (UriHostNameType.Dns or UriHostNameType.IPv4))
             {
-                yield return new ValidationResult("PC address is not a valid IPv4 or hostname.", new[] {
-nameof(IPv4) });
+                yield return new ValidationResult("PC address is not a valid IPv4 or hostname.", new[] { nameof(IPv4) });
             }
 
             if (EnableTileRendering)
             {
                 if (TileDataSource is Settings.TileDataSourceE.MapTiler && string.IsNullOrWhiteSpace(MapTilerApiKey))
                 {
-                    yield return new ValidationResult("MapTiler API Key is required when using MapTiler source.", new[]
-{nameof(MapTilerApiKey) });
+                    yield return new ValidationResult("MapTiler API Key is required when using MapTiler source.", new[] { nameof(MapTilerApiKey) });
                 }
 
                 if (TileDataSource is Settings.TileDataSourceE.PostgreSQL && string.IsNullOrWhiteSpace(TileDatabaseConnectionString))
                 {
-                    yield return new ValidationResult("Tile database connection string is required for PostgreSQL source.", new[]
-{nameof(TileDatabaseConnectionString) });
+                    yield return new ValidationResult("Tile database connection string is required for PostgreSQL source.", new[] { nameof(TileDatabaseConnectionString) });
                 }
             }
 

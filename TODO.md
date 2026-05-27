@@ -9,7 +9,6 @@
 - Use tiles when spawning tappables - don't spawn on water/forbidden areas, spawn more trees in forest?
 - Allow setting maximum cache size for tiles
 - Allow custom java resourcepacks? (tool to turn them into earth(bedrock) resourcepacks)
-- Some option to only allow custom login - because we cannot verify microsoft accounts
 - Move logs folder up to the folder with run_launcher.ps1 - cli arg to specify log file location on all programs
 - View old logs in launcher?
 - Clear logs - seperate permission

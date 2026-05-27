@@ -15,10 +15,12 @@ namespace Solace.ApiServer.Controllers;
 internal sealed partial class SigninController : SolaceControllerBase
 {
     private readonly EarthDbContext _earthDb;
+    private readonly bool _localLoginOnly;
 
-    public SigninController(EarthDbContext earthDb)
+    public SigninController(EarthDbContext earthDb, IConfiguration configuration)
     {
         _earthDb = earthDb;
+        _localLoginOnly = configuration.GetValue<bool>("Authentication:LocalLoginOnly");
     }
 
     [HttpPost("api/v{version:apiVersion}/player/profile/{profileID}")]
@@ -73,6 +75,22 @@ internal sealed partial class SigninController : SolaceControllerBase
         }
         else
         {
+            if (_localLoginOnly)
+            {
+                Log.Warning($"Sign in - microsoft login - local login only is enabled");
+                return TypedResults.BadRequest();
+            }
+
+            var dashIndex = signinRequest.SessionTicket.IndexOf('-');
+            if (dashIndex is -1 || dashIndex == signinRequest.SessionTicket.Length - 1)
+            {
+                Log.Warning($"Sign in - bad parts");
+                return TypedResults.BadRequest();
+            }
+
+            userIdString = signinRequest.SessionTicket.AsSpan(0, dashIndex);
+            jwt = signinRequest.SessionTicket.AsSpan(dashIndex + 1);
+
             if (!GetUserIdRegex().IsMatch(userIdString))
             {
                 Log.Warning($"Sign in - user id not match ({userIdString})");
@@ -82,8 +100,6 @@ internal sealed partial class SigninController : SolaceControllerBase
             userId = IdTranslator.ToGuid(userIdString);
 
             await _earthDb.EnsureAccountExists(userId);
-
-            // microsoft login - cannot validate
         }
 
         // TODO: generate secure session token

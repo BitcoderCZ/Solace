@@ -52,6 +52,9 @@ public static class Program
 
         [Option("logger-url", Default = null, Required = false, HelpText = "Url to send logs to")]
         public string? LoggerUrl { get; set; }
+
+        [Option("local-login-only", Default = false, Required = false, HelpText = "Whenther to only allow local accounts, or also allow microsoft accounts")]
+        public bool LocalLoginOnly { get; set; }
     }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
@@ -128,6 +131,15 @@ public static class Program
         var log = loggerConfig.CreateLogger();
 
         Log.Logger = log;
+
+        if (options.LocalLoginOnly)
+        {
+            Log.Information("Local account only login enabled, Microsoft accounts will not work");
+        }
+        else
+        {
+            Log.Warning("Local account only login disabled, account credentials cannot be verified");
+        }
 
         Log.Information("Loading configuration");
         try
@@ -257,6 +269,8 @@ public static class Program
 
         var builder = WebApplication.CreateBuilder(args);
 
+        builder.Configuration["Authentication:LocalLoginOnly"] = options.LocalLoginOnly.ToString();
+
         builder.Host.UseSerilog();
 
         builder.WebHost.UseUrls($"http://*:{options.HttpPort}/");
@@ -329,7 +343,7 @@ public static class Program
         });
 
         app.UseStaticFiles();
-        
+
         app.UseRouting();
 
         app.UseAuthentication();
