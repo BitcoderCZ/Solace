@@ -10,7 +10,9 @@ using Solace.DB;
 
 namespace Solace.ApiServer.Migrations
 {
+#pragma warning disable CS0618 // Type or member is obsolete
     [DbContext(typeof(LiveDbContext))]
+#pragma warning restore CS0618 // Type or member is obsolete
     [Migration("20250703082935_FirstAndLastName")]
     partial class FirstAndLastName
     {

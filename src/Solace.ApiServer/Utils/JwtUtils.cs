@@ -6,6 +6,9 @@ using System.Security.Claims;
 using System.Text.Json;
 using Solace.ApiServer.Models;
 using Solace.Common;
+using System.Collections.Immutable;
+using System.Runtime.InteropServices;
+using BitcoderCZ.Utils;
 
 namespace Solace.ApiServer.Utils;
 
@@ -23,9 +26,20 @@ internal static class JwtUtils
         where TData : ITokenData<TData>
         => SignInternal<TData>(data, secret, validity);
 
+    public static string Sign<TData>(Token<TData> token, ImmutableArray<byte> secret)
+        where TData : ITokenData<TData>
+        => SignInternal<TData>(token, ImmutableCollectionsMarshal.AsArray(secret)!, new ValidityDatePair(token.Issued, token.Expires));
+
+    public static string Sign<TData>(TData data, ImmutableArray<byte> secret, ValidityDatePair validity)
+        where TData : ITokenData<TData>
+        => SignInternal<TData>(data, ImmutableCollectionsMarshal.AsArray(secret)!, validity);
+
     private static string SignInternal<TData>(object dataOrToken, byte[] secret, ValidityDatePair validity)
         where TData : ITokenData<TData>
     {
+        ThrowHelper.ThrowIfNull(dataOrToken);
+        ThrowHelper.ThrowIfNull(secret);
+
         TData data = dataOrToken switch
         {
             Token<TData> token => token.Data,
@@ -54,9 +68,16 @@ internal static class JwtUtils
         ));
     }
 
+    public static Token<TData>? Verify<TData>(string token, ImmutableArray<byte> secret, bool allowExpired = false)
+        where TData : ITokenData<TData>
+        => Verify<TData>(token, ImmutableCollectionsMarshal.AsArray(secret)!, allowExpired);
+
     public static Token<TData>? Verify<TData>(string token, byte[] secret, bool allowExpired = false)
         where TData : ITokenData<TData>
     {
+        ThrowHelper.ThrowIfNull(token);
+        ThrowHelper.ThrowIfNull(secret);
+
         try
         {
             var signingKey = new SymmetricSecurityKey(secret)

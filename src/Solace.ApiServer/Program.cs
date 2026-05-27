@@ -213,7 +213,7 @@ public static class Program
 
         string earthDbConnectionString = "Data Source=" + options.EarthDatabaseConnectionString!;
 
-        using (var earthDbContext = EarthDbContext.Create(options.EarthDatabaseConnectionString!))
+        await using (var earthDbContext = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!))
         {
             var currentShopBuildplates = await earthDbContext.TemplateBuildplates
                 .AsNoTracking()
@@ -264,7 +264,7 @@ public static class Program
         var tappablesManager = await TappablesManager.CreateAsync(eventBus);
         var buildplateInstancesManager = await BuildplateInstancesManager.CreateAsync(eventBus);
 
-        using var birhEarthDb = EarthDbContext.Create(options.EarthDatabaseConnectionString!);
+        using var birhEarthDb = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!);
         BuildplateInstanceRequestHandler.Start(birhEarthDb, eventBus, objectStore, staticData.Catalog, buildplateInstancesManager);
 
         var builder = WebApplication.CreateBuilder(args);
@@ -305,6 +305,13 @@ public static class Program
             .AddScheme<AuthenticationSchemeOptions, GenoaAuthenticationHandler>("GenoaAuth", null);
 
         builder.Services.AddDbContext<EarthDbContext>(options => EarthDbContext.ConfigureBuilder(options, earthDbConnectionString));
+
+        await using (var earthDbContext = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!))
+        {
+            var secrets = await earthDbContext.GetOrInitializeSecretsAsync();
+
+            builder.Services.AddSingleton(secrets);
+        }
 
         var app = builder.Build();
 

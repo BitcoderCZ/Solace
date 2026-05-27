@@ -19,12 +19,14 @@ internal sealed partial class SigninController : SolaceControllerBase
     private readonly EarthDbContext _earthDb;
     private readonly bool _localLoginOnly;
     private readonly ITimeLimitedDataProtector _protector;
+    private readonly CryptoSecrets _cryptoSecrets;
 
-    public SigninController(EarthDbContext earthDb, IConfiguration configuration, IDataProtectionProvider dataProtectionProvider)
+    public SigninController(EarthDbContext earthDb, IConfiguration configuration, IDataProtectionProvider dataProtectionProvider, CryptoSecrets cryptoSecrets)
     {
         _earthDb = earthDb;
         _localLoginOnly = configuration.GetValue<bool>("Authentication:LocalLoginOnly");
-        _protector = dataProtectionProvider.CreateProtector(GenoaAuthenticationHandler.DataProtectionPurpose).ToTimeLimitedDataProtector();    
+        _protector = dataProtectionProvider.CreateProtector(GenoaAuthenticationHandler.DataProtectionPurpose).ToTimeLimitedDataProtector();
+        _cryptoSecrets = cryptoSecrets;
     }
 
     [HttpPost("api/v{version:apiVersion}/player/profile/{profileID}")]
@@ -57,7 +59,7 @@ internal sealed partial class SigninController : SolaceControllerBase
 
         if (Guid.TryParse(userIdString, out var userId))
         {
-            var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(jwt.ToString(), Program.config.PlayfabApi.SessionTicketSecretBytes);
+            var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(jwt.ToString(), _cryptoSecrets.PlayfabSessionTicketSecret);
 
             if (token is null)
             {

@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -51,11 +50,16 @@ public sealed class EarthDbContext : DbContext
     public DbSet<TemplateBuildplateEF> TemplateBuildplates { get; set; }
 
     public DbSet<Tile> Tiles { get; set; }
+    
+    public DbSet<Secret> Secrets { get; set; }
 
-    public static EarthDbContext Create(string path)
+    public static EarthDbContext CreateFromPath(string path)
+        => CreateFromConnection("Data Source=" + Path.GetFullPath(path));
+
+    public static EarthDbContext CreateFromConnection(string connectionString)
     {
         var optionsBuilder = new DbContextOptionsBuilder<EarthDbContext>();
-        ConfigureBuilder(optionsBuilder, "Data Source=" + Path.GetFullPath(path));
+        ConfigureBuilder(optionsBuilder, connectionString);
 
         return new EarthDbContext(optionsBuilder.Options);
     }
@@ -622,7 +626,9 @@ public sealed class ArrayValueComparer<T> : ValueComparer<T[]>
         : base(
             (a1, a2) => a1 == a2 || (a1 != null && a2 != null && a1.SequenceEqual(a2, equalityComparer)),
             a => a != null ? a.Aggregate(0, (h, v) => HashCode.Combine(h, equalityComparer.GetHashCode(v))) : 0,
+#pragma warning disable CS8619 // Nullability of reference types in value doesn't match target type.
             a => a != null ? a.Select(item => item == null ? null : item.DeepCopy()).ToArray() : Array.Empty<T>())
+#pragma warning restore CS8619 // Nullability of reference types in value doesn't match target type.
     {
     }
 }

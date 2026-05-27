@@ -14,6 +14,7 @@ using Solace.ApiServer.Utils;
 using Solace.Common.Utils;
 using Solace.DB.Models;
 using Solace.DB;
+using System.Runtime.InteropServices;
 
 namespace Solace.ApiServer.Controllers.Live;
 
@@ -25,7 +26,8 @@ internal sealed partial class LoginController : SolaceControllerBase
 
     private static Config Config => Program.config;
 
-    private readonly EarthDbContext _dbContext;
+    private readonly EarthDbContext _earthDb;
+    private readonly CryptoSecrets _cryptoSecrets;
 
     private static readonly (string, string)[] namespaces =
     [
@@ -43,9 +45,10 @@ internal sealed partial class LoginController : SolaceControllerBase
         ("ns1", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"),
     ];
 
-    public LoginController(EarthDbContext context)
+    public LoginController(EarthDbContext earthDb, CryptoSecrets cryptoSecrets)
     {
-        _dbContext = context;
+        _earthDb = earthDb;
+        _cryptoSecrets = cryptoSecrets;
     }
 
     [HttpGet("ppsecure/InlineConnect.srf")]
@@ -75,7 +78,7 @@ internal sealed partial class LoginController : SolaceControllerBase
 
         Log.Debug($"Login attempt: Username: {username}");
 
-        var account = await _dbContext.Accounts
+        var account = await _earthDb.Accounts
             .FirstOrDefaultAsync(account => account.Username == username, cancellationToken);
 
         if (account is null)
@@ -138,7 +141,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.BadRequest("Username must contain only: lowercase letters, numbers, underscore and colon");
         }
 
-        var account = await _dbContext.Accounts
+        var account = await _earthDb.Accounts
             .FirstOrDefaultAsync(account => account.Username == username, cancellationToken);
 
         if (account is not null)
@@ -165,8 +168,8 @@ internal sealed partial class LoginController : SolaceControllerBase
             PasswordHash = paswordHash,
         };
 
-        _dbContext.Accounts.Add(account);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        _earthDb.Accounts.Add(account);
+        await _earthDb.SaveChangesAsync(cancellationToken);
 
         Log.Information($"Account created: {username} ({userId})");
 
@@ -226,7 +229,7 @@ internal sealed partial class LoginController : SolaceControllerBase
 
             var deviceTokenValidity = ValidityDatePair.Create(Config.Login.DeviceTokenValidityMinutes);
             var deviceToken = new Tokens.Live.DeviceToken();
-            string deviceTokenString = JwtUtils.Sign(deviceToken, Config.Login.DeviceTokenSecretBytes, deviceTokenValidity);
+            string deviceTokenString = JwtUtils.Sign(deviceToken, _cryptoSecrets.LoginDeviceTokenSecret, deviceTokenValidity);
 
             var response = new XmlDocument();
 
@@ -397,9 +400,9 @@ internal sealed partial class LoginController : SolaceControllerBase
             }
 
             // todo: why do we allowExpired?
-            var userToken = JwtUtils.Verify<Tokens.Live.UserToken>(userTokenString, Config.Login.UserTokenSecretBytes, allowExpired: true);
+            var userToken = JwtUtils.Verify<Tokens.Live.UserToken>(userTokenString, _cryptoSecrets.LoginUserTokenSecret, allowExpired: true);
 #pragma warning disable IDE0059 // Unnecessary assignment of a value
-            var deviceToken = JwtUtils.Verify<Tokens.Live.DeviceToken>(deviceTokenString, Config.Login.DeviceTokenSecretBytes, allowExpired: true);
+            var deviceToken = JwtUtils.Verify<Tokens.Live.DeviceToken>(deviceTokenString, _cryptoSecrets.LoginDeviceTokenSecret, allowExpired: true);
 #pragma warning restore IDE0059 // Unnecessary assignment of a value
 
             if (userToken is null || userToken.Expired is true)
@@ -414,13 +417,13 @@ internal sealed partial class LoginController : SolaceControllerBase
 
                 var nextUserTokenValidity = ValidityDatePair.Create(Config.Login.UserTokenValidityMinutes);
                 var nextUserToken = userToken.Data;
-                string nextUserTokenString = JwtUtils.Sign(nextUserToken, Config.Login.UserTokenSecretBytes, nextUserTokenValidity);
+                string nextUserTokenString = JwtUtils.Sign(nextUserToken, _cryptoSecrets.LoginUserTokenSecret, nextUserTokenValidity);
 
                 var xboxTokenValidity = ValidityDatePair.Create(Config.Login.XboxTokenValidityMinutes);
                 var xboxToken = new Tokens.Shared.XboxTicketToken(userToken.Data.UserId, userToken.Data.Username);
-                string xboxTokenString = JwtUtils.Sign(xboxToken, Config.Login.XboxTokenSecretBytes, xboxTokenValidity);
+                string xboxTokenString = JwtUtils.Sign(xboxToken, _cryptoSecrets.LoginXboxTokenSecret, xboxTokenValidity);
 
-                string nextSessionKey = Config.Login.UserTokenSessionKey;
+                string nextSessionKey = _cryptoSecrets.LoginUserTokenSessionKeyBase64; // todo: random?
 
                 var tokenDocument = new XmlDocument();
 
@@ -509,7 +512,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                 tokenDocument.AppendChild(requestSecurityTokenResponseCollection);
                 string tokenDocumentString = tokenDocument.OuterXml;
 
-                string tokenDocumentCipherText = DoAESEncryption(Config.Login.UserTokenSessionKeyBytes, nonce, tokenDocumentString);
+                string tokenDocumentCipherText = DoAESEncryption(ImmutableCollectionsMarshal.AsArray(_cryptoSecrets.LoginUserTokenSessionKey)!, nonce, tokenDocumentString);
 
                 var response = new XmlDocument();
                 var envelope = CreateElement(response, "S", "Envelope");
@@ -626,7 +629,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         }
     }
 
-    private static LoginResponse CreateLoginResponse(Account account)
+    private LoginResponse CreateLoginResponse(Account account)
     {
         Debug.Assert(account.Username is not null);
 
@@ -637,7 +640,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             Convert.ToBase64String(account.PasswordSalt),
             Convert.ToBase64String(account.PasswordHash)
         );
-        string tokenString = JwtUtils.Sign(token, Config.Login.UserTokenSecretBytes, tokenValidity);
+        string tokenString = JwtUtils.Sign(token, _cryptoSecrets.LoginUserTokenSecret, tokenValidity);
 
         return new LoginResponse(
             account.Id,
@@ -647,7 +650,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             tokenString,
             tokenValidity.IssuedStr,
             tokenValidity.ExpiresStr,
-            Config.Login.UserTokenSessionKey
+            _cryptoSecrets.LoginUserTokenSessionKeyBase64 // todo: random?
         );
     }
 

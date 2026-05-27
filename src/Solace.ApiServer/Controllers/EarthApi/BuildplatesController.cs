@@ -45,7 +45,7 @@ internal sealed class BuildplatesController : SolaceControllerBase
     }
 
     [HttpGet("buildplates")]
-    public async Task<Results<ContentHttpResult, BadRequest>> GetBuildplates(CancellationToken cancellationToken)
+    public async Task<Results<ContentHttpResult, BadRequest>> GetBuildplates()
     {
         if (!TryGetAccountId(out var accountId))
         {
@@ -304,7 +304,7 @@ internal sealed class BuildplatesController : SolaceControllerBase
     [HttpPost("multiplayer/encounters/{encounterId}/instances")]
     public async Task<Results<ContentHttpResult, NotFound, BadRequest, InternalServerError>> CreateEncounterInstance(Guid encounterId, CancellationToken cancellationToken)
     {
-        if (!TryGetAccountId(out var accountId))
+        if (!TryGetAccountId(out _))
         {
             return TypedResults.BadRequest();
         }

@@ -198,7 +198,7 @@ public sealed class Rewards
 
         foreach (var (id, count) in rewardsModel.Items)
         {
-            rewards.AddItem(id, count);
+            rewards.AddItem(id, count ?? 1);
         }
 
         foreach (var id in rewardsModel.Buildplates)
@@ -219,7 +219,7 @@ public sealed class Rewards
             _rubies,
             _experiencePoints,
             _level,
-            new(_items),
+            _items.ToDictionary(item => item.Key, item => (int?)item.Value),
             [.. _buildplates],
             [.. _challenges]
         );

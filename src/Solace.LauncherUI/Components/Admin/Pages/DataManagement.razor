@@ -475,7 +475,7 @@
         {
             await earthDbEntry.ExtractToFileAsync(_earthDB.FullName, overwrite: false);
 
-            await using var importDb = EarthDbContext.Create(_earthDB.FullName);
+            await using var importDb = EarthDbContext.CreateFromPath(_earthDB.FullName);
 
             await importDb.Database.MigrateAsync();
 
@@ -490,7 +490,7 @@
 
             if (isSolace)
             {
-                await using var importDb = EarthDbContext.Create(importDbPath);
+                await using var importDb = EarthDbContext.CreateFromPath(importDbPath);
 
                 await importDb.Database.MigrateAsync();
 
@@ -606,7 +606,7 @@
 
         try
         {
-            await using var tempDb = EarthDbContext.Create(tempDbPath);
+            await using var tempDb = EarthDbContext.CreateFromPath(tempDbPath);
 
             await tempDb.Database.MigrateAsync();
 
