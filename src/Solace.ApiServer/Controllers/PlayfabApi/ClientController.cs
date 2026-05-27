@@ -5,6 +5,7 @@ using Solace.ApiServer.Models;
 using Solace.ApiServer.Models.Playfab;
 using Solace.ApiServer.Utils;
 using Solace.Common.Utils;
+using Serilog;
 
 namespace Solace.ApiServer.Controllers.PlayfabApi;
 
@@ -178,6 +179,6 @@ internal sealed partial class ClientController : SolaceControllerBase
             }
         ));
 
-    [GeneratedRegex("^[0-9A-F]{16}-(.*)$")]
+    [GeneratedRegex("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}-(.*)$")]
     private static partial Regex GetAuthRegex();
 }
