@@ -8,6 +8,8 @@ using Solace.Common;
 using Solace.DB;
 using Solace.ApiServer.Utils;
 using Solace.ApiServer.Models;
+using Microsoft.AspNetCore.DataProtection;
+using Solace.ApiServer.Authentication;
 
 namespace Solace.ApiServer.Controllers;
 
@@ -16,11 +18,13 @@ internal sealed partial class SigninController : SolaceControllerBase
 {
     private readonly EarthDbContext _earthDb;
     private readonly bool _localLoginOnly;
+    private readonly ITimeLimitedDataProtector _protector;
 
-    public SigninController(EarthDbContext earthDb, IConfiguration configuration)
+    public SigninController(EarthDbContext earthDb, IConfiguration configuration, IDataProtectionProvider dataProtectionProvider)
     {
         _earthDb = earthDb;
         _localLoginOnly = configuration.GetValue<bool>("Authentication:LocalLoginOnly");
+        _protector = dataProtectionProvider.CreateProtector(GenoaAuthenticationHandler.DataProtectionPurpose).ToTimeLimitedDataProtector();    
     }
 
     [HttpPost("api/v{version:apiVersion}/player/profile/{profileID}")]
@@ -102,8 +106,8 @@ internal sealed partial class SigninController : SolaceControllerBase
             await _earthDb.EnsureAccountExists(userId);
         }
 
-        // TODO: generate secure session token
-        string authToken = userId.ToString();
+        // TODO: make the time configurable
+        string authToken = _protector.Protect(userId.ToString(), TimeSpan.FromHours(1));
 
         return EarthJson(new Dictionary<string, object?>()
         {
