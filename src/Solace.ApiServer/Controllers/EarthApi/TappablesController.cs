@@ -122,8 +122,6 @@ internal sealed class TappablesController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        Log.Debug($"redeem tap: {string.Join("; ", tappable.Items)}");
-
         var redeemedTappables = await _earthDB.RedeemedTappables
             .AsTracking()
             .FirstOrNewAsync(redeemedTappables => redeemedTappables.Id == accountId, cancellationToken: cancellationToken);
