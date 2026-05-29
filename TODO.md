@@ -13,7 +13,6 @@
 - View old logs in launcher?
 - Clear logs - seperate permission
 - Show roles on profile page
-- Export buildplates in both formats
 - Launch/connect to remote components - e.g. run buildplate launcher on another PC
 - View the player buildplate's template (if exists) - open page, search id?
 - Add the level reward buildplates and add them to level ups
