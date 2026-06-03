@@ -69,8 +69,8 @@ internal sealed partial class LoginController : SolaceControllerBase
     private sealed record LoginResponse(
         Guid UserId,
         string Username,
-        string? FirstName,
-        string? LastName,
+        string FirstName,
+        string LastName,
         string Token,
         string TokenIssuedAt,
         string TokenExpires,
@@ -199,7 +199,7 @@ internal sealed partial class LoginController : SolaceControllerBase
 
         byte[] passwordBytes = Encoding.UTF8.GetBytes(password);
         byte[] saltBytes = Convert.FromBase64String(existingToken.Data.PasswordSalt);
-        
+
         byte[] passwordCheckHash = Org.BouncyCastle.Crypto.Generators.SCrypt.Generate(passwordBytes, saltBytes, 16384, 8, 1, 64);
 
         string passwordCheckHashBase64 = Convert.ToBase64String(passwordCheckHash);
@@ -344,18 +344,6 @@ internal sealed partial class LoginController : SolaceControllerBase
 
                     var requestedSecurityToken = CreateElement(response, "wst", "RequestedSecurityToken");
                     {
-                        /*var encryptedData = CreateElement(response, "e", "EncryptedData");
-                        encryptedData.SetAttribute("Id", "BinaryDAToken0");
-                        {
-                            var cipherData = CreateElement(response, "e", "CipherData");
-                            {
-                                var cipherValue = CreateElement(response, "e", "CipherValue");
-                                cipherValue.InnerText = deviceTokenString;
-                                cipherData.AppendChild(cipherValue);
-                            }
-
-                            encryptedData.AppendChild(cipherData);
-                        }*/
                         var encryptedData = response.CreateElement("EncryptedData");
                         encryptedData.SetAttribute("Id", "BinaryDAToken0");
                         {
@@ -438,7 +426,6 @@ internal sealed partial class LoginController : SolaceControllerBase
                 return TypedResults.BadRequest();
             }
 
-            // todo: why do we allowExpired?
             var userToken = JwtUtils.Verify<Tokens.Live.UserToken>(userTokenString, _cryptoSecrets.LoginUserTokenSecret, allowExpired: true);
 #pragma warning disable IDE0059 // Unnecessary assignment of a value
             var deviceToken = JwtUtils.Verify<Tokens.Live.DeviceToken>(deviceTokenString, _cryptoSecrets.LoginDeviceTokenSecret, allowExpired: true);
@@ -446,8 +433,152 @@ internal sealed partial class LoginController : SolaceControllerBase
 
             if (userToken is null || userToken.Expired is true)
             {
-                // TODO
-                throw new NotImplementedException();
+                var headerValidity = ValidityDatePair.Create(Config.Login.SoapHeaderValidityMinutes);
+                string nonce = GenerateNonce();
+
+                string scheme = Request.IsHttps ? "https" : "http";
+                string host = Request.Host.Value!;
+                string path = Request.Path.Value ?? "";
+
+                if (path.EndsWith("RST2.srf", StringComparison.OrdinalIgnoreCase))
+                {
+                    path = path[..^"RST2.srf".Length];
+                }
+                
+                if (!path.EndsWith('/'))
+                {
+                    path += "/";
+                }
+
+                string reauthenticateURL = userToken != null
+                    ? $"{scheme}://{host}{path}ppsecure/reauthenticateStart?username={HttpUtility.UrlEncode(userToken.Data.Username)}&userToken={HttpUtility.UrlEncode(userTokenString)}"
+                    : $"{scheme}://{host}{path}ppsecure/InlineConnect.srf";
+
+                var reauthenticateURLDocument = new XmlDocument();
+                var ppEle = CreateElement(reauthenticateURLDocument, "psf", "pp");
+                var inlineauthurlEle = CreateElement(reauthenticateURLDocument, "psf", "inlineauthurl");
+                inlineauthurlEle.InnerText = reauthenticateURL;
+                ppEle.AppendChild(inlineauthurlEle);
+                reauthenticateURLDocument.AppendChild(ppEle);
+
+                string reauthenticateURLDocumentCipherText = DoAESEncryption(
+                    ImmutableCollectionsMarshal.AsArray(_cryptoSecrets.LoginUserTokenSessionKey)!,
+                    nonce,
+                    reauthenticateURLDocument.OuterXml
+                );
+
+                var response = new XmlDocument();
+                var envelope = CreateElement(response, "S", "Envelope");
+                {
+                    var header = CreateElement(response, "S", "Header");
+                    {
+                        var security = CreateElement(response, "wsse", "Security");
+                        {
+                            var timestamp = CreateElement(response, "wsu", "Timestamp");
+                            {
+                                var created = CreateElement(response, "wsu", "Created");
+                                created.InnerText = headerValidity.IssuedStr;
+                                timestamp.AppendChild(created);
+
+                                var expires = CreateElement(response, "wsu", "Expires");
+                                expires.InnerText = headerValidity.ExpiresStr;
+                                timestamp.AppendChild(expires);
+                            }
+
+                            security.AppendChild(timestamp);
+
+                            XmlElement derivedKeyToken = response.CreateElement("wssc", "DerivedKeyToken", "http://schemas.xmlsoap.org/ws/2005/02/sc");
+                            derivedKeyToken.SetAttribute("xmlns:wssc", "http://schemas.xmlsoap.org/ws/2005/02/sc");
+                            derivedKeyToken.SetAttribute("xmlns:ns1", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd");
+
+                            XmlAttribute idAttr = response.CreateAttribute("ns1", "Id", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd");
+                            idAttr.Value = "EncKey";
+                            derivedKeyToken.Attributes.Append(idAttr);
+                            derivedKeyToken.SetAttribute("Algorithm", "urn:liveid:SP800-108CTR-HMAC-SHA256");
+                            {
+                                XmlElement nonceEle = response.CreateElement("wssc", "Nonce", "http://schemas.xmlsoap.org/ws/2005/02/sc");
+                                nonceEle.InnerText = nonce;
+                                derivedKeyToken.AppendChild(nonceEle);
+                            }
+
+                            security.AppendChild(derivedKeyToken);
+                        }
+
+                        header.AppendChild(security);
+
+                        var encryptedPP = CreateElement(response, "psf", "EncryptedPP");
+                        {
+                            var encryptedData = CreateElement(response, "e", "EncryptedData");
+                            encryptedData.SetAttribute("Id", "EncPsf");
+                            encryptedData.SetAttribute("Type", "http://www.w3.org/2001/04/xmlenc#Element");
+
+                            var encryptionMethod = CreateElement(response, "e", "EncryptionMethod");
+                            encryptionMethod.SetAttribute("Algorithm", "http://www.w3.org/2001/04/xmlenc#aes256-cbc");
+                            encryptedData.AppendChild(encryptionMethod);
+
+                            var keyInfo = CreateElement(response, "ds", "KeyInfo");
+                            {
+                                var str = CreateElement(response, "wsse", "SecurityTokenReference");
+                                var reference = CreateElement(response, "wsse", "Reference");
+                                reference.SetAttribute("URI", "#EncKey");
+                                str.AppendChild(reference);
+                                keyInfo.AppendChild(str);
+                            }
+
+                            encryptedData.AppendChild(keyInfo);
+
+                            var cipherData = CreateElement(response, "e", "CipherData");
+                            {
+                                var cipherValue = CreateElement(response, "e", "CipherValue");
+                                cipherValue.InnerText = reauthenticateURLDocumentCipherText;
+                                cipherData.AppendChild(cipherValue);
+                            }
+
+                            encryptedData.AppendChild(cipherData);
+                        }
+
+                        header.AppendChild(encryptedPP);
+                    }
+
+                    envelope.AppendChild(header);
+
+                    var body = CreateElement(response, "S", "Body");
+                    {
+                        var fault = CreateElement(response, "S", "Fault");
+                        {
+                            var detail = CreateElement(response, "S", "Detail");
+                            {
+                                var error = CreateElement(response, "psf", "error");
+                                {
+                                    var value = CreateElement(response, "psf", "value");
+                                    value.InnerText = "0";
+                                    error.AppendChild(value);
+
+                                    var internalerror = CreateElement(response, "psf", "internalerror");
+                                    {
+                                        var code = CreateElement(response, "psf", "code");
+                                        code.InnerText = "0";
+                                        internalerror.AppendChild(code);
+                                    }
+
+                                    error.AppendChild(internalerror);
+                                }
+
+                                detail.AppendChild(error);
+                            }
+
+                            fault.AppendChild(detail);
+                        }
+
+                        body.AppendChild(fault);
+                    }
+
+                    envelope.AppendChild(body);
+                }
+
+                response.AppendChild(envelope);
+
+                return TypedResults.Content(response.OuterXml);
             }
             else
             {
@@ -646,8 +777,6 @@ internal sealed partial class LoginController : SolaceControllerBase
         {
             return TypedResults.BadRequest();
         }
-
-        // return TypedResults.Ok();
 
         XmlElement CreateElement(XmlDocument doc, string prefix, string localName)
         {
