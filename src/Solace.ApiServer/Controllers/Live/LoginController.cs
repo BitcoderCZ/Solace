@@ -22,6 +22,13 @@ namespace Solace.ApiServer.Controllers.Live;
 [Route("login.live.com")]
 internal sealed partial class LoginController : SolaceControllerBase
 {
+    private const int MinUsernameLength = 3;
+    private const int MaxUsernameLength = 16; // keep in sync with GenerateUserId
+    private const int MinPasswordLength = 4;
+    private const int MaxPasswordLength = 32;
+    private const int MinNameLength = 2;
+    private const int MaxNameLength = 100;
+
     private static readonly RandomNumberGenerator _rng = RandomNumberGenerator.Create();
 
     private static Config Config => Program.config;
@@ -62,8 +69,8 @@ internal sealed partial class LoginController : SolaceControllerBase
     private sealed record LoginResponse(
         Guid UserId,
         string Username,
-        string FirstName,
-        string LastName,
+        string? FirstName,
+        string? LastName,
         string Token,
         string TokenIssuedAt,
         string TokenExpires,
@@ -116,29 +123,29 @@ internal sealed partial class LoginController : SolaceControllerBase
 
         Log.Debug($"Register attempt: Username: {username}, First name: {firstName}, Last name: {lastName}");
 
-        if (string.IsNullOrWhiteSpace(username) || username.Length < 3 || username.Length > 16)
+        if (string.IsNullOrWhiteSpace(username) || username.Length < MinUsernameLength || username.Length > MaxUsernameLength)
         {
-            return TypedResults.BadRequest("Username must be 3-16 characters long");
+            return TypedResults.BadRequest($"Username must be {MinUsernameLength}-{MaxUsernameLength} characters long");
         }
 
-        if (string.IsNullOrWhiteSpace(password) || password.Length < 4 || password.Length > 32)
+        if (string.IsNullOrWhiteSpace(password) || password.Length < MinPasswordLength || password.Length > MaxPasswordLength)
         {
-            return TypedResults.BadRequest("Password must be 4-32 characters long");
+            return TypedResults.BadRequest($"Password must be {MinPasswordLength}-{MaxPasswordLength} characters long");
         }
 
-        if (!string.IsNullOrWhiteSpace(firstName) && (firstName.Length < 2 || firstName.Length > 100))
+        if (!string.IsNullOrWhiteSpace(firstName) && (firstName.Length < MinNameLength || firstName.Length > MaxNameLength))
         {
-            return TypedResults.BadRequest("First name must be 2-100 characters long");
+            return TypedResults.BadRequest($"First name must be {MinNameLength}-{MaxNameLength} characters long");
         }
 
-        if (!string.IsNullOrWhiteSpace(lastName) && (lastName.Length < 2 || lastName.Length > 100))
+        if (!string.IsNullOrWhiteSpace(lastName) && (lastName.Length < MinNameLength || lastName.Length > MaxNameLength))
         {
-            return TypedResults.BadRequest("Last name must be 2-100 characters long");
+            return TypedResults.BadRequest($"Last name must be {MinNameLength}-{MaxNameLength} characters long");
         }
 
         if (!GetUsernameRegex().IsMatch(username))
         {
-            return TypedResults.BadRequest("Username must contain only: lowercase letters, numbers, underscore and colon");
+            return TypedResults.BadRequest("Username must contain only: lowercase letters, numbers, underscore and colon"); // keep in sync with GetUsernameRegex
         }
 
         var account = await _earthDb.Accounts
@@ -177,8 +184,40 @@ internal sealed partial class LoginController : SolaceControllerBase
     }
 
     [HttpPost("ppsecure/reauthenticate")]
-    public async Task<IActionResult> Reauthenticate([FromForm] string userToken, [FromForm] string password, CancellationToken cancellationToken)
-        => throw new NotImplementedException(); // TODO
+    public async Task<Results<ContentHttpResult, NotFound<string>, BadRequest<string>, ForbidHttpResult>> Reauthenticate([FromForm] string userToken, [FromForm] string password, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(userToken) || string.IsNullOrEmpty(password))
+        {
+            return TypedResults.BadRequest("Invalid user or password");
+        }
+
+        var existingToken = JwtUtils.Verify<Tokens.Live.UserToken>(userToken, _cryptoSecrets.LoginUserTokenSecret, allowExpired: true);
+        if (existingToken is null)
+        {
+            return TypedResults.Forbid();
+        }
+
+        byte[] passwordBytes = Encoding.UTF8.GetBytes(password);
+        byte[] saltBytes = Convert.FromBase64String(existingToken.Data.PasswordSalt);
+        
+        byte[] passwordCheckHash = Org.BouncyCastle.Crypto.Generators.SCrypt.Generate(passwordBytes, saltBytes, 16384, 8, 1, 64);
+
+        string passwordCheckHashBase64 = Convert.ToBase64String(passwordCheckHash);
+        if (passwordCheckHashBase64 != existingToken.Data.PasswordHash)
+        {
+            return TypedResults.Forbid();
+        }
+
+        var account = await _earthDb.Accounts
+            .FirstOrDefaultAsync(account => account.Id == existingToken.Data.UserId, cancellationToken);
+
+        if (account is null)
+        {
+            return TypedResults.NotFound("Account not found");
+        }
+
+        return JsonCamelCase(CreateLoginResponse(account));
+    }
 
     [HttpPost("ppsecure/deviceaddcredential.srf")]
     public ContentHttpResult DeviceAddCredential()
@@ -669,14 +708,14 @@ internal sealed partial class LoginController : SolaceControllerBase
 
     private static Guid GenerateUserId(string username)
     {
-        Span<byte> usernameUTF8 = stackalloc byte[51]; //Encoding.UTF8.GetMaxByteCount(16)
+        Span<byte> usernameUTF8 = stackalloc byte[51]; // Encoding.UTF8.GetMaxByteCount(MaxUsernameLength)
         int usernameUTF8Length = Encoding.UTF8.GetBytes(username, usernameUTF8);
         usernameUTF8 = usernameUTF8[..usernameUTF8Length];
 
         Span<byte> usernameHash = stackalloc byte[32];
         SHA256.HashData(usernameUTF8, usernameHash);
 
-        return new Guid(usernameHash[..16], false);//Convert.ToHexStringLower(usernameHash[..8]);
+        return new Guid(usernameHash[..16], false);
     }
 
     private static byte[] HashPassword(string password, byte[] salt)
@@ -734,7 +773,8 @@ internal sealed partial class LoginController : SolaceControllerBase
         return Convert.ToBase64String(cipherText);
     }
 
-    [GeneratedRegex("^[a-z0-9_:]+$")]
+    // keep in sync with Register
+    [GeneratedRegex("^[a-z0-9_:]+$", RegexOptions.CultureInvariant)]
     private partial Regex GetUsernameRegex();
 
     [GeneratedRegex("&da=([^&]*)")]

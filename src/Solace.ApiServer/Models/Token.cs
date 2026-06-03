@@ -15,8 +15,8 @@ internal static class Tokens
         internal sealed record UserToken(
             Guid UserId,
             string Username,
-            string PasswordSalt,
-            string PasswordHash
+            string PasswordSalt, // base64
+            string PasswordHash // base64
         ) : ITokenData<UserToken>;
 
         internal sealed record DeviceToken()
