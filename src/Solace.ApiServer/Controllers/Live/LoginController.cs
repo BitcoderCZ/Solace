@@ -676,7 +676,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         Span<byte> usernameHash = stackalloc byte[32];
         SHA256.HashData(usernameUTF8, usernameHash);
 
-        return new Guid(usernameHash, false);//Convert.ToHexStringLower(usernameHash[..8]);
+        return new Guid(usernameHash[..16], false);//Convert.ToHexStringLower(usernameHash[..8]);
     }
 
     private static byte[] HashPassword(string password, byte[] salt)
