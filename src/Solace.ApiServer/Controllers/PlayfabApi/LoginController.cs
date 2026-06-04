@@ -17,10 +17,12 @@ internal sealed partial class LoginController : SolaceControllerBase
     private static Config Config => Program.config;
 
     private readonly EarthDbContext _dbContext;
+    private readonly CryptoSecrets _cryptoSecrets;
 
-    public LoginController(EarthDbContext context)
+    public LoginController(EarthDbContext context, CryptoSecrets cryptoSecrets)
     {
         _dbContext = context;
+        _cryptoSecrets = cryptoSecrets;
     }
 
     private sealed record LoginWithCustomIDRequest(
@@ -80,7 +82,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        var xboxToken = JwtUtils.Verify<Tokens.Shared.PlayfabXboxToken>(authValue.TokenString, Config.XboxLive.PlayfabTokenSecretBytes);
+        var xboxToken = JwtUtils.Verify<Tokens.Shared.PlayfabXboxToken>(authValue.TokenString, _cryptoSecrets.LivePlayfabTokenSecret);
 
         if (xboxToken is null || xboxToken.Data.UserId != authValue.UserId)
         {
@@ -100,11 +102,11 @@ internal sealed partial class LoginController : SolaceControllerBase
 
         var sessionTicketValidity = ValidityDatePair.Create(Config.PlayfabApi.SessionTicketValidityMinutes);
         var sessionTicket = new Tokens.Shared.PlayfabSessionTicket(userId);
-        string sessionTicketString = JwtUtils.Sign(sessionTicket, Config.PlayfabApi.SessionTicketSecretBytes, sessionTicketValidity);
+        string sessionTicketString = JwtUtils.Sign(sessionTicket, _cryptoSecrets.PlayfabSessionTicketSecret, sessionTicketValidity);
 
         var entityTokenValidity = ValidityDatePair.Create(Config.PlayfabApi.EntityTokenValidityMinutes);
         var entityToken = new Tokens.Playfab.EntityToken(userId, "title_player_account");
-        string entityTokenString = JwtUtils.Sign(entityToken, Config.PlayfabApi.EntityTokenSecretBytes, entityTokenValidity);
+        string entityTokenString = JwtUtils.Sign(entityToken, _cryptoSecrets.PlayfabEntityTokenSecret, entityTokenValidity);
 
         return JsonPascalCase(new PlayfabOkResponse(
             200,

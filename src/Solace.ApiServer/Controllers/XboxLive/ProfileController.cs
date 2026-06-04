@@ -11,11 +11,12 @@ namespace Solace.ApiServer.Controllers.XboxLive;
 
 [Route("users")]
 [Route("profile.xboxlive.com/users")]
-internal sealed partial class ProfileController : SolaceControllerBase
+internal sealed partial class ProfileController : LoginServerControllerBase
 {
     private readonly EarthDbContext _dbContext;
 
-    public ProfileController(EarthDbContext context)
+    public ProfileController(EarthDbContext context, CryptoSecrets cryptoSecrets)
+        : base(cryptoSecrets)
     {
         _dbContext = context;
     }

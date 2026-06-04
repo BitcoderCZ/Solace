@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using CommandLine;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -37,9 +38,16 @@ public partial class Program
 
     public static string LoggerAddress => Address + "/api/logs/create";
 
-    private static async Task Main(string[] args)
+    private sealed class Options
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     {
-        // Environment.CurrentDirectory = AppContext.BaseDirectory; // todo:
+        [Option('s', "start-on-startup", Default = false, Required = false, HelpText = "Start the server automatically when the application launches.")]
+        public bool StartOnStartup { get; set; }
+    }
+
+    private static async Task<int> Main(string[] args)
+    {
+        // Environment.CurrentDirectory = AppContext.BaseDirectory;
 
         Settings.Instance = await Settings.LoadAsync(Settings.DefaultPath);
 
@@ -138,7 +146,6 @@ public partial class Program
         // builder.Services.AddDbContext<ApplicationDbContext>(options =>
         //     options.UseSqlite(launcherConnectionString));
 
-        Console.WriteLine(Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!));
         string earthConnectionString = "Data Source=" + Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!);
 
         builder.Services.AddDbContextFactory<EarthDbContext>(options =>
@@ -271,7 +278,55 @@ public partial class Program
         //     File.WriteAllBytes(Path.Combine("bps", dbBuildplate.Name[7..]), preview);
         // }
 
-        app.Run();
+        if (args.Any(a => a.StartsWith("--applicationName", StringComparison.Ordinal)))
+        {
+            await app.RunAsync();
+            return 0;
+        }
+
+        ParserResult<Options> res = Parser.Default.ParseArguments<Options>(args);
+
+        Options options;
+        if (res is Parsed<Options> parsed)
+        {
+            options = parsed.Value;
+        }
+        else if (res is NotParsed<Options> notParsed)
+        {
+            if (res.Errors.Any(error => error is HelpRequestedError))
+            {
+                return 0;
+            }
+            else if (res.Errors.Any(error => error is VersionRequestedError))
+            {
+                return 0;
+            }
+            else
+            {
+                return 1;
+            }
+        }
+        else
+        {
+            return 1;
+        }
+
+        if (options.StartOnStartup)
+        {
+            Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                using (var scope = app.Services.CreateScope())
+                {
+                    var serverManager = scope.ServiceProvider.GetRequiredService<ServerManager>();
+                    await serverManager.Start();
+                }
+            }).Forget();
+        }
+
+        await app.RunAsync();
+
+        return 0;
     }
 
     private static async Task EnsureBuiltInRolesAsync(RoleManager<ApplicationRole> roleManager)

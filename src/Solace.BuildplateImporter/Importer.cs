@@ -50,7 +50,7 @@ public sealed class Importer : IAsyncDisposable
         return await StoreTemplate(templateId, name, preview, worldData, cancellationToken);
     }
 
-    public async Task<bool> RegenerateTemplatePreviewAsync(Guid templateId, CancellationToken cancellationToken = default)
+    public async Task<byte[]?> RegenerateTemplatePreviewAsync(Guid templateId, CancellationToken cancellationToken = default)
     {
         TemplateBuildplateEF? template;
         try
@@ -62,19 +62,19 @@ public sealed class Importer : IAsyncDisposable
         catch (Exception ex)
         {
             Logger.Error($"Failed to fetch template {templateId}: {ex}");
-            return false;
+            return null;
         }
 
         if (template is null)
         {
             Logger.Warning($"Template {templateId} does not exist");
-            return false;
+            return null;
         }
 
         if (string.IsNullOrEmpty(template.ServerDataObjectId))
         {
             Logger.Error($"Template '{templateId}' has no associated world data");
-            return false;
+            return null;
         }
 
         var serverData = await ObjectStoreClient.GetAsync(template.ServerDataObjectId);
@@ -82,7 +82,7 @@ public sealed class Importer : IAsyncDisposable
         if (serverData is null)
         {
             Logger.Error($"Could not get world data for template '{templateId}'");
-            return false;
+            return null;
         }
 
         WorldData? worldData;
@@ -93,7 +93,7 @@ public sealed class Importer : IAsyncDisposable
 
         if (worldData is null)
         {
-            return false;
+            return null;
         }
 
         worldData = worldData with { Size = template.Size, Offset = template.Offset, Night = template.Night, };
@@ -104,7 +104,7 @@ public sealed class Importer : IAsyncDisposable
         if (newPreviewObjectId is null)
         {
             Logger.Error($"Could not store template's preview object in object store '{templateId}'");
-            return false;
+            return null;
         }
 
         var oldPreviewObjectId = template.PreviewObjectId;
@@ -121,13 +121,13 @@ public sealed class Importer : IAsyncDisposable
                 Logger.Debug($"Deleted old preview for template '{templateId}'");
             }
 
-            return true;
+            return preview;
         }
         catch (Exception ex)
         {
             Logger.Error($"Failed to update template buidplate in database: {ex}");
             await ObjectStoreClient.DeleteAsync(newPreviewObjectId);
-            return false;
+            return null;
         }
     }
 

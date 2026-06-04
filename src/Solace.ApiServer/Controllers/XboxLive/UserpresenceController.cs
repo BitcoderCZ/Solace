@@ -6,8 +6,12 @@ namespace Solace.ApiServer.Controllers.XboxLive;
 
 [Route("users")]
 [Route("userpresence.xboxlive.com/users")]
-internal sealed partial class UserpresenceController : SolaceControllerBase
+internal sealed partial class UserpresenceController : LoginServerControllerBase
 {
+    public UserpresenceController(CryptoSecrets cryptoSecrets) : base(cryptoSecrets)
+    {
+    }
+
     [HttpPost("{xuidParam}/devices/current/titles/current")]
     public Results<Ok, UnauthorizedHttpResult, BadRequest> GetTitles(string xuidParam)
     {

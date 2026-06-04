@@ -15,6 +15,9 @@ using Solace.DB.Models.Player;
 using Solace.StaticData;
 using Microsoft.EntityFrameworkCore;
 using Solace.DB.Utils;
+using Serilog;
+using Microsoft.EntityFrameworkCore;
+using Solace.DB.Utils;
 
 namespace Solace.ApiServer.Controllers.EarthApi;
 
@@ -52,12 +55,12 @@ internal sealed class InventoryController : SolaceControllerBase
             .AsNoTracking()
             .FirstOrNewAsync(journal => journal.Id == accountId, trackNew: false, cancellationToken: cancellationToken);
 
-        Dictionary<string, int?> hotbarItemCounts = [];
+        Dictionary<string, int> hotbarItemCounts = [];
         foreach (var item in hotbar.Items)
         {
             if (item is not null)
             {
-                hotbarItemCounts[item.Uuid] = hotbarItemCounts.GetOrDefault(item.Uuid, 0) + item.Count;
+                hotbarItemCounts[item.Uuid] = hotbarItemCounts.GetValueOrDefault(item.Uuid, 0) + item.Count;
             }
         }
 
@@ -80,7 +83,7 @@ internal sealed class InventoryController : SolaceControllerBase
             [.. inventory.StackableItems.Select(item =>
             {
                 string uuid = item.Id;
-                int count = item.Count - hotbarItemCounts.GetOrDefault(uuid, 0) ?? 0;
+                int count = item.Count - hotbarItemCounts.GetValueOrDefault(uuid);
                 JournalEF.ItemJournalEntry itemJournalEntry = journal.GetItem(uuid)!;
                 string firstSeen = TimeFormatter.FormatTime(itemJournalEntry.FirstSeen);
                 string lastSeen = TimeFormatter.FormatTime(itemJournalEntry.LastSeen);

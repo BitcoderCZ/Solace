@@ -11,6 +11,13 @@ internal sealed class UserController : SolaceControllerBase
 {
     private static Config Config => Program.config;
 
+    private readonly CryptoSecrets _cryptoSecrets;
+
+    public UserController(CryptoSecrets cryptoSecrets)
+    {
+        _cryptoSecrets = cryptoSecrets;
+    }
+
     public sealed record AuthenticateRequest(
         AuthenticateRequest.PropertiesR Properties,
         string RelyingParty,
@@ -34,7 +41,7 @@ internal sealed class UserController : SolaceControllerBase
     [HttpPost]
     public Results<ContentHttpResult, UnauthorizedHttpResult> Authenticate([FromBody] AuthenticateRequest request)
     {
-        var ticket = JwtUtils.Verify<Tokens.Shared.XboxTicketToken>(request.Properties.RpsTicket, Config.Login.XboxTokenSecretBytes)?.Data;
+        var ticket = JwtUtils.Verify<Tokens.Shared.XboxTicketToken>(request.Properties.RpsTicket, _cryptoSecrets.LoginXboxTokenSecret)?.Data;
 
         if (ticket is null)
         {
@@ -54,7 +61,7 @@ internal sealed class UserController : SolaceControllerBase
         return JsonPascalCase(new AuthenticateResponse(
             tokenValidity.IssuedStr,
             tokenValidity.ExpiresStr,
-            JwtUtils.Sign<Tokens.Xbox.AuthToken>(token, Config.XboxLive.AuthTokenSecretBytes, tokenValidity),
+            JwtUtils.Sign<Tokens.Xbox.AuthToken>(token, _cryptoSecrets.LiveAuthTokenSecret, tokenValidity),
             new()
             {
                 ["xui"] = [

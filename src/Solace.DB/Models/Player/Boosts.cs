@@ -17,20 +17,35 @@ public sealed class BoostsEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
     public ActiveBoost? Get(string instanceId)
         => ActiveBoosts.FirstOrDefault(activeBoost => activeBoost is not null && activeBoost.InstanceId == instanceId);
 
-    public ActiveBoost[] Prune(long currentTime)
+    public IEnumerable<ActiveBoost> Prune(long currentTime)
     {
-        LinkedList<ActiveBoost> prunedBoosts = [];
         for (int index = 0; index < ActiveBoosts.Length; index++)
         {
             ActiveBoost? activeBoost = ActiveBoosts[index];
             if (activeBoost is not null && activeBoost.StartTime + activeBoost.Duration < currentTime)
             {
                 ActiveBoosts[index] = null;
-                prunedBoosts.AddLast(activeBoost);
+                yield return activeBoost;
             }
         }
+    }
 
-        return [.. prunedBoosts];
+    public async Task MergeWith(BoostsEF other, ValueMerger merger)
+    {
+        merger.CurrentUserId = Id.ToString();
+        merger.CurrentUsername = Account?.Username;
+
+        for (var i = 0; i < other.ActiveBoosts.Length; i++)
+        {
+            if (ActiveBoosts[i] is null)
+            {
+                ActiveBoosts[i] = other.ActiveBoosts[i];
+            }
+            else if (other.ActiveBoosts[i] is not null)
+            {
+                ActiveBoosts[i] = await merger.AutoMerge(ActiveBoosts[i]!, other.ActiveBoosts[i]!, $"Boost slot {i + 1}", null);
+            }
+        }
     }
 
     public async Task MergeWith(BoostsEF other, ValueMerger merger)

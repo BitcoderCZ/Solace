@@ -640,7 +640,7 @@ BuildplateLauncher.ExeName))
 
     private async Task<bool> RemoveBuildplate(Guid id)
     {
-        await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, ownsEarthDb: true);
+        await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, createEventBus: false, ownsEarthDb: true);
 
         return await importer.RemoveBuildplateFromPlayer(id, AccountId, default);
     }

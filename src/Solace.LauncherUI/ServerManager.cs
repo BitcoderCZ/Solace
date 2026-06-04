@@ -419,7 +419,7 @@ public sealed class ServerManager : IDisposable
             }
         }
 
-        if (!await FileChecker.CheckAsync(settings, false, logger, cancellationToken))
+        if (!await FileChecker.CheckAsync(settings, logger, cancellationToken))
         {
             logger.Error("File validation failed");
             Status = ServerStatus.Offline;

@@ -82,6 +82,20 @@ namespace Solace.DB.Migrations
                     b.ToTable("EncounterBuildplates");
                 });
 
+            modelBuilder.Entity("Solace.DB.Models.Global.Secret", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Secrets");
+                });
+
             modelBuilder.Entity("Solace.DB.Models.Global.SharedBuildplateEF", b =>
                 {
                     b.Property<Guid>("Id")

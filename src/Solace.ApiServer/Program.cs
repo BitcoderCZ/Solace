@@ -52,6 +52,9 @@ public static class Program
 
         [Option("logger-url", Default = null, Required = false, HelpText = "Url to send logs to")]
         public string? LoggerUrl { get; set; }
+
+        [Option("local-login-only", Default = false, Required = false, HelpText = "Whenther to only allow local accounts, or also allow microsoft accounts")]
+        public bool LocalLoginOnly { get; set; }
     }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
@@ -129,6 +132,15 @@ public static class Program
 
         Log.Logger = log;
 
+        if (options.LocalLoginOnly)
+        {
+            Log.Information("Local account only login enabled, Microsoft accounts will not work");
+        }
+        else
+        {
+            Log.Warning("Local account only login disabled, account credentials cannot be verified");
+        }
+
         Log.Information("Loading configuration");
         try
         {
@@ -201,7 +213,7 @@ public static class Program
 
         string earthDbConnectionString = "Data Source=" + options.EarthDatabaseConnectionString!;
 
-        using (var earthDbContext = EarthDbContext.Create(options.EarthDatabaseConnectionString!))
+        await using (var earthDbContext = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!))
         {
             var currentShopBuildplates = await earthDbContext.TemplateBuildplates
                 .AsNoTracking()
@@ -252,10 +264,12 @@ public static class Program
         var tappablesManager = await TappablesManager.CreateAsync(eventBus);
         var buildplateInstancesManager = await BuildplateInstancesManager.CreateAsync(eventBus);
 
-        using var birhEarthDb = EarthDbContext.Create(options.EarthDatabaseConnectionString!);
+        using var birhEarthDb = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!);
         BuildplateInstanceRequestHandler.Start(birhEarthDb, eventBus, objectStore, staticData.Catalog, buildplateInstancesManager);
 
         var builder = WebApplication.CreateBuilder(args);
+
+        builder.Configuration["Authentication:LocalLoginOnly"] = options.LocalLoginOnly.ToString();
 
         builder.Host.UseSerilog();
 
@@ -266,6 +280,10 @@ public static class Program
         builder.Services.AddSingleton(staticData);
         builder.Services.AddSingleton(tappablesManager);
         builder.Services.AddSingleton(buildplateInstancesManager);
+
+        builder.Services.AddMemoryCache();
+
+        builder.Services.AddSingleton<CatalogResponseCacheService>();
 
         builder.Services.AddControllers()
            .ConfigureApplicationPartManager(manager =>
@@ -292,6 +310,13 @@ public static class Program
 
         builder.Services.AddDbContext<EarthDbContext>(options => EarthDbContext.ConfigureBuilder(options, earthDbConnectionString));
 
+        await using (var earthDbContext = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!))
+        {
+            var secrets = await earthDbContext.GetOrInitializeSecretsAsync();
+
+            builder.Services.AddSingleton(secrets);
+        }
+
         var app = builder.Build();
 
         var forwardedHeadersOptions = new ForwardedHeadersOptions
@@ -306,7 +331,7 @@ public static class Program
 
         app.Use(async (context, next) =>
         {
-            context.Items.Add(RequestUtils.TimestampKey, DateTimeOffset.UtcNow);
+            context.Items.Add(RequestExtensions.TimestampKey, DateTimeOffset.UtcNow);
             await next();
         });
 
@@ -329,7 +354,7 @@ public static class Program
         });
 
         app.UseStaticFiles();
-        
+
         app.UseRouting();
 
         app.UseAuthentication();

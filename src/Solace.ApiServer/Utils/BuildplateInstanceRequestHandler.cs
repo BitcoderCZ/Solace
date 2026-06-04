@@ -6,15 +6,12 @@ using Solace.Common;
 using Solace.Common.Utils;
 using Solace.DB;
 using Solace.DB.Models.Common;
-using Solace.DB.Models.Global;
 using Solace.DB.Models.Player;
 using Solace.EventBus.Client;
 using Solace.ObjectStore.Client;
 using Solace.StaticData;
-using LegacyBuildplates = Solace.DB.Models.Player.LegacyBuildplates;
 using CICIBIEType = Solace.StaticData.Catalog.ItemsCatalogR.Item.BoostInfoR.Effect.TypeE;
 using Microsoft.EntityFrameworkCore;
-using Org.BouncyCastle.Asn1.Cms;
 using Solace.DB.Utils;
 
 namespace Solace.ApiServer.Utils;
@@ -443,7 +440,7 @@ public sealed class BuildplateInstanceRequestHandler
                     initialInventoryContents = new InventoryResponse(
                         [.. Enumerable.Concat(
                             inventory.StackableItems
-                                .Select(item => new InventoryResponse.Item(item.Id, item.Count ?? 1, null, 0)),
+                                .Select(item => new InventoryResponse.Item(item.Id, item.Count, null, 0)),
                             inventory.NonStackableItems
                                 .SelectMany(item => item.Instances
                                     .Select(instance => new InventoryResponse.Item(item.Id, 1, instance.InstanceId, instance.Wear)))
@@ -494,7 +491,7 @@ public sealed class BuildplateInstanceRequestHandler
                         .FirstOrNewAsync(hotbar => hotbar.Id == playerConnectedRequest.Uuid);
 
                     var inventoryResponseHotbar = new InventoryResponse.HotbarItem[7];
-                    Dictionary<string, int?> inventoryResponseStackableItems = [];
+                    Dictionary<string, int> inventoryResponseStackableItems = [];
                     LinkedList<InventoryResponse.Item> inventoryResponseNonStackableItems = [];
                     for (int index = 0; index < 7; index++)
                     {
@@ -509,7 +506,7 @@ public sealed class BuildplateInstanceRequestHandler
                             }
                             else
                             {
-                                int wear = inventory.TakeItems(item.Uuid, [item.InstanceId])![0].Wear;
+                                int wear = inventory.TakeItems(item.Uuid, [item.InstanceId])!.First().Wear;
                                 inventoryResponseNonStackableItems.AddLast(new InventoryResponse.Item(item.Uuid, 1, item.InstanceId, wear));
                                 inventoryResponseHotbar[index] = new InventoryResponse.HotbarItem(item.Uuid, 1, item.InstanceId);
                             }
@@ -520,7 +517,7 @@ public sealed class BuildplateInstanceRequestHandler
 
                     initialInventoryContents = new InventoryResponse(
                         [
-                            .. inventoryResponseStackableItems.Select(entry => new InventoryResponse.Item(entry.Key, entry.Value ?? 1, null, 0)),
+                            .. inventoryResponseStackableItems.Select(entry => new InventoryResponse.Item(entry.Key, entry.Value, null, 0)),
                             .. inventoryResponseNonStackableItems
                         ],
                         inventoryResponseHotbar
@@ -730,7 +727,7 @@ public sealed class BuildplateInstanceRequestHandler
         return new InventoryResponse(
             [.. Enumerable.Concat(
                 inventory.StackableItems
-                    .Select(item => new InventoryResponse.Item(item.Id, item.Count ?? 1, null, 0)),
+                    .Select(item => new InventoryResponse.Item(item.Id, item.Count, null, 0)),
                 inventory.NonStackableItems
                     .SelectMany(item => item.Instances
                     .Select(instance => new InventoryResponse.Item(item.Id, 1, instance.InstanceId, instance.Wear)))
