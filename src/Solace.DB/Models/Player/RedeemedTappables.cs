@@ -11,7 +11,7 @@ public sealed class RedeemedTappablesEF : IEntityWithId<Guid>, IVersionedEntity,
 
     public Account Account { get; set; } = null!;
 
-    public Dictionary<Guid, long> Tappables = [];
+    public Dictionary<Guid, long> Tappables { get; set; } = [];
 
     public bool IsRedeemed(Guid id)
         => Tappables.ContainsKey(id);

@@ -2,13 +2,16 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Asp.Versioning;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Solace.ApiServer.Authentication;
 using Solace.ApiServer.Controllers;
 using Solace.ApiServer.Controllers.EarthApi;
 using Solace.ApiServer.Controllers.PlayfabApi;
@@ -271,7 +274,9 @@ public class ApiIntegrationTests
         var secrets = host.Secrets;
         var client = app.GetTestClient();
 
-        var sessionTicket = "0123456789ABCDEF-test-token";
+        var userId = Guid.NewGuid();
+        var sessionTicketJwt = JwtUtils.Sign(new Tokens.Shared.PlayfabSessionTicket(userId), secrets.PlayfabSessionTicketSecret, ValidityDatePair.Create(Config.Default.PlayfabApi.SessionTicketValidityMinutes));
+        var sessionTicket = $"{userId:D}-{sessionTicketJwt}";
         var request = new
         {
             SessionTicket = sessionTicket,
@@ -282,7 +287,13 @@ public class ApiIntegrationTests
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var root = document.RootElement;
-        await Assert.That(root.GetProperty("result").GetProperty("authenticationToken").GetString()).IsEqualTo("0123456789ABCDEF");
+        var authenticationToken = root.GetProperty("result").GetProperty("authenticationToken").GetString();
+        await Assert.That(authenticationToken).IsNotNull();
+
+        var protector = app.Services.GetRequiredService<IDataProtectionProvider>()
+            .CreateProtector(GenoaAuthenticationHandler.DataProtectionPurpose)
+            .ToTimeLimitedDataProtector();
+        await Assert.That(protector.Unprotect(authenticationToken!)).IsEqualTo(userId.ToString());
     }
 
     private static Task<(WebApplication App, CryptoSecrets Secrets)> BuildTestHostAsync(Type controllerType)
@@ -314,24 +325,35 @@ public class ApiIntegrationTests
             builder.Services.AddDbContext<EarthDbContext>(options => options.UseSqlite(connection));
         }
 
-        var app = builder.Build();
-        app.MapControllers();
-
-        await app.StartAsync();
+        builder.Services.AddDataProtection();
+        builder.Services.AddAuthentication("GenoaAuth")
+            .AddScheme<AuthenticationSchemeOptions, GenoaAuthenticationHandler>("GenoaAuth", null);
+        builder.Services.AddAuthorization();
 
         CryptoSecrets cryptoSecrets;
         if (connection is not null)
         {
-            using var scope = app.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<EarthDbContext>();
-            await db.Database.EnsureCreatedAsync();
-
-            cryptoSecrets = await db.GetOrInitializeSecretsAsync();
+            await using var tempProvider = builder.Services.BuildServiceProvider();
+            using (var scope = tempProvider.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<EarthDbContext>();
+                await db.Database.EnsureCreatedAsync();
+                cryptoSecrets = await db.GetOrInitializeSecretsAsync();
+            }
         }
         else
         {
             cryptoSecrets = CryptoSecrets.CreateRandom();
         }
+
+        builder.Services.AddSingleton(cryptoSecrets);
+
+        var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapControllers();
+
+        await app.StartAsync();
 
         return (app, cryptoSecrets);
     }

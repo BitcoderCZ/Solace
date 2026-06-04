@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -234,7 +235,12 @@ public sealed class EarthDbContext : DbContext
 
         // redeemed tappables
         modelBuilder.Entity<RedeemedTappablesEF>()
-            .OwnsOne(x => x.Tappables, builder => builder.ToJson());
+            .Property(x => x.Tappables)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
+                v => JsonSerializer.Deserialize<Dictionary<Guid, long>>(v, (JsonSerializerOptions)null!) ?? new Dictionary<Guid, long>()
+            )
+            .Metadata.SetValueComparer(new DictionaryGuidLongValueComparer());
 
         // tokens
         modelBuilder.Entity<TokensEF>()
@@ -512,6 +518,67 @@ public sealed class DictionaryStringIntValueComparer : ValueComparer<Dictionary<
 
         var hash = new HashCode();
         foreach (var kvp in d.OrderBy(x => x.Key, StringComparer.Ordinal))
+        {
+            hash.Add(kvp.Key);
+            hash.Add(kvp.Value);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
+public sealed class DictionaryGuidLongValueComparer : ValueComparer<Dictionary<Guid, long>>
+{
+    public DictionaryGuidLongValueComparer()
+        : base(
+            (d1, d2) => DictionariesEqual(d1, d2),
+            d => ComputeHashCode(d),
+            d => new Dictionary<Guid, long>(d.Select(item => new KeyValuePair<Guid, long>(item.Key, item.Value))))
+    {
+    }
+
+    private static bool DictionariesEqual(Dictionary<Guid, long>? d1, Dictionary<Guid, long>? d2)
+    {
+        if (d1 == d2)
+        {
+            return true;
+        }
+
+        if (d1 == null || d2 == null)
+        {
+            return false;
+        }
+
+        if (d1.Count != d2.Count)
+        {
+            return false;
+        }
+
+        foreach (var kvp in d1)
+        {
+            if (!d2.TryGetValue(kvp.Key, out var value2))
+            {
+                return false;
+            }
+
+            if (kvp.Value != value2)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int ComputeHashCode(Dictionary<Guid, long>? d)
+    {
+        if (d == null)
+        {
+            return 0;
+        }
+
+        var hash = new HashCode();
+        foreach (var kvp in d.OrderBy(x => x.Key))
         {
             hash.Add(kvp.Key);
             hash.Add(kvp.Value);

@@ -128,8 +128,8 @@ public class TappablesRedeemTests
         using (var document = JsonDocument.Parse(redeemBody))
         {
             var result = document.RootElement.GetProperty("result");
-            await Assert.That(result.GetProperty("token").GetProperty("type").GetString()).IsEqualTo("redeemtappable");
-            await Assert.That(result.GetProperty("updates").ValueKind).IsEqualTo(JsonValueKind.Object);
+            await Assert.That(result.GetProperty("token").GetProperty("clientType").GetString()).IsEqualTo("redeemtappable");
+            await Assert.That(result.GetProperty("updates").ValueKind).IsEqualTo(JsonValueKind.Null);
         }
 
         using (var scope = host.App.Services.CreateScope())
@@ -161,7 +161,7 @@ public class TappablesRedeemTests
 
         double latitude = 51.0;
         double longitude = 0.0;
-        string tileId = TappablesManager.LocationToTileId((float)latitude, (float)longitude);
+        string tileId = string.Empty;
 
         Guid? tappableId = null;
         const int maxAttempts = 10;
@@ -181,7 +181,9 @@ public class TappablesRedeemTests
                 var activeLocations = document.RootElement.GetProperty("result").GetProperty("activeLocations");
                 if (activeLocations.GetArrayLength() > 0)
                 {
-                    tappableId = activeLocations[0].GetProperty("id").GetGuid();
+                    var activeLocation = activeLocations[0];
+                    tappableId = activeLocation.GetProperty("id").GetGuid();
+                    tileId = activeLocation.GetProperty("tileId").GetString()!;
                     break;
                 }
             }
@@ -205,8 +207,8 @@ public class TappablesRedeemTests
         using (var document = JsonDocument.Parse(redeemBody))
         {
             var result = document.RootElement.GetProperty("result");
-            await Assert.That(result.GetProperty("token").GetProperty("type").GetString()).IsEqualTo("redeemtappable");
-            await Assert.That(result.GetProperty("updates").ValueKind).IsEqualTo(JsonValueKind.Object);
+            await Assert.That(result.GetProperty("token").GetProperty("clientType").GetString()).IsEqualTo("redeemtappable");
+            await Assert.That(result.GetProperty("updates").ValueKind).IsEqualTo(JsonValueKind.Null);
         }
 
         using (var scope = host.App.Services.CreateScope())

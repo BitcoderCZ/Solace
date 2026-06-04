@@ -9,9 +9,13 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 using Solace.ApiServer.Authentication;
 using Solace.ApiServer.Utils;
+using TUnit.Assertions;
+using TUnit.Assertions.Extensions;
+using TUnit.Core;
 
 namespace Solace.ApiServer.Tests;
 
@@ -43,7 +47,12 @@ public class ApiAuthenticationTests
         await using var app = await BuildAuthHostAsync();
         var client = app.GetTestClient();
 
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Genoa", "test-user-id");
+        var protector = app.Services.GetRequiredService<IDataProtectionProvider>()
+            .CreateProtector(GenoaAuthenticationHandler.DataProtectionPurpose)
+            .ToTimeLimitedDataProtector();
+        var token = protector.Protect("test-user-id");
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Genoa", token);
         var response = await client.GetAsync("/test/auth");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
@@ -64,6 +73,7 @@ public class ApiAuthenticationTests
                 manager.FeatureProviders.Add(new InternalControllerFeatureProvider());
             });
 
+        builder.Services.AddDataProtection();
         builder.Services.AddAuthentication("GenoaAuth")
             .AddScheme<AuthenticationSchemeOptions, GenoaAuthenticationHandler>("GenoaAuth", null);
 
