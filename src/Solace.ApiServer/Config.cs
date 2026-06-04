@@ -2,7 +2,6 @@
 
 namespace Solace.ApiServer;
 
-// todo: secrets should be randomly generated
 public sealed record class Config(Config.LoginR Login, Config.XboxLiveR XboxLive, Config.PlayfabApiR PlayfabApi)
 {
     public static readonly Config Default = new Config
