@@ -398,7 +398,6 @@ public sealed class NetworkServer : IDisposable
     private sealed class RequestSenderChannel : ChannelHandler
     {
         private readonly Server.RequestSender _requestSender;
-        // TODO: should they be volatile?
         private volatile Task<string?>? _currentPendingResponse;
         private volatile bool _error;
 

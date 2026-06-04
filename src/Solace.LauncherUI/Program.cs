@@ -47,7 +47,7 @@ public partial class Program
 
     private static async Task<int> Main(string[] args)
     {
-        // Environment.CurrentDirectory = AppContext.BaseDirectory; // todo:
+        // Environment.CurrentDirectory = AppContext.BaseDirectory;
 
         Settings.Instance = await Settings.LoadAsync(Settings.DefaultPath);
 
