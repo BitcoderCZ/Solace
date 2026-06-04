@@ -17,6 +17,9 @@ using Solace.ApiServer.Models;
 using Solace.ApiServer.Utils;
 using Solace.DB;
 using Solace.DB.Models;
+using TUnit.Assertions;
+using TUnit.Assertions.Extensions;
+using TUnit.Core;
 
 namespace Solace.ApiServer.Tests;
 
@@ -25,7 +28,9 @@ public class ApiIntegrationTests
     [Test]
     public async Task LocatorController_Get_ReturnsProductionEnvironmentJson()
     {
-        await using var app = await BuildTestHostAsync(typeof(LocatorController));
+        var host = await BuildTestHostAsync(typeof(LocatorController));
+        await using var app = host.App;
+
         var client = app.GetTestClient();
 
         var response = await client.GetAsync("/player/environment");
@@ -40,7 +45,8 @@ public class ApiIntegrationTests
     [Test]
     public async Task MojankLocatorController_Get_ReturnsProductionEnvironmentJson()
     {
-        await using var app = await BuildTestHostAsync(typeof(MojankLocatorController));
+        var host = await BuildTestHostAsync(typeof(MojankLocatorController));
+        await using var app = host.App;
         var client = app.GetTestClient();
 
         var response = await client.GetAsync("/api/v1.1/player/environment");
@@ -55,16 +61,17 @@ public class ApiIntegrationTests
     [Test]
     public async Task UserController_Authenticate_ReturnsXapiAuthToken()
     {
-        Program.config = Config.Default;
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync([typeof(UserController)], connection);
+        var host = await BuildTestHostAsync([typeof(UserController)], connection);
+        await using var app = host.App;
+        var secrets = host.Secrets;
         var client = app.GetTestClient();
 
         var userId = Guid.NewGuid();
         var ticket = new Tokens.Shared.XboxTicketToken(userId, "PlayerOne");
-        var rpsTicket = JwtUtils.Sign(ticket, Config.Default.Login.XboxTokenSecretBytes, ValidityDatePair.Create(Config.Default.Login.XboxTokenValidityMinutes));
+        var rpsTicket = JwtUtils.Sign(ticket, secrets.LoginXboxTokenSecret, ValidityDatePair.Create(Config.Default.Login.XboxTokenValidityMinutes));
 
         var request = new
         {
@@ -88,7 +95,7 @@ public class ApiIntegrationTests
         string token = root.GetProperty("Token").GetString()!;
         await Assert.That(token).IsNotNull();
 
-        var verified = JwtUtils.Verify<Tokens.Xbox.AuthToken>(token, Config.Default.XboxLive.AuthTokenSecretBytes);
+        var verified = JwtUtils.Verify<Tokens.Xbox.AuthToken>(token, secrets.LiveAuthTokenSecret);
         await Assert.That(verified).IsNotNull();
         await Assert.That(verified!.Data is Tokens.Xbox.UserToken).IsTrue();
         var userToken = (Tokens.Xbox.UserToken)verified.Data;
@@ -99,17 +106,18 @@ public class ApiIntegrationTests
     [Test]
     public async Task XstsController_Authenticate_ReturnsPlayfabTokenForMinecraftPlayfab()
     {
-        Program.config = Config.Default;
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync([typeof(XstsController)], connection);
+        var host = await BuildTestHostAsync([typeof(XstsController)], connection);
+        await using var app = host.App;
+        var secrets = host.Secrets;
         var client = app.GetTestClient();
 
         var userId = Guid.NewGuid();
-        var deviceToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.DeviceToken { Did = "device-1" }, Config.Default.XboxLive.AuthTokenSecretBytes, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
-        var titleToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.TitleToken { Tid = "title-1" }, Config.Default.XboxLive.AuthTokenSecretBytes, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
-        var userToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.UserToken { Xid = userId, Uhs = userId, UserId = userId, Username = "PlayerOne" }, Config.Default.XboxLive.AuthTokenSecretBytes, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
+        var deviceToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.DeviceToken { Did = "device-1" }, secrets.LiveAuthTokenSecret, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
+        var titleToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.TitleToken { Tid = "title-1" }, secrets.LiveAuthTokenSecret, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
+        var userToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.UserToken { Xid = userId, Uhs = userId, UserId = userId, Username = "PlayerOne" }, secrets.LiveAuthTokenSecret, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
 
         var request = new
         {
@@ -134,7 +142,7 @@ public class ApiIntegrationTests
         string token = root.GetProperty("Token").GetString()!;
         await Assert.That(token).IsNotNull();
 
-        var verified = JwtUtils.Verify<Tokens.Shared.PlayfabXboxToken>(token, Config.Default.XboxLive.PlayfabTokenSecretBytes);
+        var verified = JwtUtils.Verify<Tokens.Shared.PlayfabXboxToken>(token, secrets.LivePlayfabTokenSecret);
         await Assert.That(verified).IsNotNull();
         await Assert.That(verified!.Data.UserId).IsEqualTo(userId);
     }
@@ -142,11 +150,12 @@ public class ApiIntegrationTests
     [Test]
     public async Task LoginController_LoginWithXbox_ReturnsPlayfabSessionAndEntityTokens_WhenAccountExists()
     {
-        Program.config = Config.Default;
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync([typeof(LoginController), typeof(XstsController)], connection);
+        var host = await BuildTestHostAsync([typeof(LoginController), typeof(XstsController)], connection);
+        await using var app = host.App;
+        var secrets = host.Secrets;
         var client = app.GetTestClient();
 
         using (var scope = app.Services.CreateScope())
@@ -164,9 +173,9 @@ public class ApiIntegrationTests
             });
             await db.SaveChangesAsync();
 
-            var deviceToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.DeviceToken { Did = "device-1" }, Config.Default.XboxLive.AuthTokenSecretBytes, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
-            var titleToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.TitleToken { Tid = "title-1" }, Config.Default.XboxLive.AuthTokenSecretBytes, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
-            var userToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.UserToken { Xid = userId, Uhs = userId, UserId = userId, Username = "PlayerOne" }, Config.Default.XboxLive.AuthTokenSecretBytes, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
+            var deviceToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.DeviceToken { Did = "device-1" }, secrets.LiveAuthTokenSecret, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
+            var titleToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.TitleToken { Tid = "title-1" }, secrets.LiveAuthTokenSecret, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
+            var userToken = JwtUtils.Sign<Tokens.Xbox.AuthToken>(new Tokens.Xbox.UserToken { Xid = userId, Uhs = userId, UserId = userId, Username = "PlayerOne" }, secrets.LiveAuthTokenSecret, ValidityDatePair.Create(Config.Default.XboxLive.TokenValidityMinutes));
 
             var xstsRequest = new
             {
@@ -208,7 +217,7 @@ public class ApiIntegrationTests
             await Assert.That(sessionTicket).StartsWith(userId.ToString().ToUpperInvariant() + "-");
 
             var entityTokenString = loginData.GetProperty("EntityToken").GetProperty("EntityToken").GetString()!;
-            var verifiedEntityToken = JwtUtils.Verify<Tokens.Playfab.EntityToken>(entityTokenString, Config.Default.PlayfabApi.EntityTokenSecretBytes);
+            var verifiedEntityToken = JwtUtils.Verify<Tokens.Playfab.EntityToken>(entityTokenString, secrets.PlayfabEntityTokenSecret);
             await Assert.That(verifiedEntityToken).IsNotNull();
             await Assert.That(verifiedEntityToken!.Data.Id).IsEqualTo(userId);
         }
@@ -217,15 +226,16 @@ public class ApiIntegrationTests
     [Test]
     public async Task AuthenticationController_GetEntityToken_ReturnsEntityTokenForMasterPlayerAccount()
     {
-        Program.config = Config.Default;
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync([typeof(AuthenticationController)], connection);
+        var host = await BuildTestHostAsync([typeof(AuthenticationController)], connection);
+        await using var app = host.App;
+        var secrets = host.Secrets;
         var client = app.GetTestClient();
 
         var entityId = Guid.NewGuid();
-        var entityToken = JwtUtils.Sign(new Tokens.Playfab.EntityToken(entityId, "title_player_account"), Config.Default.PlayfabApi.EntityTokenSecretBytes, ValidityDatePair.Create(Config.Default.PlayfabApi.EntityTokenValidityMinutes));
+        var entityToken = JwtUtils.Sign(new Tokens.Playfab.EntityToken(entityId, "title_player_account"), secrets.PlayfabEntityTokenSecret, ValidityDatePair.Create(Config.Default.PlayfabApi.EntityTokenValidityMinutes));
         var request = new
         {
             Entity = new
@@ -253,11 +263,12 @@ public class ApiIntegrationTests
     [Test]
     public async Task SigninController_Post_ReturnsAuthenticationToken_ForValidSessionTicket()
     {
-        Program.config = Config.Default;
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
 
-        await using var app = await BuildTestHostAsync([typeof(SigninController)], connection);
+        var host = await BuildTestHostAsync([typeof(SigninController)], connection);
+        await using var app = host.App;
+        var secrets = host.Secrets;
         var client = app.GetTestClient();
 
         var sessionTicket = "0123456789ABCDEF-test-token";
@@ -274,10 +285,10 @@ public class ApiIntegrationTests
         await Assert.That(root.GetProperty("result").GetProperty("authenticationToken").GetString()).IsEqualTo("0123456789ABCDEF");
     }
 
-    private static Task<WebApplication> BuildTestHostAsync(Type controllerType)
+    private static Task<(WebApplication App, CryptoSecrets Secrets)> BuildTestHostAsync(Type controllerType)
         => BuildTestHostAsync([controllerType], null);
 
-    private static async Task<WebApplication> BuildTestHostAsync(Type[] controllerTypes, SqliteConnection? connection)
+    private static async Task<(WebApplication App, CryptoSecrets Secrets)> BuildTestHostAsync(Type[] controllerTypes, SqliteConnection? connection)
     {
         Program.config = Config.Default;
 
@@ -308,13 +319,20 @@ public class ApiIntegrationTests
 
         await app.StartAsync();
 
+        CryptoSecrets cryptoSecrets;
         if (connection is not null)
         {
             using var scope = app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<EarthDbContext>();
             await db.Database.EnsureCreatedAsync();
+
+            cryptoSecrets = await db.GetOrInitializeSecretsAsync();
+        }
+        else
+        {
+            cryptoSecrets = CryptoSecrets.CreateRandom();
         }
 
-        return app;
+        return (app, cryptoSecrets);
     }
 }

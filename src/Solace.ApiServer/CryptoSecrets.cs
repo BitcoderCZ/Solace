@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using BitcoderCZ.Utils;
 using Serilog;
 
@@ -124,4 +126,20 @@ internal sealed class CryptoSecrets
     public ImmutableArray<byte> PlayfabEntityTokenSecret => _playfabEntityTokenSecret;
 
     public ImmutableArray<byte> PlayfabSessionTicketSecret => _playfabSessionTicketSecret;
+
+    public static CryptoSecrets CreateRandom()
+    {
+        using var rng = RandomNumberGenerator.Create();
+
+        return new CryptoSecrets(GenerateSecureSecret(64), GenerateSecureSecret(64), GenerateSecureSecret(64), GenerateSecureSecret(24), GenerateSecureSecret(64), GenerateSecureSecret(64), GenerateSecureSecret(64), GenerateSecureSecret(64), GenerateSecureSecret(64));
+
+        ImmutableArray<byte> GenerateSecureSecret(int decodedLength)
+        {
+            var bytes = new byte[decodedLength];
+
+            rng.GetBytes(bytes);
+
+            return ImmutableCollectionsMarshal.AsImmutableArray(bytes);
+        }
+    }
 }

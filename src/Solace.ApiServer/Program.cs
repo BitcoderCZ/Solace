@@ -26,7 +26,7 @@ public static class Program
 {
     // initialized in main
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    internal static Config config;
+    internal static Config config = Config.Default;
 
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     private sealed class Options

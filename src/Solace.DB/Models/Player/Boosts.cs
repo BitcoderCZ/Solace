@@ -48,24 +48,6 @@ public sealed class BoostsEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
         }
     }
 
-    public async Task MergeWith(BoostsEF other, ValueMerger merger)
-    {
-        merger.CurrentUserId = Id.ToString();
-        merger.CurrentUsername = Account?.Username;
-
-        for (var i = 0; i < other.ActiveBoosts.Length; i++)
-        {
-            if (ActiveBoosts[i] is null)
-            {
-                ActiveBoosts[i] = other.ActiveBoosts[i];
-            }
-            else if (other.ActiveBoosts[i] is not null)
-            {
-                ActiveBoosts[i] = await merger.AutoMerge(ActiveBoosts[i]!, other.ActiveBoosts[i]!, $"Boost slot {i + 1}", null);
-            }
-        }
-    }
-
     public sealed record ActiveBoost(
         string InstanceId,
         string ItemId,
