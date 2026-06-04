@@ -146,7 +146,6 @@ public partial class Program
         // builder.Services.AddDbContext<ApplicationDbContext>(options =>
         //     options.UseSqlite(launcherConnectionString));
 
-        Console.WriteLine(Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!));
         string earthConnectionString = "Data Source=" + Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!);
 
         builder.Services.AddDbContextFactory<EarthDbContext>(options =>

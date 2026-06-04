@@ -25,4 +25,3 @@
 
 ## Refactoring
 
-- Load static data types only when needed

@@ -281,6 +281,10 @@ public static class Program
         builder.Services.AddSingleton(tappablesManager);
         builder.Services.AddSingleton(buildplateInstancesManager);
 
+        builder.Services.AddMemoryCache();
+
+        builder.Services.AddSingleton<CatalogResponseCacheService>();
+
         builder.Services.AddControllers()
            .ConfigureApplicationPartManager(manager =>
            {
