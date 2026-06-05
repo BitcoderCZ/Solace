@@ -35,6 +35,7 @@ internal sealed partial class LoginController : SolaceControllerBase
 
     private readonly EarthDbContext _earthDb;
     private readonly CryptoSecrets _cryptoSecrets;
+    private readonly ILogger<LoginController> _logger;
 
     private static readonly (string, string)[] namespaces =
     [
@@ -52,10 +53,11 @@ internal sealed partial class LoginController : SolaceControllerBase
         ("ns1", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"),
     ];
 
-    public LoginController(EarthDbContext earthDb, CryptoSecrets cryptoSecrets)
+    public LoginController(EarthDbContext earthDb, CryptoSecrets cryptoSecrets, ILogger<LoginController> logger)
     {
         _earthDb = earthDb;
         _cryptoSecrets = cryptoSecrets;
+        _logger = logger;
     }
 
     [HttpGet("ppsecure/InlineConnect.srf")]
@@ -83,7 +85,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         username = username.Trim();
         password = password.Trim();
 
-        Log.Debug($"Login attempt: Username: {username}");
+        LogLoginAttempt(username);
 
         var account = await _earthDb.Accounts
             .FirstOrDefaultAsync(account => account.Username == username, cancellationToken);
@@ -121,7 +123,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             lastName = null;
         }
 
-        Log.Debug($"Register attempt: Username: {username}, First name: {firstName}, Last name: {lastName}");
+        LogRegisterAttempt(username, firstName, lastName);
 
         if (string.IsNullOrWhiteSpace(username) || username.Length < MinUsernameLength || username.Length > MaxUsernameLength)
         {
@@ -156,7 +158,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.BadRequest("Account with the specified username already exists");
         }
 
-        var userId = GenerateUserId(username);
+        var accountId = GenerateAccountId(username); // todo: could we use Guid.CreateVersion7 instead?
 
         byte[] passwordSalt = new byte[16];
         _rng.GetBytes(passwordSalt);
@@ -165,7 +167,7 @@ internal sealed partial class LoginController : SolaceControllerBase
 
         account = new Account()
         {
-            Id = userId,
+            Id = accountId,
             CreatedDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             Username = username,
             ProfilePictureUrl = Account.DefaultPictureUrl, // TODO
@@ -178,7 +180,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         _earthDb.Accounts.Add(account);
         await _earthDb.SaveChangesAsync(cancellationToken);
 
-        Log.Information($"Account created: {username} ({userId})");
+        LogAccountCreated(accountId, username);
 
         return JsonCamelCase(CreateLoginResponse(account));
     }
@@ -444,7 +446,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                 {
                     path = path[..^"RST2.srf".Length];
                 }
-                
+
                 if (!path.EndsWith('/'))
                 {
                     path += "/";
@@ -835,7 +837,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         return base64;
     }
 
-    private static Guid GenerateUserId(string username)
+    private static Guid GenerateAccountId(string username)
     {
         Span<byte> usernameUTF8 = stackalloc byte[51]; // Encoding.UTF8.GetMaxByteCount(MaxUsernameLength)
         int usernameUTF8Length = Encoding.UTF8.GetBytes(username, usernameUTF8);
@@ -908,4 +910,13 @@ internal sealed partial class LoginController : SolaceControllerBase
 
     [GeneratedRegex("&da=([^&]*)")]
     private partial Regex GetDeviceDATokenStringRegex();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Login attempt - Username: {Username}")]
+    private partial void LogLoginAttempt(string Username);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Register attempt - Username: {Username}, First name: {FirstName}, Last name: {LastName}")]
+    private partial void LogRegisterAttempt(string Username, string? FirstName, string? LastName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Account created - Id: {AccountId}, Username: {Username}")]
+    private partial void LogAccountCreated(Guid AccountId, string Username);
 }
