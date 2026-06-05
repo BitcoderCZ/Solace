@@ -19,6 +19,7 @@ using Asp.Versioning;
 using Solace.ApiServer.Authentication;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.HttpOverrides;
+using Serilog.Extensions.Logging;
 
 namespace Solace.ApiServer;
 
@@ -219,7 +220,9 @@ public static class Program
                 .AsNoTracking()
                 .ToListAsync();
 
-            await using var importer = new Importer(earthDbContext, eventBus, objectStore, Log.Logger)
+            using var loggerFactory = new SerilogLoggerFactory(log);
+            var importerLogger = loggerFactory.CreateLogger<Importer>();
+            await using var importer = new Importer(earthDbContext, eventBus, objectStore, importerLogger)
             {
                 OwnsEarthDb = false,
                 OwnsEventBusClient = false,
@@ -271,9 +274,11 @@ public static class Program
 
         builder.Configuration["Authentication:LocalLoginOnly"] = options.LocalLoginOnly.ToString();
 
-        builder.Host.UseSerilog();
+        // builder.Host.UseSerilog();
 
         builder.WebHost.UseUrls($"http://*:{options.HttpPort}/");
+
+        builder.Services.AddSerilog(logger: log);
 
         builder.Services.AddSingleton(eventBus);
         builder.Services.AddSingleton(objectStore);

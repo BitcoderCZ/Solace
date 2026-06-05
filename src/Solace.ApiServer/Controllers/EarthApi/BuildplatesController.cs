@@ -18,7 +18,6 @@ using Solace.DB.Models.Global;
 using Solace.DB.Models.Player;
 using Solace.ObjectStore.Client;
 using Solace.StaticData;
-using LegacyBuildplates = Solace.DB.Models.Player.LegacyBuildplates;
 using Microsoft.EntityFrameworkCore;
 using Solace.DB.Utils;
 
@@ -27,21 +26,23 @@ namespace Solace.ApiServer.Controllers.EarthApi;
 [Authorize]
 [ApiVersion("1.1")]
 [Route("1/api/v{version:apiVersion}")]
-internal sealed class BuildplatesController : SolaceControllerBase
+internal sealed partial class BuildplatesController : SolaceControllerBase
 {
     private readonly EarthDbContext _earthDB;
     private readonly BuildplateInstancesManager _buildplateInstancesManager;
     private readonly Catalog _catalog;
     private readonly TappablesManager _tappablesManager;
     private readonly ObjectStoreClient _objectStore;
+    private readonly ILogger<BuildplatesController> _logger;
 
-    public BuildplatesController(EarthDbContext earthDB, BuildplateInstancesManager buildplateInstancesManager, StaticData.StaticData staticData, TappablesManager tappablesManager, ObjectStoreClient objectStore)
+    public BuildplatesController(EarthDbContext earthDB, BuildplateInstancesManager buildplateInstancesManager, StaticData.StaticData staticData, TappablesManager tappablesManager, ObjectStoreClient objectStore, ILogger<BuildplatesController> logger)
     {
         _earthDB = earthDB;
         _buildplateInstancesManager = buildplateInstancesManager;
         _catalog = staticData.Catalog;
         _tappablesManager = tappablesManager;
         _objectStore = objectStore;
+        _logger = logger;
     }
 
     [HttpGet("buildplates")]
@@ -61,7 +62,7 @@ internal sealed class BuildplatesController : SolaceControllerBase
             byte[]? previewData = await _objectStore.GetAsync(buildplate.PreviewObjectId);
             if (previewData is null)
             {
-                Log.Error($"Preview object {buildplate.PreviewObjectId} for buildplate {buildplate.Id} could not be loaded from object store");
+                LogBuildplatePreviewNotFound(buildplate.PreviewObjectId, buildplate.Id);
                 return null!;
             }
 
@@ -144,14 +145,14 @@ internal sealed class BuildplatesController : SolaceControllerBase
         byte[]? serverData = await _objectStore.GetAsync(buildplate.ServerDataObjectId);
         if (serverData is null)
         {
-            Log.Error($"Data object {buildplate.ServerDataObjectId} for buildplate {buildplateId} could not be loaded from object store");
+            LogBuildplateServerDataNotFound(buildplate.ServerDataObjectId, buildplateId);
             return TypedResults.InternalServerError();
         }
 
         string? sharedBuildplateServerDataObjectId = await _objectStore.StoreAsync(serverData);
         if (sharedBuildplateServerDataObjectId is null)
         {
-            Log.Error("Could not store data object for shared buildplate in object store");
+            LogSharedBuildplateServerDataStoreError(buildplateId);
             return TypedResults.InternalServerError();
         }
 
@@ -196,7 +197,7 @@ internal sealed class BuildplatesController : SolaceControllerBase
         }
         catch (Exception ex)
         {
-            Log.Error(ex, $"Failed to store shared buildplate: {ex.Message}");
+            LogSharedBuildplateDBStoreError(ex, buildplateId);
             await _objectStore.DeleteAsync(sharedBuildplateServerDataObjectId);
             return TypedResults.InternalServerError();
         }
@@ -224,19 +225,19 @@ internal sealed class BuildplatesController : SolaceControllerBase
         byte[]? serverData = await _objectStore.GetAsync(sharedBuildplate.ServerDataObjectId);
         if (serverData is null)
         {
-            Log.Error($"Data object {sharedBuildplate.ServerDataObjectId} for shared buildplate {sharedBuildplateId} could not be loaded from object store");
+            LogSharedBuildplateServerDataNotFound(sharedBuildplate.ServerDataObjectId, sharedBuildplateId);
             return TypedResults.InternalServerError();
         }
 
         string? preview = await _buildplateInstancesManager.GetBuildplatePreviewAsync(serverData, sharedBuildplate.Night);
         if (preview is null)
         {
-            Log.Error("Could not get preview for buildplate");
+            LogSharedBuildplatePreviewGenerateError(sharedBuildplateId);
             return TypedResults.InternalServerError();
         }
 
         return EarthJson(new SharedBuildplate(
-            sharedBuildplate.AccountId.ToString(),    // TODO: supposed to return username here, not player ID
+            sharedBuildplate.AccountId.ToString(), // TODO: supposed to return username here, not player ID
             TimeFormatter.FormatTime(sharedBuildplate.Created),
             new SharedBuildplate.BuildplateDataR(
                 new Dimension(sharedBuildplate.Size, sharedBuildplate.Size),
@@ -606,4 +607,23 @@ internal sealed class BuildplatesController : SolaceControllerBase
     private sealed record SharedBuildplateInstanceRequest(
         bool FullSize
     );
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Preview object {PreviewObjectId} for buildplate {BuildplateId} could not be loaded from object store")]
+    private partial void LogBuildplatePreviewNotFound(string PreviewObjectId, Guid BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Data object {ServerDataObjectId} for buildplate {BuildplateId} could not be loaded from object store")]
+    private partial void LogBuildplateServerDataNotFound(string ServerDataObjectId, Guid BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not store data object for shared buildplate '{BuildplateId}' in object store")]
+    private partial void LogSharedBuildplateServerDataStoreError(Guid BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to store shared buildplate '{BuildplateId}' to db")]
+    private partial void LogSharedBuildplateDBStoreError(Exception ex, Guid BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Data object {ServerDataObjectId} for shared buildplate {BuildplateId} could not be loaded from object store")]
+    private partial void LogSharedBuildplateServerDataNotFound(string ServerDataObjectId, Guid BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not get preview for shared buildplate '{BuildplateId}'")]
+    private partial void LogSharedBuildplatePreviewGenerateError(Guid BuildplateId);
+
 }

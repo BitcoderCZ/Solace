@@ -2,7 +2,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Serilog;
+using Microsoft.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 
@@ -10,7 +10,7 @@ using Solace.Common.Utils;
 namespace Solace.Buildplate.Model;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 
-public sealed record WorldData(
+public sealed partial record WorldData(
     byte[] ServerData,
     int Size,
     int Offset,
@@ -72,7 +72,7 @@ public sealed record WorldData(
         }
         catch (IOException ex)
         {
-            logger.Error($"Could not read world file: {ex}");
+            LogWorldFileReadError(logger, ex);
             return null;
         }
 
@@ -91,7 +91,7 @@ public sealed record WorldData(
 
                             if (!worldFileContents.TryGetValue(filePath, out byte[]? data))
                             {
-                                Log.Error($"World file is missing {filePath}");
+                                LogWorldFileFileMissing(logger, filePath);
                                 return null;
                             }
 
@@ -107,9 +107,9 @@ public sealed record WorldData(
                 serverData = zipStream.ToArray();
             }
         }
-        catch (IOException ex)
+        catch (IOException exception)
         {
-            logger.Error($"Could not prepare server data: {ex}");
+            LogServerDataPrepareError(logger, exception);
             return null;
         }
 
@@ -132,7 +132,7 @@ public sealed record WorldData(
         {
             if (buildplateMetadataString is null)
             {
-                logger.Warning($"World file does not contain {MetadataFileName}, using default values");
+                LogNoBuildplateMetadataFile(logger);
                 size = 16;
                 offset = 63;
                 night = false;
@@ -143,7 +143,7 @@ public sealed record WorldData(
 
                 if (buildplateMetadataVersion is null)
                 {
-                    logger.Error("Invalid buildplate metadata");
+                    LogInvalidBuildplateMetadata(logger);
                     return null;
                 }
 
@@ -155,7 +155,7 @@ public sealed record WorldData(
 
                             if (buildplateMetadata is null)
                             {
-                                logger.Error("Invalid buildplate metadata");
+                                LogInvalidBuildplateMetadata(logger);
                                 return null;
                             }
 
@@ -167,7 +167,7 @@ public sealed record WorldData(
                         break;
                     default:
                         {
-                            logger.Error($"Unsupported buildplate metadata version {buildplateMetadataVersion.Version}");
+                            LogUnsupportedBuildplateMetadataVersion(logger, buildplateMetadataVersion.Version);
                             return null;
                         }
                 }
@@ -175,13 +175,13 @@ public sealed record WorldData(
         }
         catch (Exception ex)
         {
-            logger.Error($"Could not read buildplate metadata file: {ex}");
+            LogBuildplateMetadataReadError(logger, ex);
             return null;
         }
 
         if (size != 8 && size != 16 && size != 32)
         {
-            logger.Error($"Invalid buildplate size {size}, must be on of: 8, 16, 32");
+            LogInvalidBuildplateSite(logger, size);
             return null;
         }
 
@@ -215,4 +215,28 @@ public sealed record WorldData(
         using var writer = new Utf8JsonWriter(stream);
         combinedObject.WriteTo(writer, options);
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not read world file")]
+    private static partial void LogWorldFileReadError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "World file is missing file '{FilePath}'")]
+    private static partial void LogWorldFileFileMissing(ILogger logger, string FilePath);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not prepare server data")]
+    private static partial void LogServerDataPrepareError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = $"World file does not contain {MetadataFileName}, using default values")]
+    private static partial void LogNoBuildplateMetadataFile(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Invalid buildplate metadata")]
+    private static partial void LogInvalidBuildplateMetadata(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Unsupported buildplate metadata version {Version}")]
+    private static partial void LogUnsupportedBuildplateMetadataVersion(ILogger logger, int Version);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not read buildplate metadata file")]
+    private static partial void LogBuildplateMetadataReadError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Invalid buildplate size {Size}, must be on of: 8, 16, 32")]
+    private static partial void LogInvalidBuildplateSite(ILogger logger, int Size);
 }

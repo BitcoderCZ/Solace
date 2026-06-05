@@ -1,4 +1,5 @@
-﻿using Asp.Versioning;
+﻿using System.Net;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using Solace.ApiServer.Types;
@@ -11,14 +12,23 @@ namespace Solace.ApiServer.Controllers.EarthApi;
 [ApiVersion("1.0")]
 [ApiVersion("1.1")]
 [Route("player/environment")]
-internal sealed class LocatorController : ControllerBase
+internal sealed partial class LocatorController : ControllerBase
 {
-    [HttpGet]
+    private readonly ILogger<LocatorController> _logger;
+
+    public LocatorController(ILogger<LocatorController> logger)
+    {
+        _logger = logger;
+    }
+
+    [HttpGet("player/environment")]
+    [HttpGet("/api/v1.1/player/environment")]
     public ContentResult Get()
     {
         string protocol = Request.IsHttps ? "https://" : "http://";
         string baseServerIP = $"{protocol}{Request.Host.Value}";
-        Log.Information($"{HttpContext.Connection.RemoteIpAddress} has issued locator, replying with {baseServerIP}");
+        
+        LogIssuedLocator(HttpContext.Connection.RemoteIpAddress, baseServerIP);
 
         string resp = Json.Serialize(new EarthApiResponse(new LocatorResponse(new()
         {
@@ -30,33 +40,10 @@ internal sealed class LocatorController : ControllerBase
             ["2020.1210.01"] = ["production"],
         }
         )));
+
         return Content(resp, "application/json");
     }
-}
 
-[ApiController]
-[ApiVersion("1.0")]
-[ApiVersion("1.1")]
-[Route("/api/v1.1/player/environment")]
-public class MojankLocatorController : ControllerBase
-{
-    [HttpGet]
-    public ContentResult Get()
-    {
-        string protocol = Request.IsHttps ? "https://" : "http://";
-        string baseServerIP = $"{protocol}{Request.Host.Value}";
-        Log.Information($"{HttpContext.Connection.RemoteIpAddress} has issued locator, replying with {baseServerIP}");
-
-        string resp = Json.Serialize(new EarthApiResponse(new LocatorResponse(new()
-        {
-            ["production"] = new LocatorResponse.Environment(baseServerIP, baseServerIP + "/cdn", "20CA2"),
-        },
-        new()
-        {
-            ["2020.1217.02"] = ["production"],
-            ["2020.1210.01"] = ["production"],
-        }
-        )));
-        return Content(resp, "application/json");
-    }
+    [LoggerMessage(Level = LogLevel.Information, Message = "{RemoteIp} has issued locator, replying with {ServerIp}")]
+    private partial void LogIssuedLocator(IPAddress? RemoteIp, string ServerIp);
 }

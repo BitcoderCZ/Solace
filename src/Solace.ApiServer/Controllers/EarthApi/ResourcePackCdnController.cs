@@ -31,13 +31,15 @@ internal sealed class ResourcePackController : ControllerBase
 
 //Heres the resource pack!
 [Route("cdn/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35")]
-public class ResourcePackCdnController : ControllerBase
+internal sealed partial class ResourcePackCdnController : ControllerBase
 {
     private readonly StaticData.StaticData _staticData;
+    private readonly ILogger<ResourcePackController> _logger;
 
-    public ResourcePackCdnController(StaticData.StaticData staticData)
+    public ResourcePackCdnController(StaticData.StaticData staticData, ILogger<ResourcePackController> logger)
     {
         _staticData = staticData;
+        _logger = logger;
     }
 
     [HttpGet, HttpHead]
@@ -47,7 +49,7 @@ public class ResourcePackCdnController : ControllerBase
 
         if (!System.IO.File.Exists(resourcePackFilePath))
         {
-            Log.Error("[Resourcepacks] Error! Resource pack file not found.");
+            LogResourcepackNotFound();
             return TypedResults.BadRequest(); //we cannot serve you.
         }
 
@@ -60,4 +62,7 @@ public class ResourcePackCdnController : ControllerBase
             enableRangeProcessing: true
         );
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Resource pack file not found")]
+    private partial void LogResourcepackNotFound();
 }

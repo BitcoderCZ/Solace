@@ -20,15 +20,17 @@ namespace Solace.ApiServer.Controllers.EarthApi;
 [Authorize]
 [ApiVersion("1.1")]
 [Route("1/api/v{version:apiVersion}")]
-internal sealed class BoostsController : SolaceControllerBase
+internal sealed partial class BoostsController : SolaceControllerBase
 {
     private readonly EarthDbContext _earthDB;
     private readonly Catalog _catalog;
+    private readonly ILogger<BoostsController> _logger;
 
-    public BoostsController(EarthDbContext earthDB, StaticData.StaticData staticData)
+    public BoostsController(EarthDbContext earthDB, StaticData.StaticData staticData, ILogger<BoostsController> logger)
     {
         _earthDB = earthDB;
         _catalog = staticData.Catalog;
+        _logger = logger;
     }
 
     private sealed record ActiveBoostInfo(
@@ -104,7 +106,7 @@ internal sealed class BoostsController : SolaceControllerBase
                 {
                     if (effect.Activation != Catalog.ItemsCatalogR.Item.BoostInfoR.Effect.ActivationE.TIMED)
                     {
-                        Log.Warning($"Active boost {activeBoostInfo.ActiveBoost.ItemId} has effect with activation {effect.Activation}");
+                        LogUnexpectedBoostActivation(activeBoostInfo.ActiveBoost.ItemId, effect.Activation);
                         continue;
                     }
 
@@ -118,7 +120,7 @@ internal sealed class BoostsController : SolaceControllerBase
                 {
                     if (effect.Activation is not Catalog.ItemsCatalogR.Item.BoostInfoR.Effect.ActivationE.TRIGGERED)
                     {
-                        Log.Warning($"Active boost {activeBoostInfo.ActiveBoost.ItemId} has effect with activation {effect.Activation}");
+                        LogUnexpectedBoostActivation(activeBoostInfo.ActiveBoost.ItemId, effect.Activation);
                         continue;
                     }
 
@@ -353,4 +355,7 @@ internal sealed class BoostsController : SolaceControllerBase
 
         return profileChanged;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Active boost {ItemId} has effect with activation {ActivationType}")]
+    private partial void LogUnexpectedBoostActivation(string ItemId, Catalog.ItemsCatalogR.Item.BoostInfoR.Effect.ActivationE ActivationType);
 }

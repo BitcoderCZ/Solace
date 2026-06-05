@@ -20,13 +20,15 @@ internal sealed partial class SigninController : SolaceControllerBase
     private readonly bool _localLoginOnly;
     private readonly ITimeLimitedDataProtector _protector;
     private readonly CryptoSecrets _cryptoSecrets;
+    private readonly ILogger<SigninController> _logger;
 
-    public SigninController(EarthDbContext earthDb, IConfiguration configuration, IDataProtectionProvider dataProtectionProvider, CryptoSecrets cryptoSecrets)
+    public SigninController(EarthDbContext earthDb, IConfiguration configuration, IDataProtectionProvider dataProtectionProvider, CryptoSecrets cryptoSecrets, ILogger<SigninController> logger)
     {
         _earthDb = earthDb;
         _localLoginOnly = configuration.GetValue<bool>("Authentication:LocalLoginOnly");
         _protector = dataProtectionProvider.CreateProtector(GenoaAuthenticationHandler.DataProtectionPurpose).ToTimeLimitedDataProtector();
         _cryptoSecrets = cryptoSecrets;
+        _logger = logger;
     }
 
     [HttpPost("api/v{version:apiVersion}/player/profile/{profileID}")]
@@ -42,13 +44,13 @@ internal sealed partial class SigninController : SolaceControllerBase
 
         if (signinRequest is null)
         {
-            Log.Warning($"Sign in - request null");
+            LogBadSignInRequestWarning("Null json");
             return TypedResults.BadRequest();
         }
 
         if (signinRequest.SessionTicket.Length < 37)
         {
-            Log.Warning($"Sign in - request parts bad ({signinRequest.SessionTicket.Length})");
+            LogBadSignInRequestWarning($"Bad request parts ({signinRequest.SessionTicket.Length})");
             return TypedResults.BadRequest();
         }
 
@@ -63,19 +65,19 @@ internal sealed partial class SigninController : SolaceControllerBase
 
             if (token is null)
             {
-                Log.Warning($"Sign in - invalid jwt");
+                LogBadSignInRequestWarning("Invalid jwt");
                 return TypedResults.BadRequest();
             }
 
             if (token.Expired is true)
             {
-                Log.Warning($"Sign in - expired jwt");
+                LogBadSignInRequestDebug("Expired jwt");
                 return TypedResults.BadRequest();
             }
 
             if (userId != token.Data.UserId)
             {
-                Log.Warning($"Sign in - user id does not match token user id");
+                LogBadSignInRequestWarning("Invalid user id does not match token user id");
                 return TypedResults.BadRequest();
             }
         }
@@ -83,14 +85,14 @@ internal sealed partial class SigninController : SolaceControllerBase
         {
             if (_localLoginOnly)
             {
-                Log.Warning($"Sign in - microsoft login - local login only is enabled");
+                LogMicrosoftLoginDisabled();
                 return TypedResults.BadRequest();
             }
 
             var dashIndex = signinRequest.SessionTicket.IndexOf('-');
             if (dashIndex is -1 || dashIndex == signinRequest.SessionTicket.Length - 1)
             {
-                Log.Warning($"Sign in - bad parts");
+                LogBadSignInRequestWarning("Bad parts");
                 return TypedResults.BadRequest();
             }
 
@@ -99,7 +101,7 @@ internal sealed partial class SigninController : SolaceControllerBase
 
             if (!GetUserIdRegex().IsMatch(userIdString))
             {
-                Log.Warning($"Sign in - user id not match ({userIdString})");
+                LogBadSignInRequestWarning($"User id not match ({userIdString})");
                 return TypedResults.BadRequest();
             }
 
@@ -137,4 +139,13 @@ internal sealed partial class SigninController : SolaceControllerBase
         string SessionTicket,
         object Streams
     );
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Bad sign in request - {Reason}")]
+    private partial void LogBadSignInRequestDebug(string Reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Bad sign in request - {Reason}")]
+    private partial void LogBadSignInRequestWarning(string Reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Microsoft login attempt - local login only is enabled")]
+    private partial void LogMicrosoftLoginDisabled();
 }

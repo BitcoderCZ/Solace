@@ -4,9 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using System.Diagnostics;
-using System.Security.Claims;
 using System.Text;
-using Solace.ApiServer.Exceptions;
 using Solace.ApiServer.Types.Buildplates;
 using Solace.ApiServer.Types.Shop;
 using Solace.BuildplateImporter;
@@ -24,19 +22,21 @@ namespace Solace.ApiServer.Controllers.EarthApi;
 [Authorize]
 [ApiVersion("1.1")]
 [Route("1/api/v{version:apiVersion}/commerce")]
-internal sealed class ShopController : SolaceControllerBase
+internal sealed partial class ShopController : SolaceControllerBase
 {
     private readonly StaticData.StaticData _staticData;
     private readonly EarthDbContext _earthDB;
     private readonly EventBusClient _eventBus;
     private readonly ObjectStoreClient _objectStore;
+    private readonly ILogger<ShopController> _logger;
 
-    public ShopController(StaticData.StaticData staticData, EarthDbContext earthDB, EventBusClient eventBus, ObjectStoreClient objectStore)
+    public ShopController(StaticData.StaticData staticData, EarthDbContext earthDB, EventBusClient eventBus, ObjectStoreClient objectStore, ILogger<ShopController> logger)
     {
         _staticData = staticData;
         _earthDB = earthDB;
         _eventBus = eventBus;
         _objectStore = objectStore;
+        _logger = logger;
     }
 
     private sealed record StoreItemInfoRequest(string Id, string StoreItemType, uint StreamVersion);
@@ -69,7 +69,7 @@ internal sealed class ShopController : SolaceControllerBase
 
                         if (buildplate is null)
                         {
-                            Log.Warning($"Buildplate with id {item.Id} not found");
+                            LogBuildplateNotFound(item.Id);
                             result.Add(new StoreItemInfo(itemId, storeItemType, StoreItemInfo.StoreItemStatus.NotFound, item.StreamVersion, null, null, null, null, null));
                             break;
                         }
@@ -78,7 +78,7 @@ internal sealed class ShopController : SolaceControllerBase
 
                         if (previewData is null)
                         {
-                            Log.Warning($"Failed to get preview for buildplate {item.Id}");
+                            LogBuildplatePreviewGetError(item.Id);
                             result.Add(new StoreItemInfo(itemId, storeItemType, StoreItemInfo.StoreItemStatus.NotFound, item.StreamVersion, null, null, null, null, null));
                             break;
                         }
@@ -165,7 +165,7 @@ internal sealed class ShopController : SolaceControllerBase
     {
         if (!_staticData.Playfab.Items.TryGetValue(itemId, out var itemToPurchase))
         {
-            Log.Debug($"Player {accountId} tried to purchase unknown item '{itemId}' (playfab)");
+            LogPurchaseUnknownItem(accountId, itemId);
             return null;
         }
 
@@ -187,7 +187,7 @@ internal sealed class ShopController : SolaceControllerBase
             return null;
         }
 
-        await using var importer = new Importer(_earthDB, _eventBus, _objectStore, Log.Logger)
+        await using var importer = new Importer(_earthDB, _eventBus, _objectStore, _logger)
         {
             OwnsEarthDb = false,
             OwnsEventBusClient = false,
@@ -210,7 +210,7 @@ internal sealed class ShopController : SolaceControllerBase
 
                         if (profile.Rubies.Total < expectedPurchasePrice)
                         {
-                            Log.Debug($"Player {accountId} tried to purchase item '{itemId}' but does not have enough rubies");
+                            LogPurchaseInsufficientRubies(accountId, itemId);
                             break;
                         }
 
@@ -218,7 +218,7 @@ internal sealed class ShopController : SolaceControllerBase
 
                         if (buidplateId is null)
                         {
-                            Log.Warning($"Failed to add buildplate {data.Id} to player {accountId}");
+                            LogBuildplateAddFail(accountId, data.Id);
                             break;
                         }
 
@@ -230,9 +230,9 @@ internal sealed class ShopController : SolaceControllerBase
 
                         rubies = profile.Rubies;
                     }
-                    catch (Exception ex)
+                    catch (Exception exception)
                     {
-                        Log.Error(ex, "Buildplate Purchase failed.");
+                        LogPurchaseFailed(exception, accountId, "Buildplate");
                         await transaction.RollbackAsync(cancellationToken);
                     }
                 }
@@ -258,7 +258,7 @@ internal sealed class ShopController : SolaceControllerBase
 
                         if (profile.Rubies.Total < expectedPurchasePrice)
                         {
-                            Log.Debug($"Player {accountId} tried to purchase item '{itemId}' but does not have enough rubies");
+                            LogPurchaseInsufficientRubies(accountId, itemId);
                             break;
                         }
 
@@ -275,9 +275,9 @@ internal sealed class ShopController : SolaceControllerBase
 
                         rubies = profile.Rubies;
                     }
-                    catch (Exception ex)
+                    catch (Exception exception)
                     {
-                        Log.Error(ex, "Buildplate Purchase failed.");
+                        LogPurchaseFailed(exception, accountId, "Item");
                         await transaction.RollbackAsync(cancellationToken);
                     }
                 }
@@ -285,8 +285,7 @@ internal sealed class ShopController : SolaceControllerBase
                 break;
 
             default:
-                Log.Warning($"Shop item '{itemId}' has unknown {nameof(Playfab.Item.ItemData)}");
-                break;
+                throw new UnreachableException($"Shop item '{itemId}' has unknown {nameof(Playfab.Item.ItemData)}");
         }
 
         if (rubies is null)
@@ -296,4 +295,22 @@ internal sealed class ShopController : SolaceControllerBase
 
         return (rubies.Purchased, rubies.Earned);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Buildplate with id {BuildplateId} not found")]
+    private partial void LogBuildplateNotFound(string BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to get preview for buildplate {BuildplateId}")]
+    private partial void LogBuildplatePreviewGetError(string BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Player '{AccountId}' tried to purchase unknown item '{ItemId}' (playfab)")]
+    private partial void LogPurchaseUnknownItem(Guid AccountId, Guid ItemId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Player {AccountId} tried to purchase item '{ItemId}' but does not have enough rubies")]
+    private partial void LogPurchaseInsufficientRubies(Guid AccountId, Guid ItemId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to add buildplate {BuildplateId} to player {AccountId}")]
+    private partial void LogBuildplateAddFail(Guid AccountId, Guid BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "{PurchaseType} purchase failed for account '{AccountId}'")]
+    private partial void LogPurchaseFailed(Exception exception, Guid AccountId, string PurchaseType);
 }

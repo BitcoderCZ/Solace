@@ -1,5 +1,4 @@
-﻿using Serilog;
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -12,6 +11,7 @@ using Solace.DB.Models.Player;
 using Solace.EventBus.Client;
 using Solace.ObjectStore.Client;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Solace.BuildplateImporter;
 
@@ -161,9 +161,9 @@ public sealed class Importer : IAsyncDisposable
             try
             {
                 instances = await EarthDB.PlayerBuildplates
-                     .AsNoTracking()
-                     .Where(buildplate => buildplate.TemplateId == templateId)
-                     .ToListAsync(cancellationToken);
+                    .AsNoTracking()
+                    .Where(buildplate => buildplate.TemplateId == templateId)
+                    .ToListAsync(cancellationToken);
             }
             catch (Exception ex)
             {
