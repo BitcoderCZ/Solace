@@ -148,10 +148,8 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.BadRequest("Username must contain only: lowercase letters, numbers, underscore and colon"); // keep in sync with GetUsernameRegex
         }
 
-        var account = await _earthDb.Accounts
-            .FirstOrDefaultAsync(account => account.Username == username, cancellationToken);
-
-        if (account is not null)
+        if (await _earthDb.Accounts
+            .AnyAsync(account => account.Username == username, cancellationToken))
         {
             return TypedResults.BadRequest("Account with the specified username already exists");
         }
@@ -163,19 +161,17 @@ internal sealed partial class LoginController : SolaceControllerBase
 
         byte[] paswordHash = HashPassword(password, passwordSalt);
 
-        account = new Account()
-        {
-            Id = userId,
-            CreatedDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            Username = username,
-            ProfilePictureUrl = Account.DefaultPictureUrl, // TODO
-            FirstName = firstName,
-            LastName = lastName,
-            PasswordSalt = passwordSalt,
-            PasswordHash = paswordHash,
-        };
+        var account = await _earthDb.GetOrCreateAccount(userId, query => query);
 
-        _earthDb.Accounts.Add(account);
+        account.Id = userId;
+        account.CreatedDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        account.Username = username;
+        account.ProfilePictureUrl = Account.DefaultPictureUrl; // TODO
+        account.FirstName = firstName;
+        account.LastName = lastName;
+        account.PasswordSalt = passwordSalt;
+        account.PasswordHash = paswordHash;
+
         await _earthDb.SaveChangesAsync(cancellationToken);
 
         Log.Information($"Account created: {username} ({userId})");
@@ -444,7 +440,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                 {
                     path = path[..^"RST2.srf".Length];
                 }
-                
+
                 if (!path.EndsWith('/'))
                 {
                     path += "/";
