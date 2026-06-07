@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using Serilog;
+using Microsoft.Extensions.Logging;
 using Solace.Common.Utils;
 
 namespace Solace.Common;
@@ -197,11 +197,11 @@ public sealed class ConsoleProcess : IDisposable
     public async Task WaitForExitAsync(CancellationToken cancellationToken = default)
         => await ActualProcess.WaitForExitAsync(cancellationToken);
 
-    public async Task StopNoWaitAsync(int timeout = 15 * 1000, CancellationToken cancellationToken = default)
-        => await ActualProcess.StopGracefullyOrKillAsync(timeout, cancellationToken);
+    public async Task StopNoWaitAsync(ILogger logger, int timeout = 15 * 1000, CancellationToken cancellationToken = default)
+        => await ActualProcess.StopGracefullyOrKillAsync(timeout, logger, cancellationToken);
 
-    public async Task StopAndWaitAsync(int timeout = 15 * 1000, CancellationToken cancellationToken = default)
-        => await ActualProcess.StopGracefullyOrKillAndWaitAsync(timeout, cancellationToken);
+    public async Task StopAndWaitAsync(ILogger logger, int timeout = 15 * 1000, CancellationToken cancellationToken = default)
+        => await ActualProcess.StopGracefullyOrKillAndWaitAsync(timeout, logger, cancellationToken);
 
     private void ApplyTerminalWrapper(IEnumerable<string> args)
     {

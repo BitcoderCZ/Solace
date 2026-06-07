@@ -1,5 +1,4 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Serilog;
 using Solace.Common;
 using Solace.DB;
 using Solace.EventBus.Client;
@@ -7,9 +6,9 @@ using Solace.ObjectStore.Client;
 
 namespace Solace.ApiServer.Utils;
 
-internal static class TileUtils
+internal static partial class TileUtils
 {
-    public static async Task<bool> TryWriteTile(int tileX, int tileY, Stream dest, EarthDbContext earthDb, EventBusClient eventBus, ObjectStoreClient objectStore, CancellationToken cancellationToken)
+    public static async Task<bool> TryWriteTile(int tileX, int tileY, Stream dest, EarthDbContext earthDb, EventBusClient eventBus, ObjectStoreClient objectStore, ILogger logger, CancellationToken cancellationToken)
     {
         ulong dbPos = ToDbPos(tileX, tileY);
 
@@ -22,13 +21,13 @@ internal static class TileUtils
             return await TryWriteTileFromObject(tile.ObjectStoreId, dest, objectStore, cancellationToken);
         }
 
-        Log.Information("Rendering tile");
+LogRenderingTile(logger);
         await using var requestSender = await eventBus.AddRequestSenderAsync();
         string? tilePng64 = await requestSender.RequestAsync("tile", "renderTile", Json.Serialize(new RenderTileRequest(tileX, tileY, 16)));
 
         if (tilePng64 is null)
         {
-            Log.Warning("Could not get tile (tile renderer did not respond to event bus request)");
+            LogTileRetreiveFail(logger);
             return false;
         }
 
@@ -38,7 +37,7 @@ internal static class TileUtils
 
         if (string.IsNullOrEmpty(tileObjectId))
         {
-            Log.Warning("Failed to store tile to object store");
+            LogTileStoreFail(logger);
             return false;
         }
 
@@ -51,7 +50,7 @@ internal static class TileUtils
         earthDb.Tiles.Add(tile);
         await earthDb.SaveChangesAsync(cancellationToken);
 
-        Log.Debug($"Stored tile ({tileX}, {tileY}) to object store under id {tileObjectId}");
+        LogTileStored(logger, tileX, tileY, tileObjectId);
 
         await dest.WriteAsync(tilePng, cancellationToken);
 
@@ -76,4 +75,16 @@ internal static class TileUtils
         => unchecked((ulong)((long)tileX | ((long)tileY << 32)));
 
     private sealed record RenderTileRequest(int TileX, int TileY, int Zoom);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Rendering tile")]
+    private static partial void LogRenderingTile(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not get tile (tile renderer did not respond to event bus request)")]
+    private static partial void LogTileRetreiveFail(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to store tile to object store")]
+    private static partial void LogTileStoreFail(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Stored tile ({TileX}, {TileY}) to object store under id {TileObjectId}")]
+    private static partial void LogTileStored(ILogger logger, int TileX, int TileY, string TileObjectId);
 }

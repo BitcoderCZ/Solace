@@ -1,16 +1,16 @@
 ﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using Serilog;
+using Microsoft.Extensions.Logging;
 using Solace.Buildplate.Connector.Model;
 using Solace.Common.Utils;
 using Solace.EventBus.Client;
 
 namespace Solace.Buildplate.Launcher;
 
-public sealed class Starter
+public sealed partial class Starter
 {
-    private readonly EventBusClient _eventBusClient;
+	private readonly EventBusClient _eventBusClient;
 
 	private readonly string _publicAddress;
 	private readonly string _javaCmd;
@@ -19,15 +19,16 @@ public sealed class Starter
 
 	private readonly FileInfo _fountainBridgeJar;
 	private readonly DirectoryInfo _serverTemplateDir;
-	private readonly String _fabricJarName;
+	private readonly string _fabricJarName;
 	private readonly FileInfo _connectorPluginJar;
+	private readonly ILogger _logger;
 
 	private const ushort BASE_PORT = 19132;
 	private const ushort SERVER_INTERNAL_BASE_PORT = 25565;
 	private readonly HashSet<int> _portsInUse = [];
 	private readonly HashSet<int> _serverInternalPortsInUse = [];
 
-    public Starter(EventBusClient eventBusClient, string eventBusConnectionString, string publicAddress, string javaCmd, string bridgeJar, string serverTemplateDir, string fabricJarName, string connectorPluginJar)
+	public Starter(EventBusClient eventBusClient, string eventBusConnectionString, string publicAddress, string javaCmd, string bridgeJar, string serverTemplateDir, string fabricJarName, string connectorPluginJar, ILogger logger)
 	{
 		_eventBusClient = eventBusClient;
 
@@ -40,9 +41,10 @@ public sealed class Starter
 		_serverTemplateDir = new DirectoryInfo(Path.GetFullPath(serverTemplateDir));
 		_fabricJarName = fabricJarName;
 		_connectorPluginJar = new FileInfo(connectorPluginJar);
+		_logger = logger;
 	}
 
-    public Instance? StartInstance(Guid instanceId, Guid? playerId, Guid buildplateId, Instance.BuildplateSource buildplateSource, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime)
+	public Instance? StartInstance(Guid instanceId, Guid? playerId, Guid buildplateId, Instance.BuildplateSource buildplateSource, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime)
 	{
 		DirectoryInfo? baseDir = CreateInstanceBaseDir(instanceId);
 		if (baseDir is null)
@@ -52,19 +54,20 @@ public sealed class Starter
 
 		int port = FindPort(_portsInUse, BASE_PORT);
 		int serverInternalPort = FindPort(_serverInternalPortsInUse, SERVER_INTERNAL_BASE_PORT);
-		var instance = Instance.Run(_eventBusClient, playerId, buildplateId, buildplateSource, instanceId, survival, night, saveEnabled, inventoryType, shutdownTime, _publicAddress, port, serverInternalPort, _javaCmd, _fountainBridgeJar, _serverTemplateDir, _fabricJarName, _connectorPluginJar, baseDir, _eventBusConnectionString);
+		// todo: create new logger with instance if and port properties
+		var instance = Instance.Run(_eventBusClient, playerId, buildplateId, buildplateSource, instanceId, survival, night, saveEnabled, inventoryType, shutdownTime, _publicAddress, port, serverInternalPort, _javaCmd, _fountainBridgeJar, _serverTemplateDir, _fabricJarName, _connectorPluginJar, baseDir, _eventBusConnectionString, _logger);
 
-        Task.Run(async () =>
-        {
-            await instance.WaitForShutdownAsync();
+		Task.Run(async () =>
+		{
+			await instance.WaitForShutdownAsync();
 			ReleasePort(_portsInUse, port);
 			ReleasePort(_serverInternalPortsInUse, serverInternalPort);
-        }).Forget();
-        
+		}).Forget();
+
 		return instance;
 	}
 
-    private static int FindPort(HashSet<int> portsInUse, int basePort)
+	private static int FindPort(HashSet<int> portsInUse, int basePort)
 	{
 		lock (portsInUse)
 		{
@@ -105,16 +108,25 @@ public sealed class Starter
 		}
 	}
 
-    private DirectoryInfo? CreateInstanceBaseDir(Guid instanceId)
+	private DirectoryInfo? CreateInstanceBaseDir(Guid instanceId)
 	{
-		var file = new DirectoryInfo(Path.Combine(_tmpDir.FullName, $"vienna-buildplate-instance_{instanceId}"));
-		if (!file.TryCreate())
+		var directory = new DirectoryInfo(Path.Combine(_tmpDir.FullName, $"vienna-buildplate-instance_{instanceId}"));
+		try
 		{
-			Log.Error($"Error creating instance base directory for {instanceId}");
-			return null;
+			directory.Create();
+		}
+		catch (IOException exception)
+		{
+			LogCreateBaseDirectoryFail(exception, instanceId);
 		}
 
-		Log.Debug($"Created instance base directory {file.FullName}");
-		return file;
+		LogCreateBaseDirectorySucceed(directory.FullName);
+		return directory;
 	}
+
+	[LoggerMessage(Level = LogLevel.Error, Message = "Error creating instance base directory for '{InstanceId}'")]
+	private partial void LogCreateBaseDirectoryFail(Exception Exception, Guid InstanceId);
+
+	[LoggerMessage(Level = LogLevel.Debug, Message = "Created instance base directory: {BaseDirectoryPath}")]
+	private partial void LogCreateBaseDirectorySucceed(string BaseDirectoryPath);
 }

@@ -253,7 +253,7 @@ internal sealed partial class BuildplatesController : SolaceControllerBase
                     item.Uuid,
                     item.Count,
                     item.InstanceId,
-                    item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, item.Wear, _catalog.ItemsCatalog) : 0.0f
+                    item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, item.Wear, _catalog.ItemsCatalog, _logger) : 0.0f
                 ) : null)],
                 [.. sharedBuildplate.Hotbar
                     .Where(item => item is not null && item.InstanceId is null)

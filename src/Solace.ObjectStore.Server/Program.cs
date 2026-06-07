@@ -1,5 +1,7 @@
 ﻿using CommandLine;
 using Serilog;
+using Serilog.Extensions.Logging;
+using Solace.Common;
 using System.Diagnostics;
 using System.Globalization;
 
@@ -59,9 +61,9 @@ internal static class Program
         }
 
         var loggerConfig = new LoggerConfiguration()
-                 .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
-                 .WriteTo.File("logs/object_store_server/log.txt", rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true, fileSizeLimitBytes: 8338607, outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}", formatProvider: CultureInfo.InvariantCulture)
-                 .Enrich.WithProperty("ComponentName", "ObjectStore");
+            .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
+            .WriteTo.File("logs/object_store_server/log.txt", rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true, fileSizeLimitBytes: 8338607, outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}", formatProvider: CultureInfo.InvariantCulture)
+            .Enrich.WithProperty("ComponentName", "ObjectStore");
 
         if (!string.IsNullOrWhiteSpace(options.LoggerUrl))
         {
@@ -72,6 +74,9 @@ internal static class Program
         var log = loggerConfig.CreateLogger();
 
         Log.Logger = log;
+
+        var globalLoggerFactory = new SerilogLoggerFactory(log);
+        GlobalLoggerFactory.Initialize(globalLoggerFactory);
 
         NetworkServer server;
         try

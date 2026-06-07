@@ -1,5 +1,7 @@
 ﻿using CommandLine;
 using Serilog;
+using Serilog.Extensions.Logging;
+using Solace.Common;
 using System.Diagnostics;
 using System.Globalization;
 
@@ -69,6 +71,9 @@ internal static class Program
         var log = loggerConfig.CreateLogger();
 
         Log.Logger = log;
+
+        var globalLoggerFactory = new SerilogLoggerFactory(log);
+        GlobalLoggerFactory.Initialize(globalLoggerFactory);
 
         NetworkServer server;
         try

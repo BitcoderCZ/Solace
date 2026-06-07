@@ -4,6 +4,8 @@ using System.Diagnostics;
 using Solace.EventBus.Client;
 using Solace.StaticData;
 using System.Globalization;
+using Solace.Common;
+using Serilog.Extensions.Logging;
 
 namespace Solace.TappablesGenerator;
 
@@ -76,6 +78,9 @@ internal static class Program
         var log = loggerConfig.CreateLogger();
 
         Log.Logger = log;
+
+        var globalLoggerFactory = new SerilogLoggerFactory(log);
+        GlobalLoggerFactory.Initialize(globalLoggerFactory);
 
         Log.Information("Loading static data");
         StaticData.StaticData staticData;

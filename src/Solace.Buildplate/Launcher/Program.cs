@@ -5,6 +5,7 @@ using Solace.Common;
 using Solace.Common.Utils;
 using Solace.EventBus.Client;
 using System.Globalization;
+using Serilog.Extensions.Logging;
 
 namespace Solace.Buildplate.Launcher;
 
@@ -80,6 +81,7 @@ internal static class Program
         var loggerConfig = new LoggerConfiguration()
             .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
             .WriteTo.File("logs/buildplate_launcher/log.txt", rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true, fileSizeLimitBytes: 8338607, outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}", formatProvider: CultureInfo.InvariantCulture)
+            .Enrich.FromLogContext()
             .Enrich.WithProperty("ComponentName", "BuildplateLauncher");
 
         if (!string.IsNullOrWhiteSpace(options.LoggerUrl))
@@ -91,6 +93,9 @@ internal static class Program
         var log = loggerConfig.CreateLogger();
 
         Log.Logger = log;
+
+        var globalLoggerFactory = new SerilogLoggerFactory(log);
+        GlobalLoggerFactory.Initialize(globalLoggerFactory);
 
         Log.Information("Connecting to event bus");
         EventBusClient eventBusClient;
@@ -107,7 +112,7 @@ internal static class Program
 
         Log.Information("Connected to event bus");
 
-        string javaCmd = JavaLocator.Locate();
+        string javaCmd = JavaLocator.Locate(globalLoggerFactory.CreateLogger(nameof(JavaLocator)));
         var starter = new Starter(eventBusClient, options.EventBusConnectionString, options.PublicAddress, javaCmd, options.BridgeJar, options.ServerTemplateDir, options.FabricJarName, options.ConnectorPluginJar);
         var instanceManager = await InstanceManager.CreateAsync(eventBusClient, starter);
 

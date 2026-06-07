@@ -1,5 +1,4 @@
 ﻿using Microsoft.IdentityModel.Tokens;
-using Serilog;
 using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -12,7 +11,7 @@ using BitcoderCZ.Utils;
 
 namespace Solace.ApiServer.Utils;
 
-internal static class JwtUtils
+internal static partial class JwtUtils
 {
     private static readonly JwtSecurityTokenHandler jwtHandler = new JwtSecurityTokenHandler();
 
@@ -68,11 +67,11 @@ internal static class JwtUtils
         ));
     }
 
-    public static Token<TData>? Verify<TData>(string token, ImmutableArray<byte> secret, bool allowExpired = false)
+    public static Token<TData>? Verify<TData>(string token, ImmutableArray<byte> secret, ILogger logger, bool allowExpired = false)
         where TData : ITokenData<TData>
-        => Verify<TData>(token, ImmutableCollectionsMarshal.AsArray(secret)!, allowExpired);
+        => Verify<TData>(token, ImmutableCollectionsMarshal.AsArray(secret)!, logger, allowExpired);
 
-    public static Token<TData>? Verify<TData>(string token, byte[] secret, bool allowExpired = false)
+    public static Token<TData>? Verify<TData>(string token, byte[] secret, ILogger logger, bool allowExpired = false)
         where TData : ITokenData<TData>
     {
         ThrowHelper.ThrowIfNull(token);
@@ -114,15 +113,21 @@ internal static class JwtUtils
 
             return new Token<TData>(DateTimeOffset.FromUnixTimeSeconds(issuedSeconds), expires, allowExpired && expires < DateTimeOffset.UtcNow, data);
         }
-        catch (SecurityTokenException ex)
+        catch (SecurityTokenException exception)
         {
-            Log.Debug($"JWT verification failed: {ex.Message}");
+            LogJwtVerificationFail(logger, exception);
             return null;
         }
-        catch (JsonException ex)
+        catch (JsonException exception)
         {
-            Log.Debug($"JWT data deserialization failed: {ex.Message}");
+            LogJwtDataDeserializationFail(logger, exception);
             return null;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "JWT verification failed")]
+    private static partial void LogJwtVerificationFail(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "JWT data deserialization failed")]
+    private static partial void LogJwtDataDeserializationFail(ILogger logger, Exception exception);
 }

@@ -5,12 +5,13 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
+using static Solace.Buildplate.Model.WorldData.Logs;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Solace.Buildplate.Model;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 
-public sealed partial record WorldData(
+public sealed partial record class WorldData(
     byte[] ServerData,
     int Size,
     int Offset,
@@ -216,27 +217,31 @@ public sealed partial record WorldData(
         combinedObject.WriteTo(writer, options);
     }
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Could not read world file")]
-    private static partial void LogWorldFileReadError(ILogger logger, Exception exception);
+    // LoggerMessage doesn't work in records???
+    internal static partial class Logs
+    {
+        [LoggerMessage(Level = LogLevel.Error, Message = "Could not read world file")]
+        internal static partial void LogWorldFileReadError(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "World file is missing file '{FilePath}'")]
-    private static partial void LogWorldFileFileMissing(ILogger logger, string FilePath);
+        [LoggerMessage(Level = LogLevel.Error, Message = "World file is missing file '{FilePath}'")]
+        internal static partial void LogWorldFileFileMissing(ILogger logger, string FilePath);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Could not prepare server data")]
-    private static partial void LogServerDataPrepareError(ILogger logger, Exception exception);
+        [LoggerMessage(Level = LogLevel.Error, Message = "Could not prepare server data")]
+        internal static partial void LogServerDataPrepareError(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = $"World file does not contain {MetadataFileName}, using default values")]
-    private static partial void LogNoBuildplateMetadataFile(ILogger logger);
+        [LoggerMessage(Level = LogLevel.Warning, Message = $"World file does not contain {MetadataFileName}, using default values")]
+        internal static partial void LogNoBuildplateMetadataFile(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Invalid buildplate metadata")]
-    private static partial void LogInvalidBuildplateMetadata(ILogger logger);
+        [LoggerMessage(Level = LogLevel.Error, Message = "Invalid buildplate metadata")]
+        internal static partial void LogInvalidBuildplateMetadata(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Unsupported buildplate metadata version {Version}")]
-    private static partial void LogUnsupportedBuildplateMetadataVersion(ILogger logger, int Version);
+        [LoggerMessage(Level = LogLevel.Error, Message = "Unsupported buildplate metadata version {Version}")]
+        internal static partial void LogUnsupportedBuildplateMetadataVersion(ILogger logger, int Version);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Could not read buildplate metadata file")]
-    private static partial void LogBuildplateMetadataReadError(ILogger logger, Exception exception);
+        [LoggerMessage(Level = LogLevel.Error, Message = "Could not read buildplate metadata file")]
+        internal static partial void LogBuildplateMetadataReadError(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Invalid buildplate size {Size}, must be on of: 8, 16, 32")]
-    private static partial void LogInvalidBuildplateSite(ILogger logger, int Size);
+        [LoggerMessage(Level = LogLevel.Error, Message = "Invalid buildplate size {Size}, must be on of: 8, 16, 32")]
+        internal static partial void LogInvalidBuildplateSite(ILogger logger, int Size);
+    }
 }

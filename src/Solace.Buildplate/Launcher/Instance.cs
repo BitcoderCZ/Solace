@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Cyotek.Data.Nbt;
 using Cyotek.Data.Nbt.Serialization;
-using Serilog;
+using Microsoft.Extensions.Logging;
 using Solace.Buildplate.Connector.Model;
 using Solace.Common;
 using Solace.Common.Utils;
@@ -14,19 +14,19 @@ using Solace.EventBus.Client;
 namespace Solace.Buildplate.Launcher;
 
 #pragma warning disable CA1001 // Types that own disposable fields should be disposable
-public sealed class Instance
+public sealed partial class Instance
 #pragma warning restore CA1001 // Types that own disposable fields should be disposable
 {
     private const long HOST_PLAYER_CONNECT_TIMEOUT = 120_000;
 
-    public static Instance Run(EventBusClient eventBusClient, Guid? playerId, Guid buildplateId, BuildplateSource buildplateSource, Guid instanceId, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime, string publicAddress, int port, int serverInternalPort, string javaCmd, FileInfo fountainBridgeJar, DirectoryInfo serverTemplateDir, string fabricJarName, FileInfo connectorPluginJar, DirectoryInfo baseDir, string eventBusConnectionString)
+    public static Instance Run(EventBusClient eventBusClient, Guid? playerId, Guid buildplateId, BuildplateSource buildplateSource, Guid instanceId, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime, string publicAddress, int port, int serverInternalPort, string javaCmd, FileInfo fountainBridgeJar, DirectoryInfo serverTemplateDir, string fabricJarName, FileInfo connectorPluginJar, DirectoryInfo baseDir, string eventBusConnectionString, ILogger logger)
     {
         if (playerId is null && buildplateSource is BuildplateSource.PLAYER)
         {
             throw new ArgumentException($"{nameof(playerId)} cannot be null when {nameof(buildplateSource)} is {nameof(BuildplateSource.PLAYER)}");
         }
 
-        var instance = new Instance(eventBusClient, playerId, buildplateId, buildplateSource, instanceId, survival, night, saveEnabled, inventoryType, shutdownTime, publicAddress, port, serverInternalPort, javaCmd, fountainBridgeJar, serverTemplateDir, fabricJarName, connectorPluginJar, baseDir, eventBusConnectionString);
+        var instance = new Instance(eventBusClient, playerId, buildplateId, buildplateSource, instanceId, survival, night, saveEnabled, inventoryType, shutdownTime, publicAddress, port, serverInternalPort, javaCmd, fountainBridgeJar, serverTemplateDir, fabricJarName, connectorPluginJar, baseDir, eventBusConnectionString, logger);
         instance._threadStartedSemaphore.Wait();
         instance._thread = instance.RunAsync();
         instance._threadStartedSemaphore.Wait();
@@ -79,7 +79,7 @@ public sealed class Instance
 
     private volatile bool _hostPlayerConnected;
 
-    private Instance(EventBusClient eventBusClient, Guid? playerId, Guid buildplateId, BuildplateSource buildplateSource, Guid instanceId, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime, string publicAddress, int port, int serverInternalPort, string javaCmd, FileInfo fountainBridgeJar, DirectoryInfo serverTemplateDir, string fabricJarName, FileInfo connectorPluginJar, DirectoryInfo baseDir, string eventBusConnectionString)
+    private Instance(EventBusClient eventBusClient, Guid? playerId, Guid buildplateId, BuildplateSource buildplateSource, Guid instanceId, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime, string publicAddress, int port, int serverInternalPort, string javaCmd, FileInfo fountainBridgeJar, DirectoryInfo serverTemplateDir, string fabricJarName, FileInfo connectorPluginJar, DirectoryInfo baseDir, string eventBusConnectionString, ILogger logger)
     {
         _eventBusClient = eventBusClient;
 
@@ -111,7 +111,7 @@ public sealed class Instance
             _inventoryType
         ));
 
-        _logger = Log.Logger.ForContext("InstanceId", InstanceId);
+        _logger = logger; // Log.Logger.ForContext("InstanceId", InstanceId);
     }
 
     private async Task RunAsync()
@@ -125,22 +125,22 @@ public sealed class Instance
             switch (_buildplateSource)
             {
                 case BuildplateSource.PLAYER:
-                    _logger.Information($"Starting for player {_playerId} buildplate {_buildplateId} (survival = {_survival}, saveEnabled = {_saveEnabled}, inventoryType = {_inventoryType})");
+                    LogStartingForPlayer(_playerId, _buildplateId, _survival, _saveEnabled, _inventoryType);
                     break;
                 case BuildplateSource.SHARED:
-                    _logger.Information($"Starting for shared buildplate {_buildplateId} (player = {_playerId}, survival = {_survival}, saveEnabled = {_saveEnabled}, inventoryType = {_inventoryType})");
+                    LogStartingForSharedBuildplate(_buildplateId, _playerId, _survival, _saveEnabled, _inventoryType);
                     break;
                 case BuildplateSource.ENCOUNTER:
-                    _logger.Information($"Starting for encounter buildplate {_buildplateId} (player = {_playerId}, survival = {_survival}, saveEnabled = {_saveEnabled}, inventoryType = {_inventoryType})");
+                    LogStartingForEncounterBuildplate(_buildplateId, _playerId, _survival, _saveEnabled, _inventoryType);
                     break;
             }
 
-            _logger.Information($"Using port {Port} internal port {_serverInternalPort}");
+            LogPortUsageInfo(Port, _serverInternalPort);
 
             _publisher = await _eventBusClient.AddPublisherAsync();
             _requestSender = await _eventBusClient.AddRequestSenderAsync();
 
-            _logger.Information("Setting up server");
+            LogSettingUpServer();
 
             BuildplateLoadResponse? buildplateLoadResponse = _buildplateSource switch
             {
@@ -159,7 +159,7 @@ public sealed class Instance
             }
             catch (Exception exception)
             {
-                _logger.Error(exception, "Buildplate load response contained invalid base64 data");
+                LogBuildplateLoadInvalidBase64(exception);
                 return;
             }
 
@@ -168,7 +168,7 @@ public sealed class Instance
                 var serverWorkDir = await SetupServerFiles(serverData);
                 if (serverWorkDir is null)
                 {
-                    _logger.Error("Could not set up files for server");
+                    LogSetupServerFilesError();
                     return;
                 }
 
@@ -176,7 +176,7 @@ public sealed class Instance
             }
             catch (IOException exception)
             {
-                _logger.Error(exception, "Could not set up files for server");
+                LogSetupServerFilesError(exception);
                 return;
             }
 
@@ -185,7 +185,7 @@ public sealed class Instance
                 var bridgeWorkDir = SetupBridgeFiles(serverData);
                 if (bridgeWorkDir is null)
                 {
-                    _logger.Error("Could not set up files for bridge");
+                    LogSetupBridgeFilesError();
                     return;
                 }
 
@@ -193,17 +193,17 @@ public sealed class Instance
             }
             catch (IOException exception)
             {
-                _logger.Error(exception, "Could not set up files for bridge");
+                LogSetupBridgeFilesError(exception);
                 return;
             }
 
-            _logger.Information("Running server");
+            LogRunningServer();
 
             _subscriber = await _eventBusClient.AddSubscriberAsync(_eventBusQueueName, new SubscriberListener(
                 HandleConnectorEvent,
                 async () =>
                 {
-                    _logger.Error("Event bus subscriber error");
+                    LogEventBusSubscriberError();
                     BeginShutdown();
                 }
             ));
@@ -216,7 +216,7 @@ public sealed class Instance
                 },
                 async () =>
                 {
-                    _logger.Error("Event bus request handler error");
+                    LogEventBusRequestHandlerError();
                     BeginShutdown();
                 }
             ));
@@ -237,30 +237,30 @@ public sealed class Instance
                     _serverProcess = null;
                     if (!_shuttingDown)
                     {
-                        _logger.Warning($"Server process has unexpectedly terminated with exit code {exitCode}");
+                        LogServerProcessUnexpectedExit(exitCode);
                     }
                     else
                     {
-                        _logger.Information($"Server has finished with exit code {exitCode}");
+                        LogServerProcessFinished(exitCode);
                     }
 
                     _shuttingDown = true;
 
                     if (_bridgeProcess is not null)
                     {
-                        _logger.Information("Bridge is still running, shutting it down now");
+                        LogWaitingForBridge();
                         await @lock.DisposeAsync();
-                        await _bridgeProcess.StopAndWaitAsync();
+                        await _bridgeProcess.StopAndWaitAsync(_logger);
                         exitCode = _bridgeProcess.ExitCodeText;
                         @lock = await _subprocessLock.LockAsync(CancellationToken.None);
                         _bridgeProcess.Dispose();
                         _bridgeProcess = null;
-                        _logger.Information($"Bridge has finished with exit code {exitCode}");
+                        LogBridgeProcessFinished(exitCode);
                     }
                 }
                 else
                 {
-                    _logger.Information("Server failed to start");
+                    LogServerStartFailed();
                 }
             }
 
@@ -299,7 +299,7 @@ public sealed class Instance
             _serverProcess?.Dispose();
             _bridgeProcess?.Dispose();
 
-            _logger.Information("Finished");
+            LogInstanceFinished();
         }
     }
 
@@ -309,7 +309,7 @@ public sealed class Instance
         {
             case "started":
                 {
-                    _logger.Information("Server is ready");
+                    LogServerIsReady();
                     await StartBridgeProcessAsync();
                     SendEventBusInstanceStatusNotification("ready");
                     if (_shutdownTime is not null)
@@ -344,7 +344,7 @@ public sealed class Instance
                     }
                     else
                     {
-                        _logger.Information("Ignoring save data because saving is disabled");
+                        _logger.LogDebug("Ignoring save data because saving is disabled");
                     }
                 }
 
@@ -415,12 +415,12 @@ public sealed class Instance
                         }
                         else
                         {
-                            Log.Debug("[playerConnected] invalid api response");
+                            // Log.Debug("[playerConnected] invalid api response");
                         }
                     }
                     else
                     {
-                        Log.Debug("[playerConnected] failed to read json");
+                        // Log.Debug("[playerConnected] failed to read json");
                     }
                 }
 
@@ -473,13 +473,12 @@ public sealed class Instance
                         }
                         else
                         {
-                            Log.Debug("[getInventory] invalid api response");
-
+                            // Log.Debug("[getInventory] invalid api response");
                         }
                     }
                     else
                     {
-                        Log.Debug("[getInventory] failed to read json");
+                        // Log.Debug("[getInventory] failed to read json");
                     }
                 }
 
@@ -519,7 +518,7 @@ public sealed class Instance
                     }
                     else
                     {
-                        Log.Debug("[findPlayer] failed to read json");
+                        // Log.Debug("[findPlayer] failed to read json");
                     }
                 }
 
@@ -537,7 +536,7 @@ public sealed class Instance
                     }
                     else
                     {
-                        Log.Debug("[getInitialPlayerState] failed to read json");
+                        // Log.Debug("[getInitialPlayerState] failed to read json");
                     }
                 }
 
@@ -555,7 +554,7 @@ public sealed class Instance
         }
         catch (Exception ex)
         {
-            Log.Error($"Failed to decode event bus message JSON: {ex}");
+            LogEventBusDecodeError(ex);
             BeginShutdown();
             return default;
         }
@@ -569,7 +568,7 @@ public sealed class Instance
         {
             if (!task.Result)
             {
-                Log.Error("Event bus publisher error");
+                LogEventBusPublisherError();
                 BeginShutdown();
             }
         });
@@ -1059,7 +1058,7 @@ public sealed class Instance
             {
                 _logger.Information("Waiting for bridge to shut down");
                 await @lock.DisposeAsync();
-                await _bridgeProcess.StopAndWaitAsync();
+                await _bridgeProcess.StopAndWaitAsync(_logger);
                 var exitCode = _bridgeProcess.ExitCodeText;
                 @lock = await _subprocessLock.LockAsync(CancellationToken.None);
                 _bridgeProcess.Dispose();
@@ -1070,7 +1069,7 @@ public sealed class Instance
             if (_serverProcess is not null)
             {
                 _logger.Information("Asking the server to shut down");
-                await _serverProcess.StopNoWaitAsync();
+                await _serverProcess.StopNoWaitAsync(_logger);
             }
 
             await @lock.DisposeAsync();
@@ -1110,4 +1109,70 @@ public sealed class Instance
         SHARED,
         ENCOUNTER
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Starting for player {PlayerId} buildplate {BuildplateId} (survival = {SurvivalEnabled}, saveEnabled = {SaveEnabled}, inventoryType = {InventoryType})")]
+    private partial void LogStartingForPlayer(Guid? PlayerId, Guid BuildplateId, bool SurvivalEnabled, bool SaveEnabled, InventoryType InventoryType);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Starting for shared buildplate {BuildplateId} (player = {PlayerId}, survival = {SurvivalEnabled}, saveEnabled = {SaveEnabled}, inventoryType = {InventoryType})")]
+    private partial void LogStartingForSharedBuildplate(Guid BuildplateId, Guid? PlayerId, bool SurvivalEnabled, bool SaveEnabled, InventoryType InventoryType);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Starting for encounter buildplate {BuildplateId} (player = {PlayerId}, survival = {SurvivalEnabled}, saveEnabled = {SaveEnabled}, inventoryType = {InventoryType})")]
+    private partial void LogStartingForEncounterBuildplate(Guid BuildplateId, Guid? PlayerId, bool SurvivalEnabled, bool SaveEnabled, InventoryType InventoryType);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Using port {Port} internal port {ServerInternalPort}")]
+    private partial void LogPortUsageInfo(int Port, int ServerInternalPort);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Setting up server")]
+    private partial void LogSettingUpServer();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Buildplate load response contained invalid base64 data")]
+    private partial void LogBuildplateLoadInvalidBase64(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not set up files for server")]
+    private partial void LogSetupServerFilesError();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not set up files for server")]
+    private partial void LogSetupServerFilesError(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not set up files for bridge")]
+    private partial void LogSetupBridgeFilesError();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not set up files for bridge")]
+    private partial void LogSetupBridgeFilesError(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Running server")]
+    private partial void LogRunningServer();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus subscriber error")]
+    private partial void LogEventBusSubscriberError();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus request handler error")]
+    private partial void LogEventBusRequestHandlerError();
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Server process has unexpectedly terminated with exit code {ExitCode}")]
+    private partial void LogServerProcessUnexpectedExit(string ExitCode);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Server has finished with exit code {ExitCode}")]
+    private partial void LogServerProcessFinished(string ExitCode);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bridge is still running, shutting it down now")]
+    private partial void LogWaitingForBridge();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bridge has finished with exit code {ExitCode}")]
+    private partial void LogBridgeProcessFinished(string ExitCode);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Server failed to start")]
+    private partial void LogServerStartFailed();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Finished")]
+    private partial void LogInstanceFinished();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Server is ready")]
+    private partial void LogServerIsReady();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to decode event bus message JSON")]
+    private partial void LogEventBusDecodeError(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus publisher error")]
+    private partial void LogEventBusPublisherError();
 }

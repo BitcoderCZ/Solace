@@ -26,11 +26,13 @@ internal sealed class InventoryController : SolaceControllerBase
 {
     private readonly EarthDbContext _earthDB;
     private readonly Catalog _catalog;
+    private readonly ILogger<InventoryController> _logger;
 
-    public InventoryController(EarthDbContext earthDB, StaticData.StaticData staticData)
+    public InventoryController(EarthDbContext earthDB, StaticData.StaticData staticData, ILogger<InventoryController> logger)
     {
         _earthDB = earthDB;
         _catalog = staticData.Catalog;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -76,7 +78,7 @@ internal sealed class InventoryController : SolaceControllerBase
                 item.Uuid,
                 item.Count,
                 item.InstanceId,
-                item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId)?.Wear ?? 0, _catalog.ItemsCatalog) : 0.0f
+                item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId)?.Wear ?? 0, _catalog.ItemsCatalog, _logger) : 0.0f
                     ) : null)],
             [.. inventory.StackableItems.Select(item =>
             {
@@ -102,7 +104,7 @@ internal sealed class InventoryController : SolaceControllerBase
                 string lastSeen = TimeFormatter.FormatTime(itemJournalEntry.LastSeen);
                 return new NonStackableInventoryItem(
                     uuid,
-                    [.. item.Instances.Where(instance => !hotbarItemInstances.Contains(instance.InstanceId)).Select(instance => new NonStackableInventoryItem.Instance(instance.InstanceId, ItemWear.WearToHealth(item.Id, instance.Wear, _catalog.ItemsCatalog)))],
+                    [.. item.Instances.Where(instance => !hotbarItemInstances.Contains(instance.InstanceId)).Select(instance => new NonStackableInventoryItem.Instance(instance.InstanceId, ItemWear.WearToHealth(item.Id, instance.Wear, _catalog.ItemsCatalog, _logger)))],
                     1,
                     new NonStackableInventoryItem.OnR(firstSeen),
                     new NonStackableInventoryItem.OnR(lastSeen)
@@ -150,7 +152,7 @@ internal sealed class InventoryController : SolaceControllerBase
             item.Uuid,
             item.Count,
             item.InstanceId,
-            item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId)!.Wear, _catalog.ItemsCatalog) : 0.0f
+            item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId)!.Wear, _catalog.ItemsCatalog, _logger) : 0.0f
         ) : null)];
 
         string resp = Json.Serialize(hotbarItems);

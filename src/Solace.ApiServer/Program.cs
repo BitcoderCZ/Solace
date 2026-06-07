@@ -324,6 +324,9 @@ public static class Program
 
         var app = builder.Build();
 
+        var globalLoggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+        GlobalLoggerFactory.Initialize(globalLoggerFactory);
+
         var forwardedHeadersOptions = new ForwardedHeadersOptions
         {
             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
