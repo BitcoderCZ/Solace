@@ -29,6 +29,23 @@ public static class IdTranslator
         return ToGuidViaHash(idString);
     }
 
+    // todo: optimmize - remove TryFormat
+    public static string ToHex(Guid id)
+    {
+        if (id == Guid.Empty)
+        {
+            return string.Empty;
+        }
+
+        Span<char> buffer = stackalloc char[32];
+        bool formatted = id.TryFormat(buffer, out int charsWritten, "N");
+        Debug.Assert(formatted && charsWritten == 32);
+
+        ReadOnlySpan<char> trimmed = buffer.TrimStart('0');
+        
+        return trimmed.IsEmpty ? string.Empty : trimmed.ToString();
+    }
+
     private static Guid ToGuidDirect(ReadOnlySpan<char> hexId)
     {
         Span<char> padded = stackalloc char[32];
