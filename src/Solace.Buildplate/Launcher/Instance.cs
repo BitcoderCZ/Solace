@@ -268,7 +268,7 @@ public sealed partial class Instance
         }
         catch (Exception exception)
         {
-            _logger.Error(exception, $"Unhandled exception: {exception.Message}");
+            LogUnhandledException(exception);
         }
         finally
         {
@@ -332,20 +332,20 @@ public sealed partial class Instance
                         {
                             if (_hostPlayerConnected)
                             {
-                                _logger.Information("Saving snapshot");
+                                LogSavingSnapshot();
                                 SendEventBusRequest<object>("saved", worldSavedMessage, false)
                                     .Forget();
                             }
                             else
                             {
-                                _logger.Information("Not saving snapshot because host player never connected");
+                                LogNotSavingSnapshotHostNotConnected();
                             }
                         }
                     }
-                    else
-                    {
-                        _logger.LogDebug("Ignoring save data because saving is disabled");
-                    }
+                    // else
+                    // {
+                    //     _logger.LogDebug("Ignoring save data because saving is disabled");
+                    // }
                 }
 
                 break;
@@ -397,14 +397,14 @@ public sealed partial class Instance
                     {
                         if (_playerId is not null && !_hostPlayerConnected && playerConnectedRequest.Uuid != _playerId)
                         {
-                            _logger.Information($"Rejecting player connection for player {playerConnectedRequest.Uuid} because the host player must connect first");
+                            LogRejectingPlayerConnectionHostNotFirst(playerConnectedRequest.Uuid);
                             return new PlayerConnectedResponse(false, null);
                         }
 
                         PlayerConnectedResponse? playerConnectedResponse = await SendEventBusRequest<PlayerConnectedResponse>("playerConnected", playerConnectedRequest, true);
                         if (playerConnectedResponse is not null)
                         {
-                            _logger.Information($"Player {playerConnectedRequest.Uuid} has connected");
+                            LogPlayerConnected(playerConnectedRequest.Uuid);
 
                             if (_playerId is not null && !_hostPlayerConnected && playerConnectedRequest.Uuid == _playerId)
                             {
@@ -433,11 +433,11 @@ public sealed partial class Instance
                         PlayerDisconnectedResponse? playerDisconnectedResponse = await SendEventBusRequest<PlayerDisconnectedResponse>("playerDisconnected", playerDisconnectedRequest, true);
                         if (playerDisconnectedResponse is not null)
                         {
-                            _logger.Information($"Player {playerDisconnectedRequest.PlayerId} has disconnected");
+                            LogPlayerDisconnected(playerDisconnectedRequest.PlayerId);
 
                             if (_shutdownTime is null && _playerId is not null && playerDisconnectedRequest.PlayerId == _playerId)
                             {
-                                _logger.Information("Host player has disconnected, beginning shutdown");
+                                LogHostPlayerDisconnected();
                                 BeginShutdown();
                             }
 
@@ -596,7 +596,7 @@ public sealed partial class Instance
 
             if (response is null)
             {
-                Log.Error("Event bus request failed (no response)");
+                LogEventBusRequestNoResponse();
                 BeginShutdown();
                 return default;
             }
@@ -612,9 +612,9 @@ public sealed partial class Instance
                 return default;
             }
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error($"Event bus request failed: {ex}");
+            LogEventBusRequestFail(exception);
             BeginShutdown();
             return default;
         }
@@ -623,15 +623,19 @@ public sealed partial class Instance
     private async Task<DirectoryInfo?> SetupServerFiles(byte[] serverData)
     {
         var workDir = new DirectoryInfo(Path.Combine(_baseDir.FullName, "server"));
-        if (!workDir.TryCreate())
+        try
         {
-            _logger.Error("Could not create server working directory");
+            workDir.Create();
+        }
+        catch (IOException exception)
+        {
+            LogServerDirectoryCreateFail(exception);
             return null;
         }
 
         if (!CopyServerFile(new FileInfo(Path.Combine(_serverTemplateDir.FullName, _fabricJarName)), new FileInfo(Path.Combine(workDir.FullName, _fabricJarName)), false))
         {
-            _logger.Error("Fabric JAR {} does not exist in server template directory", _fabricJarName);
+            LogFabricJarNotFound(_fabricJarName);
             return null;
         }
 
@@ -640,7 +644,7 @@ public sealed partial class Instance
         {
             if (!warnedMissingServerFiles)
             {
-                _logger.Warning("Server files were not pre-downloaded in server template directory, it is recommended to pre-download all server files to improve instance start-up time and reduce network data usage");
+                LogServerFilesNotPreDownloaded();
                 warnedMissingServerFiles = true;
             }
         }
@@ -649,7 +653,7 @@ public sealed partial class Instance
         {
             if (!warnedMissingServerFiles)
             {
-                _logger.Warning("Server files were not pre-downloaded in server template directory, it is recommended to pre-download all server files to improve instance start-up time and reduce network data usage");
+                LogServerFilesNotPreDownloaded();
                 warnedMissingServerFiles = true;
             }
         }
@@ -658,7 +662,7 @@ public sealed partial class Instance
         {
             if (!warnedMissingServerFiles)
             {
-                _logger.Warning("Server files were not pre-downloaded in server template directory, it is recommended to pre-download all server files to improve instance start-up time and reduce network data usage");
+                LogServerFilesNotPreDownloaded();
 #pragma warning disable IDE0059 // Unnecessary assignment of a value
                 warnedMissingServerFiles = true;
 #pragma warning restore IDE0059 // Unnecessary assignment of a value
@@ -667,7 +671,7 @@ public sealed partial class Instance
 
         if (!CopyServerFile(new DirectoryInfo(Path.Combine(_serverTemplateDir.FullName, "mods")), new DirectoryInfo(Path.Combine(workDir.FullName, "mods")), true))
         {
-            _logger.Error("Mods directory was not present in server template directory, the buildplate server instance will not function correctly without the Fountain and Vienna Fabric mods installed");
+            LogModsDirrectoryNotFound();
         }
 
         await File.WriteAllTextAsync(Path.Combine(workDir.FullName, "eula.txt"), "eula=true");
@@ -686,23 +690,35 @@ public sealed partial class Instance
         await File.WriteAllTextAsync(Path.Combine(workDir.FullName, "server.properties"), serverProperties);
 
         var worldDir = new DirectoryInfo(Path.Combine(workDir.FullName, "world"));
-        if (!worldDir.TryCreate())
+        try
         {
-            _logger.Error("Could not create server world directory");
+            workDir.Create();
+        }
+        catch (IOException exception)
+        {
+            LogServerWorldDirectoryCreateFail(exception);
             return null;
         }
 
         var worldEntitiesDir = new DirectoryInfo(Path.Combine(worldDir.FullName, "entities"));
-        if (!worldEntitiesDir.TryCreate())
+        try
         {
-            _logger.Error("Could not create server world entities directory");
+            worldEntitiesDir.Create();
+        }
+        catch (IOException exception)
+        {
+            LogServerWorldEntitiesDirectoryCreateFail(exception);
             return null;
         }
 
         var worldRegionDir = new DirectoryInfo(Path.Combine(worldDir.FullName, "region"));
-        if (!worldRegionDir.TryCreate())
+        try
         {
-            _logger.Error("Could not create server world regions directory");
+            worldRegionDir.Create();
+        }
+        catch (IOException exception)
+        {
+            LogServerWorldRegionsDirectoryCreateFail(exception);
             return null;
         }
 
@@ -830,9 +846,13 @@ public sealed partial class Instance
 #pragma warning restore IDE0060 // Remove unused parameter
     {
         var workDir = new DirectoryInfo(Path.Combine(_baseDir.FullName, "bridge"));
-        if (!workDir.TryCreate())
+        try
         {
-            _logger.Error("Could not create bridge working directory");
+            workDir.Create();
+        }
+        catch (IOException exception)
+        {
+            LogBridgeDirectoryCreateFail(exception);
             return null;
         }
 
@@ -843,7 +863,7 @@ public sealed partial class Instance
 
     private void CleanupBaseDir()
     {
-        _logger.Information("Cleaning up runtime directory");
+        LogCleaningUpRuntimeDirectory();
 
         try
         {
@@ -851,7 +871,7 @@ public sealed partial class Instance
         }
         catch (Exception exception)
         {
-            _logger.Error(exception, $"Exception while cleaning up runtime directory: {exception.Message}");
+            LogCleanUpRuntimeDirectoryError(exception);
         }
     }
 
@@ -861,17 +881,17 @@ public sealed partial class Instance
         {
             if (_shuttingDown)
             {
-                _logger.Debug("Already shutting down, not starting server process");
+                LogSkippingServerStartAlreadyShuttingDown();
                 return;
             }
 
             if (_serverProcess is not null)
             {
-                _logger.Debug("Server process has already been started");
+                LogSkippingServerStartAlreadyStarted();
                 return;
             }
 
-            _logger.Information("Starting server process");
+            LogStartingServerProcess();
 
             try
             {
@@ -886,25 +906,25 @@ public sealed partial class Instance
                     {
                         if (!string.IsNullOrWhiteSpace(e.Data))
                         {
-                            Log.Debug($"[server] {e.Data}");
+                            LogReceivedServerData(LogLevel.Information, e.Data);
                         }
                     };
                     _serverProcess.ErrorTextReceived += (sender, e) =>
                     {
                         if (!string.IsNullOrWhiteSpace(e.Data))
                         {
-                            Log.Error($"[server] {e.Data}");
+                            LogReceivedServerData(LogLevel.Error, e.Data);
                         }
                     };
                 }
 
                 await _serverProcess.ExecuteAsync(_serverWorkDir.FullName, ["-jar", _fabricJarName, "-nogui"]);
 
-                _logger.Information($"Server process started, PID {_serverProcess.Id}");
+                LogServerProcessStarted(_serverProcess.Id);
             }
             catch (IOException exception)
             {
-                _logger.Error(exception, "Could not start server process");
+                LogServerProcessStartError(exception);
             }
         }
     }
@@ -915,17 +935,17 @@ public sealed partial class Instance
         {
             if (_shuttingDown)
             {
-                _logger.Debug("Already shutting down, not starting bridge process");
+                LogSkippingBridgeStartAlreadyShuttingDown();
                 return;
             }
 
             if (_bridgeProcess is not null)
             {
-                _logger.Debug("Bridge process has already been started");
+                LogSkippingBridgeStartAlreadyStarted();
                 return;
             }
 
-            _logger.Information("Starting bridge process");
+            LogStartingBridgeProcess();
 
             try
             {
@@ -939,14 +959,14 @@ public sealed partial class Instance
                     {
                         if (!string.IsNullOrWhiteSpace(e.Data))
                         {
-                            Log.Debug($"[bridge] {e.Data}");
+                            LogReceivedBridgeData(LogLevel.Information, e.Data);
                         }
                     };
                     _bridgeProcess.ErrorTextReceived += (sender, e) =>
                     {
                         if (!string.IsNullOrWhiteSpace(e.Data))
                         {
-                            Log.Error($"[bridge] {e.Data}");
+                            LogReceivedBridgeData(LogLevel.Error, e.Data);
                         }
                     };
                 }
@@ -959,7 +979,7 @@ public sealed partial class Instance
                         {
                             if (!_shuttingDown)
                             {
-                                Log.Warning($"Bridge process has unexpectedly terminated with exit code {_bridgeProcess.ExitCode}");
+                                LogBridgeProcessUnexpectedTermination(_bridgeProcess.ExitCode);
                                 _bridgeProcess.Dispose();
                                 _bridgeProcess = null;
                                 BeginShutdown();
@@ -980,11 +1000,11 @@ public sealed partial class Instance
                     "-useUUIDAsUsername",
                 ]);
 
-                _logger.Information($"Bridge process started, PID {_bridgeProcess.Id}");
+                LogBridgeProcessStarted(_bridgeProcess.Id);
             }
             catch (IOException exception)
             {
-                _logger.Error(exception, "Could not start bridge process");
+                LogBridgeProcessStartError(exception);
             }
         }
     }
@@ -1004,7 +1024,7 @@ public sealed partial class Instance
 
             if (!_hostPlayerConnected)
             {
-                _logger.Information("Host player has not connected yet, shutting down");
+                LogHostConnectTimerDone();
                 BeginShutdown();
             }
         }).Forget();
@@ -1022,7 +1042,7 @@ public sealed partial class Instance
                     long duration = shutdownTime - currentTime;
                     if (duration > 0)
                     {
-                        _logger.Information("Server will shut down in {} milliseconds", duration);
+                        LogShutdownTimerProgress(duration);
                         await Task.Delay(checked((int)(duration > 2000 ? (duration / 2) : duration)));
                     }
 
@@ -1030,7 +1050,7 @@ public sealed partial class Instance
                 }
             }
 
-            _logger.Information("Shutdown time has been reached, shutting down");
+            LogShutdownTimerDone();
             BeginShutdown();
         }).Forget();
 
@@ -1043,32 +1063,32 @@ public sealed partial class Instance
 
             if (_shuttingDown)
             {
-                _logger.Debug("Already shutting down, not beginning shutdown");
+                LogShutDownAlreadyInProgress();
                 await @lock.DisposeAsync();
                 return;
             }
 
             _shuttingDown = true;
 
-            _logger.Information("Beginning shutdown");
+            LogBeginningShutdown();
 
             SendEventBusInstanceStatusNotification("shuttingDown");
 
             if (_bridgeProcess is not null)
             {
-                _logger.Information("Waiting for bridge to shut down");
+                LogWaitingForBridgeToShutDown();
                 await @lock.DisposeAsync();
                 await _bridgeProcess.StopAndWaitAsync(_logger);
                 var exitCode = _bridgeProcess.ExitCodeText;
                 @lock = await _subprocessLock.LockAsync(CancellationToken.None);
                 _bridgeProcess.Dispose();
                 _bridgeProcess = null;
-                _logger.Information($"Bridge has finished with exit code {exitCode}");
+                LogBridgeProcessFinished(exitCode);
             }
 
             if (_serverProcess is not null)
             {
-                _logger.Information("Asking the server to shut down");
+                LogAskingTheServerToShutDown();
                 await _serverProcess.StopNoWaitAsync(_logger);
             }
 
@@ -1164,6 +1184,9 @@ public sealed partial class Instance
     [LoggerMessage(Level = LogLevel.Error, Message = "Server failed to start")]
     private partial void LogServerStartFailed();
 
+    [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled exception")]
+    private partial void LogUnhandledException(Exception exception);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Finished")]
     private partial void LogInstanceFinished();
 
@@ -1175,4 +1198,118 @@ public sealed partial class Instance
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Event bus publisher error")]
     private partial void LogEventBusPublisherError();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Saving snapshot")]
+    private partial void LogSavingSnapshot();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Not saving snapshot because host player never connected")]
+    private partial void LogNotSavingSnapshotHostNotConnected();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Rejecting player connection for player {PlayerUuid} because the host player must connect first")]
+    private partial void LogRejectingPlayerConnectionHostNotFirst(Guid PlayerUuid);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Player {PlayerUuid} has connected")]
+    private partial void LogPlayerConnected(Guid PlayerUuid);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Player {PlayerUuid} has disconnected")]
+    private partial void LogPlayerDisconnected(Guid PlayerUuid);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Host player has disconnected, beginning shutdown")]
+    private partial void LogHostPlayerDisconnected();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus request failed (no response)")]
+    private partial void LogEventBusRequestNoResponse();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus request failed")]
+    private partial void LogEventBusRequestFail(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not create server working directory")]
+    private partial void LogServerDirectoryCreateFail(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Fabric JAR '{FabricJarPath}' does not exist in server template directory")]
+    private partial void LogFabricJarNotFound(string FabricJarPath);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Server files were not pre-downloaded in server template directory, it is recommended to pre-download all server files to improve instance start-up time and reduce network data usage")]
+    private partial void LogServerFilesNotPreDownloaded();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Mods directory was not present in server template directory, the buildplate server instance will not function correctly without the Fountain and Vienna Fabric mods installed")]
+    private partial void LogModsDirrectoryNotFound();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not create server world directory")]
+    private partial void LogServerWorldDirectoryCreateFail(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not create server world entities directory")]
+    private partial void LogServerWorldEntitiesDirectoryCreateFail(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not create server world regions directory")]
+    private partial void LogServerWorldRegionsDirectoryCreateFail(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not create bridge working directory")]
+    private partial void LogBridgeDirectoryCreateFail(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cleaning up runtime directory")]
+    private partial void LogCleaningUpRuntimeDirectory();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Exception while cleaning up runtime directory")]
+    private partial void LogCleanUpRuntimeDirectoryError(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Already shutting down, not starting server process")]
+    private partial void LogSkippingServerStartAlreadyShuttingDown();
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Server process has already been started")]
+    private partial void LogSkippingServerStartAlreadyStarted();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Starting server process")]
+    private partial void LogStartingServerProcess();
+
+    [LoggerMessage(Message = "[server] {Message}")]
+    private partial void LogReceivedServerData(LogLevel logLevel, string Message);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Server process started, PID: {Pid}")]
+    private partial void LogServerProcessStarted(int Pid);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not start server process")]
+    private partial void LogServerProcessStartError(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Already shutting down, not starting bridge process")]
+    private partial void LogSkippingBridgeStartAlreadyShuttingDown();
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Bridge process has already been started")]
+    private partial void LogSkippingBridgeStartAlreadyStarted();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Starting bridge process")]
+    private partial void LogStartingBridgeProcess();
+
+    [LoggerMessage(Message = "[bridge] {Message}")]
+    private partial void LogReceivedBridgeData(LogLevel logLevel, string Message);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bridge process started, PID: {Pid}")]
+    private partial void LogBridgeProcessStarted(int Pid);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not start bridge process")]
+    private partial void LogBridgeProcessStartError(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Bridge process has unexpectedly terminated with exit code {ExitCode}")]
+    private partial void LogBridgeProcessUnexpectedTermination(int? ExitCode);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Host player has not connected yet, shutting down")]
+    private partial void LogHostConnectTimerDone();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Server will shut down in {DurationMiliseconds} milliseconds")]
+    private partial void LogShutdownTimerProgress(long DurationMiliseconds);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Shutdown time has been reached, shutting down")]
+    private partial void LogShutdownTimerDone();
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Already shutting down, not beginning shutdown1")]
+    private partial void LogShutDownAlreadyInProgress();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Beginning shutdown")]
+    private partial void LogBeginningShutdown();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Waiting for bridge to shut down")]
+    private partial void LogWaitingForBridgeToShutDown();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Asking the server to shut down")]
+    private partial void LogAskingTheServerToShutDown();
 }

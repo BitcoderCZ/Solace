@@ -1,14 +1,12 @@
-﻿using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
-using ILogger = Serilog.ILogger;
 
 namespace Solace.LauncherUI.Programs;
 
 internal static class BuildplateLauncher
 {
     public static readonly string ExeName = "BuildplateLauncher" + (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : "");
-    public const string DispName = "Buildplate launcher";
+    public const string DisplayName = "Buildplate launcher";
 
     public const string ServerJarName = "fabric-server-mc.1.20.4-loader.0.15.10-launcher.1.0.1.jar";
 
@@ -19,7 +17,7 @@ internal static class BuildplateLauncher
         string exePath = Path.GetFullPath(Path.Combine(Program.ProgramsDir, ExeName));
         if (!File.Exists(exePath))
         {
-            logger.Error($"{DispName} exe doesn't exits: {exePath}");
+            ProgramsLogs.LogExecutableNotFound(logger, DisplayName, exePath);
             return false;
         }
 
@@ -28,7 +26,7 @@ internal static class BuildplateLauncher
 
     public static Process? Run(Settings settings, ILogger logger)
     {
-        logger.Debug($"Running {DispName}");
+        ProgramsLogs.LogRunning(logger, DisplayName);
         return Process.Start(new ProcessStartInfo(Path.GetFullPath(Path.Combine(Program.ProgramsDir, ExeName)),
         [
             $"--eventbus=localhost:{settings.EventBusPort}",

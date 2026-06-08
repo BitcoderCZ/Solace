@@ -8,7 +8,7 @@ using Solace.Common.Utils;
 namespace Solace.Common;
 
 // from https://stackoverflow.com/a/50311340/15878562
-public sealed class ConsoleProcess : IDisposable
+public sealed partial class ConsoleProcess : IDisposable
 {
     private readonly string _filePath;
     public readonly Process Process = new Process();
@@ -53,6 +53,8 @@ public sealed class ConsoleProcess : IDisposable
     private int? _actualAppPid;
     private Process? _cachedActualProcess;
 
+    private readonly ILogger _logger;
+
     private static string? _cachedLinuxTerminal;
     private static string? _cachedLinuxTerminalExecArg;
     private static bool _linuxTerminalDiscoveryAttempted;
@@ -95,7 +97,7 @@ public sealed class ConsoleProcess : IDisposable
         }
     }
 
-    public ConsoleProcess(string appName, bool useShellExecute, bool redirect, bool openInNewWindow = false)
+    public ConsoleProcess(string appName, ILogger logger, bool useShellExecute, bool redirect, bool openInNewWindow = false)
     {
         if (openInNewWindow && redirect)
         {
@@ -114,7 +116,7 @@ public sealed class ConsoleProcess : IDisposable
 
             if (!hasDisplay || !IsLinuxTerminalAvailable())
             {
-                Log.Debug("No terminal emulator is available, launching without a new window");
+                LogNotTerminalEmulatorAvailableNoNewWindow();
                 openInNewWindow = false;
             }
         }
@@ -122,6 +124,8 @@ public sealed class ConsoleProcess : IDisposable
         _filePath = appName;
         IORedirected = redirect;
         OpenInNewWindow = openInNewWindow;
+
+        _logger = logger;
 
         Process.StartInfo = new ProcessStartInfo(appName)
         {
@@ -302,7 +306,8 @@ public sealed class ConsoleProcess : IDisposable
 
                     if (process.ExitCode == 0)
                     {
-                        Log.Information($"Using '{name}' to launch new terminal windows.");
+                        var logger = GlobalLoggerFactory.CreateLogger<ConsoleProcess>();
+                        LogUsingTerminalEmulator(logger, name);
                         _cachedLinuxTerminal = name;
                         _cachedLinuxTerminalExecArg = executionArg;
                         return true;
@@ -317,7 +322,7 @@ public sealed class ConsoleProcess : IDisposable
         }
     }
 
-    private static async Task<int?> ResolveActualPidAsync(string pidFile, int timeout = 5000)
+    private async Task<int?> ResolveActualPidAsync(string pidFile,  int timeout = 5000)
     {
         using var cts = new CancellationTokenSource(timeout);
 
@@ -346,7 +351,7 @@ public sealed class ConsoleProcess : IDisposable
         }
         catch (OperationCanceledException)
         {
-            Log.Warning("Timed out waiting for terminal emulator to report its PID.");
+            LogTerminalEmulatorStartTimeout();
         }
         finally
         {
@@ -364,4 +369,13 @@ public sealed class ConsoleProcess : IDisposable
         Process.Dispose();
         _cachedActualProcess?.Dispose();
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "No terminal emulator is available, launching without a new window")]
+    private partial void LogNotTerminalEmulatorAvailableNoNewWindow();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Using '{TerminalEmulatorName}' to launch new terminal windows")]
+    private static partial void LogUsingTerminalEmulator(ILogger logger, string TerminalEmulatorName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Timed out waiting for terminal emulator to report its PID")]
+    private partial void LogTerminalEmulatorStartTimeout();
 }

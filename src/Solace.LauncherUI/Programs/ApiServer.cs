@@ -1,14 +1,12 @@
-﻿using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
-using ILogger = Serilog.ILogger;
 
 namespace Solace.LauncherUI.Programs;
 
 internal static class ApiServer
 {
     public static readonly string ExeName = "ApiServer" + (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : "");
-    public const string DispName = "Api server";
+    public const string DisplayName = "Api server";
 
 #pragma warning disable IDE0060 // Remove unused parameter
     public static bool Check(Settings settings, ILogger logger)
@@ -17,7 +15,7 @@ internal static class ApiServer
         string exePath = Path.GetFullPath(Path.Combine(Program.ProgramsDir, ExeName));
         if (!File.Exists(exePath))
         {
-            logger.Error($"{DispName} exe doesn't exits: {exePath}");
+            ProgramsLogs.LogExecutableNotFound(logger, DisplayName, exePath);
             return false;
         }
 
@@ -26,7 +24,7 @@ internal static class ApiServer
 
     public static Process? Run(Settings settings, ILogger logger)
     {
-        logger.Debug($"Running {DispName}");
+        ProgramsLogs.LogRunning(logger, DisplayName);
 
         var arguments = new List<string>(7)
         {

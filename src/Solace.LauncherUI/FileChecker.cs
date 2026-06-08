@@ -1,14 +1,12 @@
-﻿using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Reflection;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.LauncherUI.Programs;
-using ILogger = Serilog.ILogger;
 
 namespace Solace.LauncherUI;
 
-internal static class FileChecker
+internal static partial class FileChecker
 {
     private static readonly HttpClient httpClient = new();
 
@@ -49,11 +47,11 @@ internal static class FileChecker
     {
         if (settings.SkipFileChecks is not true)
         {
-            logger.Information("Validating files");
+            LogValidatingFiles(logger);
         }
         else
         {
-            logger.Warning("Skipped file validation, you can turn it back on in 'Configure/Skip file validation before starting'");
+            LogValidateFilesSkipped(logger);
             return true;
         }
 
@@ -77,7 +75,7 @@ internal static class FileChecker
             if (!Directory.Exists(fullDir))
             {
                 Directory.CreateDirectory(fullDir);
-                logger.Warning($"Static data directory '{fullDir}' did not exist, created");
+                LogStaticDataNotFoundCreated(logger, fullDir);
             }
         }
 
@@ -87,34 +85,45 @@ internal static class FileChecker
 
             if (!File.Exists(fullFile))
             {
-                logger.Error($"Static data file '{fullFile}' does not exist");
+                LogStaticDataNotFoundError(logger, fullFile);
                 error = true;
             }
         }
 
-        logger.Debug("All static files exist");
+        if (!error)
+        {
+            LogStaticFilesOk(logger);
+        }
+        else
+        {
+            LogStaticFilesMissing(logger);
+        }
 
         var resourcePack = new FileInfo(Path.GetFullPath(Path.Combine(Program.StaticDataDir, "resourcepacks", "vanilla.zip")));
         if (!resourcePack.Exists)
         {
-            logger.Error($"Resourcepack file '{resourcePack.FullName}' does not exist");
-            logger.Information("Download it from https://cdn.mceserv.net/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35 (using internet archive)");
-            logger.Information($"Rename it to vanilla.zip and move it to: {Path.GetFullPath(Path.Combine(Program.StaticDataDir, "resourcepacks"))}");
+            LogResourcepackFileNotFound(logger, resourcePack.FullName);
+            LogResourcepackFileDownloadInstructions1(logger);
+#pragma warning disable CA1873 // Avoid potentially expensive logging
+            LogResourcepackFileDownloadInstructions2(logger, Path.GetFullPath(Path.Combine(Program.StaticDataDir, "resourcepacks")));
+#pragma warning restore CA1873 // Avoid potentially expensive logging
 
             error = true;
         }
         else if (resourcePack.Length < 100_000_000)
         {
-            logger.Error($"Resourcepack file '{resourcePack.FullName}' is invalid, expected size: 131885348B, actual size: {resourcePack.Length}B");
-            logger.Information("Download it from https://cdn.mceserv.net/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35 (using internet archive)");
-            logger.Information($"Rename it to vanilla.zip and move it to: {Path.GetFullPath(Path.Combine(Program.StaticDataDir, "resourcepacks"))}");
+            LogResourcepackFileInvalid(logger, resourcePack.FullName, resourcePack.Length);
+            LogResourcepackFileDownloadInstructions1(logger);
+#pragma warning disable CA1873 // Avoid potentially expensive logging
+            LogResourcepackFileDownloadInstructions2(logger, Path.GetFullPath(Path.Combine(Program.StaticDataDir, "resourcepacks")));
+#pragma warning restore CA1873 // Avoid potentially expensive logging
 
             error = true;
         }
 
         if (!Directory.EnumerateFiles(Path.Combine(Program.StaticDataDir, "server_template_dir", "mods")).Any(path => Path.GetFileName(path).StartsWith("fabric-api", StringComparison.OrdinalIgnoreCase) && path.EndsWith(".jar", StringComparison.OrdinalIgnoreCase)))
         {
-            logger.Warning("Fabric api mod not found, downloading");
+            LogFabricApiModNotFound(logger);
 
             var response = await httpClient.GetAsync("https://cdn.modrinth.com/data/P7dR8mSH/versions/xklQBMta/fabric-api-0.97.0%2B1.20.4.jar", cancellationToken);
             using (var fs = File.OpenWriteNew(Path.Combine(Program.StaticDataDir, "server_template_dir", "mods", "fabric-api-0.97.0+1.20.4.jar")))
@@ -122,12 +131,12 @@ internal static class FileChecker
                 await response.Content.CopyToAsync(fs, cancellationToken);
             }
 
-            logger.Information("Downloaded fabric api");
+            LogDownloadedFabricApi(logger);
         }
 
         if (!File.Exists(Path.Combine(Program.StaticDataDir, "server_template_dir", BuildplateLauncher.ServerJarName)))
         {
-            logger.Warning("Fabric server not found, downloading");
+            LogFabricServerNotFound(logger);
 
             var response = await httpClient.GetAsync("https://meta.fabricmc.net/v2/versions/loader/1.20.4/0.15.10/1.0.1/server/jar", cancellationToken);
             using (var fs = File.OpenWriteNew(Path.Combine(Program.StaticDataDir, "server_template_dir", BuildplateLauncher.ServerJarName)))
@@ -135,19 +144,19 @@ internal static class FileChecker
                 await response.Content.CopyToAsync(fs, cancellationToken);
             }
 
-            logger.Information("Downloaded fabric server");
+            LogDownloadedFabricServer(logger);
         }
 
         string eulaPath = Path.GetFullPath(Path.Combine(Program.StaticDataDir, "server_template_dir", "eula.txt"));
         if (!File.Exists(eulaPath))
         {
-            logger.Information("Detected that server was not setup, running");
+            LogServerNotSetup(logger);
 
             string javaExe = JavaLocator.Locate(logger);
 
             bool useShellExecute = false;
 
-            using var serverProcess = new ConsoleProcess(javaExe, useShellExecute, !useShellExecute);
+            using var serverProcess = new ConsoleProcess(javaExe, logger, useShellExecute, !useShellExecute);
 
             if (!useShellExecute)
             {
@@ -155,24 +164,24 @@ internal static class FileChecker
                 {
                     if (!string.IsNullOrWhiteSpace(e.Data))
                     {
-                        logger.Debug($"[server] {e.Data}");
+                        LogReceiveServerMessage(logger, LogLevel.Debug, e.Data);
                     }
                 };
                 serverProcess.ErrorTextReceived += (sender, e) =>
                 {
                     if (!string.IsNullOrWhiteSpace(e.Data))
                     {
-                        logger.Error($"[server] {e.Data}");
+                        LogReceiveServerMessage(logger, LogLevel.Error, e.Data);
                     }
                 };
             }
 
             await serverProcess.ExecuteAsync(Path.GetFullPath(Path.Combine(Program.StaticDataDir, "server_template_dir")), ["-jar", BuildplateLauncher.ServerJarName, "-nogui"]);
-            logger.Information("Server process started, waiting for exit");
-            await serverProcess.Process.WaitForExitAsync(cancellationToken);
+            LogWaitingForServerExit(logger);
+            await serverProcess.Process.WaitForExitAsync(cancellationToken); // todo: timeout?
 
-            int exitCode = serverProcess.Process.ExitCode;
-            logger.Information($"Server process exited with exit code {exitCode}");
+            var exitCode = serverProcess.Process.ExitCode;
+            LogServerProcessDone(logger, exitCode);
             if (exitCode != 0)
             {
                 error = true;
@@ -181,20 +190,20 @@ internal static class FileChecker
 
         if (File.Exists(eulaPath) && !(await File.ReadAllTextAsync(eulaPath, cancellationToken)).Contains("eula=true", StringComparison.OrdinalIgnoreCase))
         {
-            logger.Information($"Server eula not accepted, open '{eulaPath}' and set 'eula=true'");
-            logger.Information("Waiting for you to make the change");
+            LogEulaNotAccepted(logger, eulaPath);
+            LogWaitingForEula(logger);
             while (!(await File.ReadAllTextAsync(eulaPath, cancellationToken)).Contains("eula=true", StringComparison.OrdinalIgnoreCase))
             {
                 await Task.Delay(1000, cancellationToken);
             }
 
-            logger.Information("Running server to download/generate rest of the files, close it after it starts up");
+            LogRunningServerToSetupFiles(logger);
 
             string javaExe = JavaLocator.Locate(logger);
 
             bool useShellExecute = true;
 
-            using var serverProcess = new ConsoleProcess(javaExe, useShellExecute, !useShellExecute);
+            using var serverProcess = new ConsoleProcess(javaExe, logger, useShellExecute, !useShellExecute);
 
             if (!useShellExecute)
             {
@@ -202,24 +211,24 @@ internal static class FileChecker
                 {
                     if (!string.IsNullOrWhiteSpace(e.Data))
                     {
-                        logger.Debug($"[server] {e.Data}");
+                        LogReceiveServerMessage(logger, LogLevel.Debug, e.Data);
                     }
                 };
                 serverProcess.ErrorTextReceived += (sender, e) =>
                 {
                     if (!string.IsNullOrWhiteSpace(e.Data))
                     {
-                        logger.Error($"[server] {e.Data}");
+                        LogReceiveServerMessage(logger, LogLevel.Error, e.Data);
                     }
                 };
             }
 
             await serverProcess.ExecuteAsync(Path.GetFullPath(Path.Combine(Program.StaticDataDir, "server_template_dir")), ["-jar", BuildplateLauncher.ServerJarName, "-nogui"]);
-            logger.Information("Server process started, waiting for exit");
-            await serverProcess.Process.WaitForExitAsync(cancellationToken);
+            LogWaitingForServerExit(logger);
+            await serverProcess.Process.WaitForExitAsync(cancellationToken); // todo: timeout?
 
-            int exitCode = serverProcess.Process.ExitCode;
-            logger.Information($"Server process exited with exit code {exitCode}");
+            var exitCode = serverProcess.Process.ExitCode;
+            LogServerProcessDone(logger, exitCode);
             if (exitCode != 0)
             {
                 error = true;
@@ -228,4 +237,67 @@ internal static class FileChecker
 
         return !error;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Validating files")]
+    private static partial void LogValidatingFiles(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Skipped file validation, you can turn it back on in 'Configure/Skip file validation before starting'")]
+    private static partial void LogValidateFilesSkipped(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Static data directory '{Path}' did not exist, created")]
+    private static partial void LogStaticDataNotFoundCreated(ILogger logger, string Path);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Static data file '{Path}' does not exist")]
+    private static partial void LogStaticDataNotFoundError(ILogger logger, string Path);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "All static files exist")]
+    private static partial void LogStaticFilesOk(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Some static files missing")]
+    private static partial void LogStaticFilesMissing(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Resourcepack file '{Path}' does not exist")]
+    private static partial void LogResourcepackFileNotFound(ILogger logger, string Path);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Resourcepack file '{Path}' is invalid, expected size: 131885348B, actual size: {Size}B")]
+    private static partial void LogResourcepackFileInvalid(ILogger logger, string Path, long Size);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Download it from https://cdn.mceserv.net/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35 (using internet archive)")]
+    private static partial void LogResourcepackFileDownloadInstructions1(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Rename it to vanilla.zip and move it to: {Path}")]
+    private static partial void LogResourcepackFileDownloadInstructions2(ILogger logger, string Path);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Fabric api mod not found, downloading")]
+    private static partial void LogFabricApiModNotFound(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Downloaded fabric api")]
+    private static partial void LogDownloadedFabricApi(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Fabric server not found, downloading")]
+    private static partial void LogFabricServerNotFound(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Downloaded fabric server")]
+    private static partial void LogDownloadedFabricServer(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Detected that server was not setup, running")]
+    private static partial void LogServerNotSetup(ILogger logger);
+
+    [LoggerMessage(Message = "[server] {Message}")]
+    private static partial void LogReceiveServerMessage(ILogger logger, LogLevel logLevel, string Message);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Server process started, waiting for exit")]
+    private static partial void LogWaitingForServerExit(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Server process exited with exit code {ExitCode}")]
+    private static partial void LogServerProcessDone(ILogger logger, int ExitCode);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Server eula not accepted, open '{Path}' and set 'eula=true'")]
+    private static partial void LogEulaNotAccepted(ILogger logger, string Path);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Waiting for you to make the change")]
+    private static partial void LogWaitingForEula(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Running server to download/generate rest of the files, close it after it starts up")]
+    private static partial void LogRunningServerToSetupFiles(ILogger logger);
 }

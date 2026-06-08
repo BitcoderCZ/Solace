@@ -188,7 +188,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.BadRequest("Invalid user or password");
         }
 
-        var existingToken = JwtUtils.Verify<Tokens.Live.UserToken>(userToken, _cryptoSecrets.LoginUserTokenSecret, allowExpired: true);
+        var existingToken = JwtUtils.Verify<Tokens.Live.UserToken>(userToken, _cryptoSecrets.LoginUserTokenSecret, _logger, allowExpired: true);
         if (existingToken is null)
         {
             return TypedResults.Forbid();
@@ -423,9 +423,9 @@ internal sealed partial class LoginController : SolaceControllerBase
                 return TypedResults.BadRequest();
             }
 
-            var userToken = JwtUtils.Verify<Tokens.Live.UserToken>(userTokenString, _cryptoSecrets.LoginUserTokenSecret, allowExpired: true);
+            var userToken = JwtUtils.Verify<Tokens.Live.UserToken>(userTokenString, _cryptoSecrets.LoginUserTokenSecret, _logger, allowExpired: true);
 #pragma warning disable IDE0059 // Unnecessary assignment of a value
-            var deviceToken = JwtUtils.Verify<Tokens.Live.DeviceToken>(deviceTokenString, _cryptoSecrets.LoginDeviceTokenSecret, allowExpired: true);
+            var deviceToken = JwtUtils.Verify<Tokens.Live.DeviceToken>(deviceTokenString, _cryptoSecrets.LoginDeviceTokenSecret, _logger, allowExpired: true);
 #pragma warning restore IDE0059 // Unnecessary assignment of a value
 
             if (userToken is null || userToken.Expired is true)
