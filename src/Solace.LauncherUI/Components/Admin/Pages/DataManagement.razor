@@ -4,13 +4,10 @@
 @using System.Security.Claims
 @using Microsoft.Data.Sqlite
 @using Microsoft.EntityFrameworkCore
-@using Serilog
 @using Solace.Common.Utils
 @using Solace.DB
 @using Solace.LauncherUI.Utils
 @using System.IO.Compression
-@using System.Diagnostics
-@using System.Numerics
 @attribute [Authorize(Policy = Permissions.ViewData)]
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
@@ -461,12 +458,12 @@
                 }
             }
 
-            Log.Information("Imported server data");
+            Logger.LogInformation("Imported server data");
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error(ex, "Error processing file");
-            _uploadError = $"Error processing file: {ex.Message}";
+            Logger.LogError(exception, "Error processing file");
+            _uploadError = $"Error processing file: {exception.Message}";
         }
     }
 
@@ -511,9 +508,9 @@
             {
                 File.Delete(importDbPath);
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Log.Warning(ex, $"Failed to detele import db file '{importDbPath}': {ex.Message}");
+                Logger.LogWarning(exception, "Failed to detele import db file '{ImportDbPath}'", importDbPath);
             }
         }
     }
@@ -623,9 +620,9 @@
             {
                 File.Delete(tempDbPath);
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Log.Warning(ex, $"Failed to detele temp db file '{tempDbPath}': {ex.Message}");
+                Logger.LogWarning(exception, "Failed to detele temp db file '{TempDbPath}'", tempDbPath);
             }
         }
     }

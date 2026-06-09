@@ -1,16 +1,12 @@
 @page "/Admin/Players/{AccountId:guid}/Buildplates"
 @using Microsoft.AspNetCore.Authorization
 @using System.Security.Claims
-@using System.Diagnostics
 @using Microsoft.EntityFrameworkCore
-@using Serilog
 @using Solace.BuildplateImporter
 @using Solace.BuildplateRenderer
 @using Solace.DB
-@using Solace.EventBus.Client
 @using Solace.LauncherUI.Programs
 @using Solace.LauncherUI.Utils
-@using Solace.ObjectStore.Client
 @attribute [Authorize(Policy = Permissions.ManagePlayers)]
 @rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthStateProvider
@@ -390,9 +386,9 @@ _playerPageSize));
                 .AsNoTracking()
                 .FirstOrDefaultAsync(account => account.Id == AccountId))?.Username;
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error(ex, $"Failed to get username for player '{AccountId}': {ex.Message}");
+            Logger.LogError(exception, "Failed to get username for player '{AccountId}'", AccountId);
         }
 
         await LoadPlayerBuildplates();
@@ -493,9 +489,9 @@ _playerPageSize));
                 });
             }
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error($"Could not load templates for player assignment: {ex}");
+            Logger.LogError(exception, "Could not load templates for player assignment");
             _templates = new List<TemplateDto>();
             _totalCount = 0;
         }
@@ -573,10 +569,10 @@ BuildplateLauncher.ExeName))
                             InvokeAsync(StateHasChanged);
                         });
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error($"Failed to add buildplate '{template.Id}' to player '{AccountId}': {ex}");
-            template.ErrorMessage = $"An error occurred while importing the buildplate: {ex.Message}";
+            Logger.LogError(exception, "Failed to add buildplate '{TemplateId}' to player '{AccountId}'", template.Id, AccountId);
+            template.ErrorMessage = $"An error occurred while importing the buildplate: {exception.Message}";
         }
         finally
         {
@@ -628,10 +624,10 @@ BuildplateLauncher.ExeName))
                         _errorMessage = $"An error occurred while removing the buildplate.";
                     }
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    Log.Error($"Failed to remove buildplate '{_idToDelete}' from player '{AccountId}': {ex}");
-                    _errorMessage = $"An error occurred while removing the buildplate: {ex.Message}";
+                    Logger.LogError(exception, "Failed to remove buildplate '{IdToDelete}' from player '{AccountId}'", _idToDelete, AccountId);
+                    _errorMessage = $"An error occurred while removing the buildplate: {exception.Message}";
                 }
             }
         }
@@ -688,16 +684,16 @@ BuildplateLauncher.ExeName))
                 await Task.Delay(250);
 
                 bp.AcceptChanges();
-                Log.Information($"Successfully updated buildplate {bp.Id} for player {AccountId}");
+                Logger.LogInformation("Successfully updated buildplate {Id} for player {AccountId}", bp.Id, AccountId);
             }
             else
             {
                 bp.ErrorMessage = "Buildplate not found in database.";
             }
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error($"Failed to save buildplate '{bp.Id}' for player '{AccountId}': {ex}");
+            Logger.LogError(exception, "Failed to save buildplate '{Id}' for player '{AccountId}'", bp.Id, AccountId);
             bp.ErrorMessage = "Failed to save. Try again?";
         }
         finally
@@ -741,11 +737,11 @@ BuildplateLauncher.ExeName))
 
             bp.ServerDataObjectId = buildplate.ServerDataObjectId;
 
-            Log.Information($"Successfully regenerated preview for player buildplate {bp.Id}");
+            Logger.LogInformation("Successfully regenerated preview for player buildplate {Id}", bp.Id);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error($"Failed to regenerate preview for player buildplate '{bp.Id}': {ex}");
+            Logger.LogError(exception, "Failed to regenerate preview for player buildplate '{Id}'", bp.Id);
             bp.ErrorMessage = "Failed to regenerate preview. Try again?";
         }
         finally

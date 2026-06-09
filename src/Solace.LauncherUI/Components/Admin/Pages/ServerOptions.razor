@@ -1,10 +1,10 @@
 @page "/Admin/ServerOptions"
 @using Microsoft.AspNetCore.Authorization
 @using System.ComponentModel.DataAnnotations
-@using Serilog
 @attribute [Authorize(Policy = Permissions.EditServerOptions)]
 @rendermode InteractiveServer
 @inject IJSRuntime JSRuntime
+@inject ILogger<ServerOptions> Logger
 
 <PageTitle>Server Options - Solace</PageTitle>
 
@@ -208,7 +208,7 @@
         Settings.Instance = settings;
 
         Settings.Instance.Save(Settings.DefaultPath);
-        Log.Information("Settings Saved Successfully!");
+        Logger.LogDebug("Settings Saved Successfully!");
     }
 
     private async Task ResetToDefault()

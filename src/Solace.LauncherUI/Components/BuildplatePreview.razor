@@ -6,17 +6,12 @@
 @using HomagGroup.Blazor3D.Viewers
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.JSInterop
-@using Serilog
-@using System.Diagnostics
-@using System.IO
-@using Solace.Buildplate.Model
 @using Solace.BuildplateImporter
 @using Solace.BuildplateRenderer
 @using Solace.DB
 @using Solace.LauncherUI.Data
 @using Solace.LauncherUI.Programs
 @using Solace.LauncherUI.Utils
-@using Solace.ObjectStore.Client
 
 @inject IJSRuntime JSRuntime
 @inject ServerManager ServerManager
@@ -81,7 +76,7 @@
     private Viewer? _viewer3D;
     private ViewerSettings _settings = new();
     private Scene _scene = new();
-    
+
     private bool _isPreviewLoading = true;
     private bool _isPreviewFailed = false;
     private string? _previewDataUri;
@@ -111,19 +106,19 @@
         if (_previewDataUri is null && !_isPreviewFailed && _isPreviewLoading && !_isCurrentlyLoadingTask)
         {
             _isCurrentlyLoadingTask = true;
-        
+
             _ = InvokeAsync(async () =>
-            {
-                try
-                {
-                    await Task.Run(async () => await LoadPreviewAsync());
-                }
-                finally
-                {
-                    _isCurrentlyLoadingTask = false;
-                    StateHasChanged();
-                }
-            });
+                        {
+                            try
+                            {
+                                await Task.Run(async () => await LoadPreviewAsync());
+                            }
+                            finally
+                            {
+                                _isCurrentlyLoadingTask = false;
+                                StateHasChanged();
+                            }
+                        });
         }
     }
 
@@ -153,15 +148,15 @@
                     });
                     _isModelImported = true;
                 }
-                catch (ArgumentNullException ex) when (ex.ParamName == "jsObjectReference")
+                catch (ArgumentNullException exception) when (exception.ParamName == "jsObjectReference")
                 {
-                    Log.Debug("Viewer JS reference not ready for {Id}, retrying next render...", BuildplateId);
+                    Logger.LogDebug("Viewer JS reference not ready for {Id}, retrying next render...", BuildplateId);
                     await Task.Delay(200);
                     StateHasChanged();
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    Log.Error("Failed to import GLB model into Blazor3D Viewer for {Id}: {ex}", BuildplateId, ex);
+                    Logger.LogError(exception, "Failed to import GLB model into Blazor3D Viewer for {Id}", BuildplateId);
                     _isPreviewFailed = true;
                     _isModelImported = true;
                     StateHasChanged();
@@ -181,7 +176,7 @@
         _isPreviewFailed = false;
         _isModelImported = false;
         _previewDataUri = null;
-        
+
         StateHasChanged();
 
         await LoadPreviewAsync(getFromCache: false);
@@ -216,8 +211,7 @@
             await using var dbContext = await ApplicationDbFactory.CreateDbContextAsync();
             var previewData = IsTemplate
                 ? await importer.GetTemplateLauncherPreviewAsync(BuildplateId, dbContext, ResourcePackManager, getFromCache: getFromCache)
-                : await importer.GetPlayerBuildplateLauncherPreviewAsync(PlayerId!.Value, BuildplateId, dbContext, ResourcePackManager, getFromCache:
-getFromCache);
+                : await importer.GetPlayerBuildplateLauncherPreviewAsync(PlayerId!.Value, BuildplateId, dbContext, ResourcePackManager, getFromCache: getFromCache);
 
             if (previewData is null)
             {
@@ -227,9 +221,9 @@ getFromCache);
 
             _previewDataUri = DataUtils.DataToUri(previewData.Value.AsSpan());
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error(ex, "Preview mesh generation failed for Buildplate ID {Id}", BuildplateId);
+            Logger.LogError(exception, "Preview mesh generation failed for Buildplate ID {Id}", BuildplateId);
             _isPreviewFailed = true;
         }
         finally
@@ -264,9 +258,9 @@ getFromCache);
         catch (JSDisconnectedException)
         {
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Debug("Error during disposal of {Id}: {Msg}", BuildplateId, ex.Message);
+            Logger.LogDebug(exception, "Error during disposal of {Id}", BuildplateId);
         }
     }
 }

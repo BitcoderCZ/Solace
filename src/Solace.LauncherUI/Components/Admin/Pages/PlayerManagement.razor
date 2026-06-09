@@ -1,7 +1,6 @@
 @page "/Admin/Players"
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
-@using Serilog
 @using System.Security.Claims
 @using Solace.DB
 @using Solace.DB.Models.Player
@@ -12,6 +11,7 @@
 @inject IJSRuntime JS
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject ILogger<PlayerManagement> Logger
 
 <PageTitle>Player Management - Solace</PageTitle>
 
@@ -259,7 +259,7 @@
         }
         catch (Exception ex)
         {
-            Log.Error(ex.ToString());
+            Logger.LogError(ex, "Failed to get accounts from db");
             _errorMessage = "Database connection failed.";
         }
     }
@@ -376,11 +376,11 @@
                 }
             }
 
-            Log.Information("Deleted player {PlayerId}", id);
+            Logger.LogInformation("Deleted player {PlayerId}", id);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error(ex, "Failed to delete player {PlayerId}", id);
+            Logger.LogError(exception, "Failed to delete player {PlayerId}", id);
             _errorMessage = "Failed to delete player. Check logs for details.";
         }
     }

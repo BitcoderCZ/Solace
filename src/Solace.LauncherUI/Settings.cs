@@ -77,7 +77,7 @@ public sealed class Settings
 
     public static async Task<Settings> LoadAsync(string path)
     {
-        Log.Information("Loading settings...");
+        Log.Debug("Loading settings...");
 
         Settings? settings;
 
@@ -196,7 +196,7 @@ public sealed class Settings
             settings.OnlyAllowLocalLogin = Default.OnlyAllowLocalLogin;
         }
 
-        Log.Information("Loaded settings");
+        Log.Debug("Loaded settings");
 
         await settings.SaveAsync(path);
 

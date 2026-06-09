@@ -2,7 +2,6 @@
 @implements IDisposable
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
-@using Serilog
 @using System.Buffers
 @using System.Text.Json
 @using Solace.BuildplateImporter
@@ -319,7 +318,7 @@ BuildplateLauncher.ExeName))
 
                     if (Path.GetExtension(fileState.File.Name).Equals(".json", StringComparison.OrdinalIgnoreCase))
                     {
-                        MCeToJava.Converter.InitRegistry(Log.Logger);
+                        MCeToJava.Converter.InitRegistry(Logger);
                         var mceBuildplate = await MCeToJava.Utils.JsonUtils.DeserializeJsonAsync<MCeToJava.Models.MCE.Buildplate>(memoryStream);
 
                         if (mceBuildplate is null)
@@ -328,7 +327,7 @@ BuildplateLauncher.ExeName))
                         }
 
                         var options = new MCeToJava.Converter.Options(
-                            Log.Logger,
+                            Logger,
                             MCeToJava.Models.ConvertTarget.Vienna,
                             "minecraft:plains",
                             displayName
@@ -358,11 +357,11 @@ BuildplateLauncher.ExeName))
                     fileState.IsComplete = true;
                     successCount++;
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    Log.Error(ex, "Failed to import buildplate");
+                    Logger.LogError(exception, "Failed to import buildplate");
                     fileState.HasError = true;
-                    fileState.ErrorMessage = $"Failed: {ex.Message}";
+                    fileState.ErrorMessage = $"Failed: {exception.Message}";
                 }
                 finally
                 {
@@ -381,9 +380,9 @@ BuildplateLauncher.ExeName))
                 ShowDialog(false, $"Finished. {successCount} succeeded, {totalAttempted - successCount} failed.");
             }
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error(ex, "Failed to connect to backend services");
+            Logger.LogError(exception, "Failed to connect to backend services");
             ShowDialog(false, "Could not connect to services. Please check if they are running.");
         }
         finally

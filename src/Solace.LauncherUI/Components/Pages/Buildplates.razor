@@ -13,7 +13,6 @@
 @using System.IO.Compression;
 @using System.Text;
 @using Microsoft.EntityFrameworkCore
-@using Serilog
 @using Solace.Buildplate.Model
 @using Solace.BuildplateImporter
 @using Solace.BuildplateRenderer
@@ -388,9 +387,9 @@
                 _buildplates.Add(buildplate);
             }
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error($"Could not connect to earth db: {ex}");
+            Logger.LogError(exception, $"Could not connect to earth db");
         }
     }
 
@@ -455,11 +454,11 @@
                 return;
             }
 
-            Log.Information($"Successfully regenerated preview for buildplate {bp.Id}");
+            Logger.LogInformation("Successfully regenerated preview for buildplate '{Id}'", bp.Id);
         }
         catch (Exception ex)
         {
-            Log.Error($"Failed to regenerate preview: {ex}");
+            Logger.LogError(ex, "Failed to regenerate preview");
             bp.ErrorMessage = "Failed to regenerate preview. Try again?";
         }
         finally
@@ -503,11 +502,11 @@
             await Task.Delay(250);
 
             bp.AcceptChanges();
-            Log.Information($"Successfully updated buildplate {bp.Id}");
+            Logger.LogInformation("Successfully updated buildplate '{Id}'", bp.Id);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error($"Failed to save buildplate '{bp.Id}'': {ex}");
+            Logger.LogError(exception, "Failed to save buildplate '{Id}'", bp.Id);
             bp.ErrorMessage = "Failed to save. Try again?";
         }
         finally
@@ -562,7 +561,7 @@
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to delete buildplate");
+                Logger.LogError(ex, "Failed to delete buildplate");
                 _deleteErrorMessage = $"Failed to delete the buildplate: {ex.Message}";
             }
             finally
@@ -721,15 +720,15 @@
 
             await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
 
-            Log.Information($"Successfully triggered download for {fileName}");
+            Logger.LogInformation("Successfully triggered download for {FileName}", fileName);
 
             _showExportModal = false;
             _exportBp = null;
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error($"Failed to download buildplate file: {ex.Message}");
-            _exportErrorMessage = $"Export failed: {ex.Message}";
+            Logger.LogError(exception, "Failed to download buildplate file");
+            _exportErrorMessage = $"Export failed: {exception.Message}";
         }
         finally
         {
