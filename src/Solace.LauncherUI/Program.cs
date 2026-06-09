@@ -68,6 +68,9 @@ public partial class Program
 
         Log.Logger = log;
 
+        builder.Logging.ClearProviders();
+        builder.Logging.AddSerilog(log);
+
         bool isLegacyDb = await IsLegacyEarthDbAsync(Settings.Instance.EarthDatabaseConnectionString!);
         string legacyDbPath = "";
         string liveDbPath = "";
