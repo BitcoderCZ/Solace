@@ -50,7 +50,7 @@ public sealed class PlayerLevels
         int ExperienceRequired,
         int Rubies,
         Level.Item[] Items,
-        Guid[] Buildplates
+        string[] Buildplates
     )
     {
         public sealed record Item(

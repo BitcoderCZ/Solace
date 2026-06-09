@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Solace.Common;
 using Solace.DB;
 using Solace.DB.Models.Player;
 using Solace.DB.Utils;
@@ -7,7 +8,7 @@ using static Solace.DB.Models.Player.TokensEF;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed class LevelUtils
+public sealed partial class LevelUtils
 {
 #pragma warning disable IDE0060 // Remove unused parameter
     public static async Task CheckAndHandlePlayerLevelUpAsync(EarthDbContext.Results results, Guid accountId, long currentTime, StaticData.StaticData staticData)
@@ -49,9 +50,20 @@ public sealed class LevelUtils
 
         foreach (var buildplate in level.Buildplates)
         {
-            rewards.AddBuildplate(buildplate);
+            if (Guid.TryParse(buildplate, out var buildplateGuid))
+            {
+                rewards.AddBuildplate(buildplateGuid);
+            }
+            else
+            {
+                var logger = GlobalLoggerFactory.CreateLogger(nameof(LevelUtils));
+                LogCouldNotParseLevelUpBuildplateId(logger, buildplate);
+            }
         }
 
         return rewards;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not parse level up buildplate id '{BuildplateId}'")]
+    private static partial void LogCouldNotParseLevelUpBuildplateId(ILogger logger, string BuildplateId);
 }
