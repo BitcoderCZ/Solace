@@ -435,13 +435,13 @@ public sealed partial class Server : IDisposable
     [GeneratedRegex("^[^A-Za-z0-9]")]
     private static partial Regex GetValitationRegex2();
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Adding subscriber for queue '{QueueName}'")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Adding subscriber for queue {QueueName}")]
     private partial void LogAddingSubscriber(string QueueName);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Adding publisher")]
     private partial void LogAddingPublisher();
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Adding request handler for queue '{QueueName}'")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Adding request handler for queue {QueueName}")]
     private partial void LogAddingRequestHandler(string QueueName);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Adding request sender")]

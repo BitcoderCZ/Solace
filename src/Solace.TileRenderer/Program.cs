@@ -9,6 +9,7 @@ using Solace.StaticData;
 using System.Globalization;
 using Serilog.Core;
 using Microsoft.Extensions.Logging;
+using Serilog.Extensions.Logging;
 
 namespace Solace.TileRenderer;
 
@@ -38,7 +39,7 @@ internal static class Program
         {
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
-                Log.Fatal($"Unhandled exception: {e.ExceptionObject}");
+                Log.Fatal(e.ExceptionObject as Exception, "Unhandled exception");
                 Log.CloseAndFlush();
                 Environment.Exit(1);
             };
@@ -77,7 +78,7 @@ internal static class Program
 
         Log.Logger = log;
 
-        var globalLoggerFactory = (ILoggerFactory)new SerilogLoggerFactory(log);
+        var globalLoggerFactory = new SerilogLoggerFactory(log);
 
         if (string.IsNullOrEmpty(options.MapTilerApiKey) && string.IsNullOrEmpty(options.TileDatabaseConnectionString))
         {
@@ -193,15 +194,5 @@ internal static class Program
         }
 
         return 0;
-    }
-}
-
-internal class SerilogLoggerFactory
-{
-    private Logger log;
-
-    public SerilogLoggerFactory(Logger log)
-    {
-        this.log = log;
     }
 }

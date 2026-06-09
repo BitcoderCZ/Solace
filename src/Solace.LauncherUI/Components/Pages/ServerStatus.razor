@@ -124,11 +124,7 @@
                     <div class="log-content">
                         @foreach (var log in LogService.GetLogsFor(_activeTab))
                         {
-                            <div class="log-line">
-                                <span class="log-time">[@log.Timestamp.ToString("HH:mm:ss")]</span>
-                                <span class="log-level @GetLogLevelClass(log.Level)">[@GetShortLevel(log.Level)]</span>
-                                <span class="log-msg">@log.RenderedMessage</span>
-
+                            <div class="log-line"><span class="log-time">[@log.Timestamp.ToString("HH:mm:ss")]</span> <span class="log-level @GetLogLevelClass(log.Level)">[@GetShortLevel(log.Level)]</span> <span class="log-msg">@log.RenderedMessage</span>
                                 @if (!string.IsNullOrWhiteSpace(log.Exception))
                                 {
                                     <div class="log-exception">@log.Exception</div>
