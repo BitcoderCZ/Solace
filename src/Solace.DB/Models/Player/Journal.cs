@@ -13,12 +13,12 @@ public sealed class JournalEF : IEntityWithId<Guid>, IVersionedEntity, IMergeabl
 
     public Account Account { get; set; } = null!;
 
-    public Dictionary<string, ItemJournalEntry> Items { get; set; } = [];
+    public Dictionary<Guid, ItemJournalEntry> Items { get; set; } = [];
 
-    public ItemJournalEntry? GetItem(string uuid)
+    public ItemJournalEntry? GetItem(Guid uuid)
         => Items.GetValueOrDefault(uuid);
 
-    public int AddCollectedItem(string uuid, long timestamp, int count)
+    public int AddCollectedItem(Guid uuid, long timestamp, int count)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
 

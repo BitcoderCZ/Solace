@@ -13,9 +13,9 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
 
     public Account Account { get; set; } = null!;
 
-    public Dictionary<string, int> StackableItemsData { get; set; } = [];
+    public Dictionary<Guid, int> StackableItemsData { get; set; } = [];
 
-    public Dictionary<string, Dictionary<string, NonStackableItemInstance>> NonStackableItemsData { get; set; } = [];
+    public Dictionary<Guid, Dictionary<Guid, NonStackableItemInstance>> NonStackableItemsData { get; set; } = [];
 
     [JsonIgnore, NotMapped]
     public IEnumerable<StackableItem> StackableItems => StackableItemsData.Select(item => new StackableItem(item.Key, item.Value));
@@ -24,44 +24,44 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
     public IEnumerable<NonStackableItem> NonStackableItems => NonStackableItemsData.Select(item => new NonStackableItem(item.Key, [.. item.Value.Values]));
 
     public sealed record StackableItem(
-        string Id,
+        Guid Id,
         int Count
     );
 
     public sealed record NonStackableItem(
-        string Id,
+        Guid Id,
         NonStackableItemInstance[] Instances
     );
 
-    public int GetItemCount(string id)
+    public int GetItemCount(Guid id)
     {
         if (StackableItemsData.TryGetValue(id, out var count))
         {
             return count;
         }
 
-        Dictionary<string, NonStackableItemInstance>? instances = NonStackableItemsData!.GetValueOrDefault(id);
+        var instances = NonStackableItemsData!.GetValueOrDefault(id);
 
         return instances is not null
             ? instances.Count
             : 0;
     }
 
-    public NonStackableItemInstance[] GetItemInstances(string id)
+    public NonStackableItemInstance[] GetItemInstances(Guid id)
     {
-        Dictionary<string, NonStackableItemInstance>? instances = NonStackableItemsData!.GetValueOrDefault(id);
+        var instances = NonStackableItemsData!.GetValueOrDefault(id);
         return instances is not null
             ? [.. instances.Values]
             : [];
     }
 
-    public NonStackableItemInstance? GetItemInstance(string id, string instanceId)
+    public NonStackableItemInstance? GetItemInstance(Guid id, Guid instanceId)
     {
-        Dictionary<string, NonStackableItemInstance>? instances = NonStackableItemsData!.GetValueOrDefault(id);
+        var instances = NonStackableItemsData!.GetValueOrDefault(id);
         return instances?.GetValueOrDefault(instanceId);
     }
 
-    public void AddItems(string id, int count)
+    public void AddItems(Guid id, int count)
     {
         if (count < 0)
         {
@@ -71,9 +71,9 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
         StackableItemsData[id] = StackableItemsData.GetValueOrDefault(id, 0) + count;
     }
 
-    public void AddItems(string id, NonStackableItemInstance[] instances)
+    public void AddItems(Guid id, NonStackableItemInstance[] instances)
     {
-        Dictionary<string, NonStackableItemInstance> instancesMap = NonStackableItemsData.ComputeIfAbsent(id, id1 => [])!;
+        var instancesMap = NonStackableItemsData.ComputeIfAbsent(id, id1 => [])!;
 
         foreach (NonStackableItemInstance instance in instances)
         {
@@ -81,7 +81,7 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
         }
     }
 
-    public bool TakeItems(string id, int count)
+    public bool TakeItems(Guid id, int count)
     {
         if (count < 0)
         {
@@ -98,16 +98,16 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
         return true;
     }
 
-    public IEnumerable<NonStackableItemInstance>? TakeItems(string id, ReadOnlySpan<string> instanceIds)
+    public IEnumerable<NonStackableItemInstance>? TakeItems(Guid id, ReadOnlySpan<Guid> instanceIds)
     {
-        Dictionary<string, NonStackableItemInstance>? instanceMap = NonStackableItemsData.GetValueOrDefault(id);
+        var instanceMap = NonStackableItemsData.GetValueOrDefault(id);
         if (instanceMap is null)
         {
             return null;
         }
 
         var instances = new List<NonStackableItemInstance>(instanceIds.Length);
-        foreach (string instanceId in instanceIds)
+        foreach (var instanceId in instanceIds)
         {
             if (!instanceMap.Remove(instanceId, out var instance))
             {

@@ -38,7 +38,7 @@ public sealed class Catalog
     {
         public readonly ImmutableArray<Item> Items;
 
-        private readonly Dictionary<string, Item> itemsById = [];
+        private readonly Dictionary<Guid, Item> itemsById = [];
 
         internal ItemsCatalogR(string file)
         {
@@ -51,7 +51,7 @@ public sealed class Catalog
                 Items = ImmutableCollectionsMarshal.AsImmutableArray(items);
             }
 
-            HashSet<string> ids = [];
+            HashSet<Guid> ids = [];
             HashSet<string> names = [];
             foreach (Item item in Items)
             {
@@ -72,11 +72,11 @@ public sealed class Catalog
             }
         }
 
-        public Item? GetItem(string id)
+        public Item? GetItem(Guid id)
             => itemsById.GetValueOrDefault(id);
 
         public record Item(
-            string Id,
+            Guid Id,
             string Name,
             int Aux,
             bool Stackable,

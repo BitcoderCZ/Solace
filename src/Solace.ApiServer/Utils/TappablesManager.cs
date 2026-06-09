@@ -1,5 +1,4 @@
-﻿using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json.Serialization;
 using Solace.Common;
 using Solace.Common.Utils;
@@ -7,31 +6,34 @@ using Solace.EventBus.Client;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed class TappablesManager
+public sealed partial class TappablesManager
 {
     private static readonly long GRACE_PERIOD = 30000;
 
     private Subscriber _subscriber = null!;
     private RequestSender _requestSender = null!;
 
+    private readonly ILogger _logger;
+
     private readonly Dictionary<string, Dictionary<Guid, Tappable>> _tappables = [];
     private readonly Dictionary<string, Dictionary<Guid, Encounter>> _encounters = [];
     private int _pruneCounter;
 
-    private TappablesManager()
+    private TappablesManager(ILogger logger)
     {
+        _logger = logger;
     }
 
-    public static async Task<TappablesManager> CreateAsync(EventBusClient eventBusClient)
+    public static async Task<TappablesManager> CreateAsync(EventBusClient eventBusClient, ILogger logger)
     {
-        var tappablesManager = new TappablesManager();
+        var tappablesManager = new TappablesManager(logger);
 
         tappablesManager._subscriber = await eventBusClient.AddSubscriberAsync("tappables", new SubscriberListener(
             tappablesManager.HandleEvent,
             async () =>
             {
-                Log.Fatal("Tappables event bus subscriber error");
-                Log.CloseAndFlush();
+                LogTappablesEventBusSubscriberError(logger);
+                Serilog.Log.CloseAndFlush();
                 Environment.Exit(1);
             }));
         tappablesManager._requestSender = await eventBusClient.AddRequestSenderAsync();
@@ -156,7 +158,7 @@ public sealed class TappablesManager
         string? response = await _requestSender.RequestAsync("tappables", "activeTile", Json.Serialize(new ActiveTileNotification(tileX, tileY, accountId.ToString())));
         if (response is null)
         {
-            Log.Warning("Active tile notification event was rejected/ignored");
+            LogActiveTileNotificationEventWasRejectedIgnored();
         }
     }
 
@@ -177,9 +179,9 @@ public sealed class TappablesManager
                     {
                         tappables = Json.Deserialize<Tappable[]>(@event.Data);
                     }
-                    catch (Exception ex)
+                    catch (Exception exception)
                     {
-                        Log.Error($"Could not deserialise tappable spawn event {ex}");
+                        LogFailedToDeserialiseTappableSpawnEvent(exception);
                         break;
                     }
 
@@ -208,7 +210,7 @@ public sealed class TappablesManager
                     }
                     catch (Exception exception)
                     {
-                        Log.Error($"Could not deserialise encounter spawn event: {exception}");
+                        LogFailedToDeserialiseEncounterSpawnEvent(exception);
                         break;
                     }
 
@@ -334,4 +336,16 @@ public sealed class TappablesManager
             LEGENDARY
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Tappables event bus subscriber error")]
+    private static partial void LogTappablesEventBusSubscriberError(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Active tile notification event was rejected/ignored")]
+    private partial void LogActiveTileNotificationEventWasRejectedIgnored();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to deserialise tappable spawn event")]
+    private partial void LogFailedToDeserialiseTappableSpawnEvent(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to deserialise encounter spawn event")]
+    private partial void LogFailedToDeserialiseEncounterSpawnEvent(Exception exception);
 }

@@ -3,7 +3,7 @@
 namespace Solace.DB.Models.Common;
 
 public sealed record NonStackableItemInstance(
-    string InstanceId,
+    Guid InstanceId,
     int Wear
 ) : ICloneable<NonStackableItemInstance>
 {
@@ -11,7 +11,7 @@ public sealed record NonStackableItemInstance(
         => new NonStackableItemInstance(this);
 
     public sealed record Legacy(
-        string InstanceId,
+        Guid InstanceId,
         int Wear
     );
 }

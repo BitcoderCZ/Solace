@@ -8,8 +8,8 @@ public sealed record InventorySetHotbarMessage(
 )
 {
     public sealed record Item(
-        string ItemId,
+        Guid ItemId,
         int Count,
-        string? InstanceId
+        Guid? InstanceId
     );
 }

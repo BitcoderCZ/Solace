@@ -12,9 +12,11 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Serilog;
 using Serilog.Events;
+using Serilog.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.DB;
@@ -49,7 +51,7 @@ public partial class Program
     {
         // Environment.CurrentDirectory = AppContext.BaseDirectory;
 
-        Settings.Instance = await Settings.LoadAsync(Settings.DefaultPath);
+        Settings.Instance = await Settings.LoadAsync(Settings.DefaultPath, NullLogger.Instance);
 
         var builder = WebApplication.CreateBuilder(args);
 
@@ -67,6 +69,9 @@ public partial class Program
             .CreateLogger();
 
         Log.Logger = log;
+
+        var globalLoggerFactory = new SerilogLoggerFactory(log);
+        GlobalLoggerFactory.Initialize(globalLoggerFactory);
 
         bool isLegacyDb = await IsLegacyEarthDbAsync(Settings.Instance.EarthDatabaseConnectionString!);
         string legacyDbPath = "";

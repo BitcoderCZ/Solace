@@ -137,9 +137,9 @@ public sealed class SharedBuildplateEF : IEntityWithId<Guid>, IMergeable<SharedB
         => $"Scale: {Scale}, Night: {Night}, Last modified: {DateTimeOffset.FromUnixTimeMilliseconds(BuildplateLastModifed).UtcDateTime:s}";
 
     public sealed record HotbarItem(
-        string Uuid,
+        Guid Uuid,
         int Count,
-        string? InstanceId,
+        Guid? InstanceId,
         int Wear
     ) : ICloneable<HotbarItem>
     {

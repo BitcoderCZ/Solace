@@ -14,7 +14,7 @@ public sealed class BoostsEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
 
     public ActiveBoost?[] ActiveBoosts { get; set; } = new ActiveBoost[5];
 
-    public ActiveBoost? Get(string instanceId)
+    public ActiveBoost? Get(Guid instanceId)
         => ActiveBoosts.FirstOrDefault(activeBoost => activeBoost is not null && activeBoost.InstanceId == instanceId);
 
     public IEnumerable<ActiveBoost> Prune(long currentTime)
@@ -49,8 +49,8 @@ public sealed class BoostsEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
     }
 
     public sealed record ActiveBoost(
-        string InstanceId,
-        string ItemId,
+        Guid InstanceId,
+        Guid ItemId,
         long StartTime,
         long Duration
     ) : ICloneable<ActiveBoost>

@@ -1,11 +1,9 @@
-﻿using Serilog;
-using System.Net;
-using System.Text.Json;
+﻿using System.Text.Json;
 using Solace.Common.Utils;
 
 namespace Solace.LauncherUI;
 
-public sealed class Settings
+public sealed partial class Settings
 {
     private static readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions()
     {
@@ -75,15 +73,15 @@ public sealed class Settings
         }
     }
 
-    public static async Task<Settings> LoadAsync(string path)
+    public static async Task<Settings> LoadAsync(string path, ILogger logger)
     {
-        Log.Debug("Loading settings...");
+        LogLoadingSettings(logger);
 
         Settings? settings;
 
         if (!File.Exists(path))
         {
-            Log.Information($"Config file doesn't exist, created default");
+            LogConfigFileDoesNotExistUsingDefault(logger);
             settings = Default;
         }
         else
@@ -100,28 +98,28 @@ public sealed class Settings
                     throw new InvalidDataException("Settings is null");
                 }
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Log.Warning($"Error when parsing settings, using default: {ex}");
+                LogErrorWhenParsingSettingsUsingDefault(logger, exception);
                 settings = Default;
             }
         }
 
         if (settings.ApiPort is null)
         {
-            Log.Warning($"Api port is invalid, using default: '{Default.ApiPort}'");
+            LogInvalidOption(logger, "Api port", Default.ApiPort);
             settings.ApiPort = Default.ApiPort;
         }
 
         if (settings.EventBusPort is null)
         {
-            Log.Warning($"EventBus port is invalid, using default: '{Default.EventBusPort}'");
+            LogInvalidOption(logger, "EventBus port", Default.EventBusPort);
             settings.EventBusPort = Default.EventBusPort;
         }
 
         if (settings.ObjectStorePort is null)
         {
-            Log.Warning($"ObjectStore port is invalid, using default: '{Default.ObjectStorePort}'");
+            LogInvalidOption(logger, "ObjectStore port", Default.ObjectStorePort);
             settings.ObjectStorePort = Default.ObjectStorePort;
         }
 
@@ -129,25 +127,25 @@ public sealed class Settings
 
         if (nameType != UriHostNameType.IPv4 && nameType != UriHostNameType.Dns)
         {
-            Log.Warning($"IPv4 is invalid, using default: '{Default.IPv4}' (Change this in Options/IPv4)");
+            LogInvalidOption(logger, "IPv4", Default.IPv4);
             settings.IPv4 = Default.IPv4;
         }
 
         if (string.IsNullOrWhiteSpace(settings.EarthDatabaseConnectionString))
         {
-            Log.Warning($"DatabaseConnectionString is invalid, using default: '{Default.EarthDatabaseConnectionString}'");
+            LogInvalidOption(logger, "EarthDatabaseConnectionString", Default.EarthDatabaseConnectionString);
             settings.EarthDatabaseConnectionString = Default.EarthDatabaseConnectionString;
         }
 
         if (string.IsNullOrWhiteSpace(settings.LiveDatabaseConnectionString))
         {
-            Log.Warning($"LiveDatabaseConnectionString is invalid, using default: '{Default.LiveDatabaseConnectionString}'");
+            LogInvalidOption(logger, "LiveDatabaseConnectionString", Default.LiveDatabaseConnectionString);
             settings.LiveDatabaseConnectionString = Default.LiveDatabaseConnectionString;
         }
 
         if (settings.EnableTileRenderingLabel is null)
         {
-            Log.Warning($"EnableTileRenderingLabel is invalid, using default: '{Default.EnableTileRenderingLabel}'");
+            LogInvalidOption(logger, "EnableTileRenderingLabel", Default.EnableTileRenderingLabel);
             settings.EnableTileRenderingLabel = Default.EnableTileRenderingLabel;
         }
 
@@ -155,51 +153,66 @@ public sealed class Settings
         {
             if (settings.TileDataSource is null)
             {
-                Log.Warning($"TileDataSource is invalid, using default: '{Default.TileDataSource}'");
+            LogInvalidOption(logger, "TileDataSource", Default.TileDataSource);
                 settings.TileDataSource = Default.TileDataSource;
             }
 
             if (string.IsNullOrWhiteSpace(settings.MapTilerApiKey))
             {
-                Log.Warning($"MapTilerApiKey is invalid, using default: '{Default.MapTilerApiKey}'");
+            LogInvalidOption(logger, "MapTilerApiKey", Default.MapTilerApiKey);
                 settings.MapTilerApiKey = Default.MapTilerApiKey;
             }
         }
 
         if (settings.TileDatabaseConnectionString is null)
         {
-            Log.Warning($"TileDatabaseConnectionString is invalid, using default: '{Default.TileDatabaseConnectionString}'");
+            LogInvalidOption(logger, "TileDatabaseConnectionString", Default.TileDatabaseConnectionString);
             settings.TileDatabaseConnectionString = Default.TileDatabaseConnectionString;
         }
 
         if (settings.GeneratePreviewOnImport is null)
         {
-            Log.Warning($"Generate preview on import is invalid, using default: '{Default.GeneratePreviewOnImport}'");
+            LogInvalidOption(logger, "Generate preview on import", Default.GeneratePreviewOnImport);
             settings.GeneratePreviewOnImport = Default.GeneratePreviewOnImport;
         }
 
         if (settings.SkipFileChecks is null)
         {
-            Log.Warning($"Skip file checks is invalid, using default: '{Default.SkipFileChecks}'");
+            LogInvalidOption(logger, "Skip file checks", Default.SkipFileChecks);
             settings.SkipFileChecks = Default.SkipFileChecks;
         }
 
         if (string.IsNullOrWhiteSpace(settings.StaticDataPath))
         {
-            Log.Warning($"StaticData path is invalid, using default: '{Default.StaticDataPath}'");
+            LogInvalidOption(logger, "StaticData path", Default.StaticDataPath);
             settings.StaticDataPath = Default.StaticDataPath;
         }
 
         if (settings.OnlyAllowLocalLogin is null)
         {
-            Log.Warning($"OnlyAllowLocalLogin is invalid, using default: '{Default.OnlyAllowLocalLogin}'");
+            LogInvalidOption(logger, "OnlyAllowLocalLogin", Default.OnlyAllowLocalLogin);
             settings.OnlyAllowLocalLogin = Default.OnlyAllowLocalLogin;
         }
 
-        Log.Debug("Loaded settings");
+        LogLoadedSettings(logger);
 
         await settings.SaveAsync(path);
 
         return settings;
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Loading settings...")]
+    private static partial void LogLoadingSettings(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Config file doesn't exist, using default")]
+    private static partial void LogConfigFileDoesNotExistUsingDefault(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Error when parsing settings, using default")]
+    private static partial void LogErrorWhenParsingSettingsUsingDefault(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{OptionName} is invalid, using default: '{DefaultValue}'")]
+    private static partial void LogInvalidOption(ILogger logger, string OptionName, object? DefaultValue);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Loaded settings")]
+    private static partial void LogLoadedSettings(ILogger logger);
 }

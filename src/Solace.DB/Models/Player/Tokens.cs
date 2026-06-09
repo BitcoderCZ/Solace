@@ -118,9 +118,9 @@ public sealed class TokensEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
 
     public sealed class JournalItemUnlockedToken : Token
     {
-        public string ItemId { get; init; }
+        public Guid ItemId { get; init; }
 
-        public JournalItemUnlockedToken(string itemId)
+        public JournalItemUnlockedToken(Guid itemId)
             : base(TypeE.JOURNAL_ITEM_UNLOCKED)
         {
             ItemId = itemId;

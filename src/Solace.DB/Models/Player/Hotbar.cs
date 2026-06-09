@@ -19,8 +19,8 @@ public sealed class HotbarEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
     {
         ThrowHelper.ThrowIfNull(inventory);
 
-        Dictionary<string, int> usedStackableItemCounts = [];
-        Dictionary<string, HashSet<string>> usedNonStackableItemInstances = [];
+        Dictionary<Guid, int> usedStackableItemCounts = [];
+        Dictionary<Guid, HashSet<Guid>> usedNonStackableItemInstances = [];
 
         for (int index = 0; index < Items.Length; index++)
         {
@@ -32,11 +32,11 @@ public sealed class HotbarEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
 
             if (item.InstanceId is not null)
             {
-                if (inventory.GetItemInstance(item.Uuid, item.InstanceId) is not null)
+                if (inventory.GetItemInstance(item.Uuid, item.InstanceId.Value) is not null)
                 {
                     var usedItemInstances = usedNonStackableItemInstances.ComputeIfAbsent(item.Uuid, uuid => [])!;
 
-                    if (!usedItemInstances.Add(item.InstanceId))
+                    if (!usedItemInstances.Add(item.InstanceId.Value))
                     {
                         item = null;
                     }
@@ -83,9 +83,9 @@ public sealed class HotbarEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
     }
 
     public sealed record Item(
-        string Uuid,
+        Guid Uuid,
         int Count,
-        string? InstanceId
+        Guid? InstanceId
     ) : ICloneable<Item>
     {
         public Item DeepCopy()

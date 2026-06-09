@@ -162,7 +162,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        LoadFromSettings(await Settings.LoadAsync(Settings.DefaultPath));
+        LoadFromSettings(await Settings.LoadAsync(Settings.DefaultPath, Logger));
     }
 
     private void LoadFromSettings(Settings source)
