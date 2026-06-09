@@ -70,6 +70,9 @@ public partial class Program
 
         Log.Logger = log;
 
+        builder.Logging.ClearProviders();
+        builder.Logging.AddSerilog(log);
+
         var globalLoggerFactory = new SerilogLoggerFactory(log);
         GlobalLoggerFactory.Initialize(globalLoggerFactory);
 
