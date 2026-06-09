@@ -6,7 +6,7 @@ public sealed record RecipesCatalog(
 )
 {
     public sealed record CraftingRecipe(
-        string Id,
+        Guid Id,
         string Category,
         string Duration,
         CraftingRecipe.Ingredient[] Ingredients,
@@ -16,37 +16,37 @@ public sealed record RecipesCatalog(
     )
     {
         public sealed record Ingredient(
-            string[] Items,
+            Guid[] Items,
             int Quantity
         );
 
         public sealed record OutputR(
-            string ItemId,
+            Guid ItemId,
             int Quantity
         );
 
         public sealed record ReturnItem(
-            string Id,
+            Guid Id,
             int Amount
         );
     }
 
     public sealed record SmeltingRecipe(
-        string Id,
+        Guid Id,
         int HeatRequired,
-        string InputItemId,
+        Guid InputItemId,
         SmeltingRecipe.OutputR Output,
         SmeltingRecipe.ReturnItem[] ReturnItems,
-        bool deprecated
+        bool Deprecated
     )
     {
         public sealed record OutputR(
-            string ItemId,
+            Guid ItemId,
             int Quantity
         );
 
         public sealed record ReturnItem(
-            string Id,
+            Guid Id,
             int Amount
         );
     }

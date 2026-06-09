@@ -15,8 +15,8 @@ public sealed class Rewards
     private int _experiencePoints;
 
     private int? _level;
-    private readonly Dictionary<string, int> _items = [];
-    private readonly HashSet<string> _buildplates = [];
+    private readonly Dictionary<Guid, int> _items = [];
+    private readonly HashSet<Guid> _buildplates = [];
     private readonly HashSet<string> _challenges = [];
 
     public Rewards()
@@ -30,13 +30,13 @@ public sealed class Rewards
         return this;
     }
 
-    public Rewards AddItem(string id, int count)
+    public Rewards AddItem(Guid id, int count)
     {
         _items[id] = _items.GetValueOrDefault(id, 0) + count;
         return this;
     }
 
-    public Rewards AddBuildplate(string id)
+    public Rewards AddBuildplate(Guid id)
     {
         _buildplates.Add(id);
         return this;
@@ -125,7 +125,7 @@ public sealed class Rewards
 
             foreach (var entry in _items)
             {
-                string id = entry.Key;
+                var id = entry.Key;
                 int quantity = entry.Value;
                 if (quantity > 0)
                 {
@@ -138,7 +138,7 @@ public sealed class Rewards
                     }
                     else
                     {
-                        inventory.AddItems(id, [.. Enumerable.Range(0, quantity).Select(index => new NonStackableItemInstance(Guid.NewGuid().ToString(), 0))]);
+                        inventory.AddItems(id, [.. Enumerable.Range(0, quantity).Select(index => new NonStackableItemInstance(Guid.NewGuid(), 0))]);
                     }
 
                     if (journal.AddCollectedItem(id, currentTime, quantity) == 0)

@@ -136,14 +136,14 @@ internal sealed class TappablesController : SolaceControllerBase
 
         int experiencePointsGlobalMultiplier = 0;
 
-        Dictionary<string, int> experiencePointsPerItemMultiplier = [];
+        Dictionary<Guid, int> experiencePointsPerItemMultiplier = [];
         foreach (var effect in BoostUtils.GetActiveEffects(boosts, requestStartedOn, _staticData.Catalog.ItemsCatalog))
         {
             if (effect.Type is Catalog.ItemsCatalogR.Item.BoostInfoR.Effect.TypeE.ITEM_XP)
             {
                 if (effect.ApplicableItemIds is not null && effect.ApplicableItemIds.Length > 0)
                 {
-                    foreach (string itemId in effect.ApplicableItemIds)
+                    foreach (var itemId in effect.ApplicableItemIds)
                     {
                         experiencePointsPerItemMultiplier[itemId] = experiencePointsPerItemMultiplier.GetValueOrDefault(itemId) + effect.Value;
                     }

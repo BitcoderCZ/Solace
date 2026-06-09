@@ -261,8 +261,8 @@ internal sealed partial class ShopController : SolaceControllerBase
                             break;
                         }
 
-                        inventory.AddItems(data.Id.ToString(), data.Amount);
-                        journal.AddCollectedItem(data.Id.ToString(), U.CurrentTimeMillis(), data.Amount);
+                        inventory.AddItems(data.Id, data.Amount);
+                        journal.AddCollectedItem(data.Id, U.CurrentTimeMillis(), data.Amount);
 
                         // TODO: add to activity log?
 

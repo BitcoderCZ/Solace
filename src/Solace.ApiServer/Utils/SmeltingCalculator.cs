@@ -249,7 +249,7 @@ public static class SmeltingCalculator
     )
     {
         public sealed record OutputItem(
-            string Id,
+            Guid Id,
             int Count
         );
     }

@@ -310,7 +310,7 @@ public sealed partial class TappablesManager
         }
 
         public sealed record Item(
-            string Id,
+            Guid Id,
             int Count
         );
     }

@@ -163,7 +163,7 @@ internal sealed partial class BoostsController : SolaceControllerBase
     }
 
     [HttpPost("boosts/potions/{itemId}/activate")]
-    public async Task<Results<ContentHttpResult, BadRequest>> ActivateBoost(string itemId, CancellationToken cancellationToken)
+    public async Task<Results<ContentHttpResult, BadRequest>> ActivateBoost(Guid itemId, CancellationToken cancellationToken)
     {
         if (!TryGetAccountId(out var accountId))
         {
@@ -242,7 +242,7 @@ internal sealed partial class BoostsController : SolaceControllerBase
         }
         else
         {
-            boosts.ActiveBoosts[newIndex] = new BoostsEF.ActiveBoost(Guid.NewGuid().ToString(), itemId, requestStartedOn, item.BoostInfo.Duration);
+            boosts.ActiveBoosts[newIndex] = new BoostsEF.ActiveBoost(Guid.NewGuid(), itemId, requestStartedOn, item.BoostInfo.Duration);
             if (item.BoostInfo.Effects.Any(effect => effect.Type is Catalog.ItemsCatalogR.Item.BoostInfoR.Effect.TypeE.HEALTH))
             {
                 // TODO: determine if we should add new player health straight away
@@ -267,7 +267,7 @@ internal sealed partial class BoostsController : SolaceControllerBase
     }
 
     [HttpDelete("boosts/{instanceId}")]
-    public async Task<Results<ContentHttpResult, BadRequest>> DeactivateBoost(string instanceId, CancellationToken cancellationToken)
+    public async Task<Results<ContentHttpResult, BadRequest>> DeactivateBoost(Guid instanceId, CancellationToken cancellationToken)
     {
         if (!TryGetAccountId(out var accountId))
         {
@@ -356,5 +356,5 @@ internal sealed partial class BoostsController : SolaceControllerBase
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Active boost {ItemId} has effect with activation {ActivationType}")]
-    private partial void LogUnexpectedBoostActivation(string ItemId, Catalog.ItemsCatalogR.Item.BoostInfoR.Effect.ActivationE ActivationType);
+    private partial void LogUnexpectedBoostActivation(Guid ItemId, Catalog.ItemsCatalogR.Item.BoostInfoR.Effect.ActivationE ActivationType);
 }

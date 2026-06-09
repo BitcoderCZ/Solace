@@ -76,7 +76,7 @@ public sealed partial class TappableGenerator
 
             var items = new List<Tappable.Item>(dropSet.Items.Length);
 
-            foreach (string itemId in dropSet.Items)
+            foreach (var itemId in dropSet.Items)
             {
                 TappablesConfig.TappableConfig.ItemCount itemCount = tappableConfig.ItemCounts[itemId];
                 items.Add(new Tappable.Item(itemId, _random.Next(itemCount.Min, itemCount.Max + 1)));

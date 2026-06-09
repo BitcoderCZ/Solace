@@ -51,9 +51,9 @@ public sealed class LegacySharedBuildplates
         }
 
         public sealed record HotbarItem(
-            string Uuid,
+            Guid Uuid,
             int Count,
-            string? InstanceId,
+            Guid? InstanceId,
             int Wear
         );
     }

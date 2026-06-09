@@ -102,8 +102,8 @@ public sealed class BoostsEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
         }
 
         public sealed record ActiveBoost(
-            string InstanceId,
-            string ItemId,
+            Guid InstanceId,
+            Guid ItemId,
             long StartTime,
             long Duration
         );

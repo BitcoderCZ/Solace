@@ -37,7 +37,7 @@ public sealed class TappablesConfig
             {
                 foreach (TappableConfig.DropSetR dropSet in tappableConfig.DropSets)
                 {
-                    foreach (string itemId in dropSet.Items)
+                    foreach (var itemId in dropSet.Items)
                     {
                         if (!tappableConfig.ItemCounts.ContainsKey(itemId))
                         {
@@ -60,11 +60,11 @@ public sealed class TappablesConfig
     public record TappableConfig(
         string Icon,
         TappableConfig.DropSetR[] DropSets,
-        Dictionary<string, TappableConfig.ItemCount> ItemCounts
+        Dictionary<Guid, TappableConfig.ItemCount> ItemCounts
     )
     {
         public record DropSetR(
-            string[] Items,
+            Guid[] Items,
             int Chance
         );
 

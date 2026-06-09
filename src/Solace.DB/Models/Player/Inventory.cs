@@ -157,9 +157,9 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
     public sealed class Legacy : IEquatable<Legacy>
     {
         [JsonInclude, JsonPropertyName("stackableItems")]
-        public Dictionary<string, int?> StackableItems;
+        public Dictionary<Guid, int?> StackableItems;
         [JsonInclude, JsonPropertyName("nonStackableItems")]
-        public Dictionary<string, Dictionary<string, NonStackableItemInstance.Legacy>> NonStackableItems;
+        public Dictionary<Guid, Dictionary<Guid, NonStackableItemInstance.Legacy>> NonStackableItems;
 
         public Legacy()
         {
@@ -168,12 +168,12 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
         }
 
         public sealed record StackableItem(
-            string Id,
+            Guid Id,
             int? Count
         );
 
         public sealed record NonStackableItem(
-            string Id,
+            Guid Id,
             NonStackableItemInstance[] Instances
         )
         {
@@ -197,8 +197,8 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
 
         public bool Equals(Legacy? other)
             => other is not null &&
-            StackableItems.OrderBy(static item => item.Key, StringComparer.Ordinal).Select(item => (Key: item.Key, Value: item.Value)).SequenceEqual(other.StackableItems.OrderBy(static item => item.Key, StringComparer.Ordinal).Select(item => (Key: item.Key, Value: item.Value))) &&
-            NonStackableItems.OrderBy(static item => item.Key, StringComparer.Ordinal).Select(item => (Key: item.Key, Value: item.Value)).SequenceEqual(other.NonStackableItems.OrderBy(static item => item.Key, StringComparer.Ordinal).Select(item => (Key: item.Key, Value: item.Value)));
+            StackableItems.OrderBy(static item => item.Key).Select(item => (Key: item.Key, Value: item.Value)).SequenceEqual(other.StackableItems.OrderBy(static item => item.Key).Select(item => (Key: item.Key, Value: item.Value))) &&
+            NonStackableItems.OrderBy(static item => item.Key).Select(item => (Key: item.Key, Value: item.Value)).SequenceEqual(other.NonStackableItems.OrderBy(static item => item.Key).Select(item => (Key: item.Key, Value: item.Value)));
 
         public override bool Equals(object? obj)
             => Equals(obj as Legacy);
@@ -207,13 +207,13 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
         {
             var hash = new HashCode();
 
-            foreach (var item in StackableItems.OrderBy(static item => item.Key, StringComparer.Ordinal))
+            foreach (var item in StackableItems.OrderBy(static item => item.Key))
             {
                 hash.Add(item.Key);
                 hash.Add(item.Value);
             }
 
-            foreach (var item in NonStackableItems.OrderBy(static item => item.Key, StringComparer.Ordinal))
+            foreach (var item in NonStackableItems.OrderBy(static item => item.Key))
             {
                 hash.Add(item.Key);
                 hash.Add(item.Value);

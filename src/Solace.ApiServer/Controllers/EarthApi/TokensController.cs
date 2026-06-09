@@ -94,7 +94,7 @@ internal sealed class TokensController : SolaceControllerBase
         switch (token)
         {
             case TokensEF.JournalItemUnlockedToken journalItemUnlocked:
-                properties["itemid"] = journalItemUnlocked.ItemId;
+                properties["itemid"] = journalItemUnlocked.ItemId.ToString();
                 break;
         }
 

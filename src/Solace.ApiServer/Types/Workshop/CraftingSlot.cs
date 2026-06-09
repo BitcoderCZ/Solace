@@ -2,7 +2,7 @@
 
 public sealed record CraftingSlot(
     string? SessionId,
-    string? RecipeId,
+    Guid? RecipeId,
     OutputItem? Output,
     InputItem[]? Escrow,
     int Completed,

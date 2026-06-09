@@ -13,7 +13,7 @@ public sealed record ItemsCatalog(
 )
 {
     public sealed record ItemR(
-        string Id,
+        Guid Id,
         ItemData Item,
         string Category,
         Rarity Rarity,
@@ -78,7 +78,7 @@ public sealed record ItemsCatalog(
         }
 
         public sealed record ReturnItem(
-            string Id,
+            Guid Id,
             int Amount
         );
     }

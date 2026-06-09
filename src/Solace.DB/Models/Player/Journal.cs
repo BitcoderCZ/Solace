@@ -88,7 +88,7 @@ public sealed class JournalEF : IEntityWithId<Guid>, IVersionedEntity, IMergeabl
     public sealed class Legacy : IEquatable<Legacy>
     {
         [JsonInclude, JsonPropertyName("items")]
-        public Dictionary<string, ItemJournalEntry> _items;
+        public Dictionary<Guid, ItemJournalEntry> _items;
 
         public Legacy()
         {
@@ -96,11 +96,11 @@ public sealed class JournalEF : IEntityWithId<Guid>, IVersionedEntity, IMergeabl
         }
 
         [JsonIgnore]
-        public Dictionary<string, ItemJournalEntry> Items => _items;
+        public Dictionary<Guid, ItemJournalEntry> Items => _items;
 
         // KVP is not equatable
         public bool Equals(Legacy? other)
-            => other is not null && _items.Select(item => (Key: item.Key, Value: item.Value)).OrderBy(item => item.Key, StringComparer.Ordinal).SequenceEqual(other._items.Select(item => (Key: item.Key, Value: item.Value)).OrderBy(item => item.Key, StringComparer.Ordinal));
+            => other is not null && _items.Select(item => (Key: item.Key, Value: item.Value)).OrderBy(item => item.Key).SequenceEqual(other._items.Select(item => (Key: item.Key, Value: item.Value)).OrderBy(item => item.Key));
 
         public override bool Equals(object? obj)
             => Equals(obj as Legacy);
@@ -109,9 +109,9 @@ public sealed class JournalEF : IEntityWithId<Guid>, IVersionedEntity, IMergeabl
         {
             var hash = new HashCode();
 
-            foreach (var item in _items.OrderBy(item => item.Key, StringComparer.Ordinal))
+            foreach (var item in _items.OrderBy(item => item.Key))
             {
-                hash.Add(item.Key, StringComparer.Ordinal);
+                hash.Add(item.Key);
                 hash.Add(item.Value);
             }
 

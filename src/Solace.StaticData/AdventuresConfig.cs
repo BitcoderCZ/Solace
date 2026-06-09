@@ -7,7 +7,7 @@ namespace Solace.StaticData;
 
 public sealed class AdventuresConfig
 {
-    public const string CommonAdventureCrystalId = "4f16a053-4929-263a-c91a-29663e29df76";
+    public static readonly Guid CommonAdventureCrystalId = Guid.Parse("4f16a053-4929-263a-c91a-29663e29df76");
     private static readonly string[] DefaultFolders = ["common", "uncommon", "rare", "epic", "legendary", "oobe"];
 
     public readonly AdventureSpawnConfig SpawnConfig;

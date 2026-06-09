@@ -60,7 +60,7 @@ public sealed class CraftingSlotEF : ICloneable<CraftingSlotEF>
 
     public sealed record ActiveJobR(
         string SessionId,
-        string RecipeId,
+        Guid RecipeId,
         long StartTime,
         InputRow[] Input,
         int TotalRounds,
@@ -121,7 +121,7 @@ public sealed class CraftingSlotEF : ICloneable<CraftingSlotEF>
 
         public sealed record ActiveJobR(
             string SessionId,
-            string RecipeId,
+            Guid RecipeId,
             long StartTime,
             InputItem.Legacy[][] Input,
             int TotalRounds,

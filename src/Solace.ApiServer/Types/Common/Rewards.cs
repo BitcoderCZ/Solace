@@ -6,14 +6,14 @@ public sealed record Rewards(
     int? ExperiencePoints,
     int? Level,
     Rewards.Item[] Inventory,
-    string[] Buildplates,
+    Guid[] Buildplates,
     Rewards.Challenge[] Challenges,
     string[] PersonaItems,
     Rewards.UtilityBlock[] UtilityBlocks
 )
 {
     public sealed record Item(
-        string Id,
+        Guid Id,
         int Amount
     );
 

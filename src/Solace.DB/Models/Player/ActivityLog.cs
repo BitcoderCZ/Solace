@@ -173,9 +173,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
     public sealed class JournalItemUnlockedEntry : Entry
     {
-        public string ItemId { get; init; }
+        public Guid ItemId { get; init; }
 
-        public JournalItemUnlockedEntry(long timestamp, string itemId)
+        public JournalItemUnlockedEntry(long timestamp, Guid itemId)
             : base(timestamp, TypeE.JOURNAL_ITEM_UNLOCKED)
         {
             ItemId = itemId;
@@ -233,9 +233,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
     public sealed class BoostActivatedEntry : Entry
     {
-        public string ItemId { get; init; }
+        public Guid ItemId { get; init; }
 
-        public BoostActivatedEntry(long timestamp, string itemId)
+        public BoostActivatedEntry(long timestamp, Guid itemId)
             : base(timestamp, TypeE.BOOST_ACTIVATED)
         {
             ItemId = itemId;
@@ -356,9 +356,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
         public sealed class JournalItemUnlockedEntry : Entry
         {
-            public string ItemId { get; init; }
+            public Guid ItemId { get; init; }
 
-            public JournalItemUnlockedEntry(long timestamp, string itemId)
+            public JournalItemUnlockedEntry(long timestamp, Guid itemId)
                 : base(timestamp, TypeE.JOURNAL_ITEM_UNLOCKED)
             {
                 ItemId = itemId;
@@ -407,9 +407,9 @@ public sealed class ActivityLogEF : IEntityWithId<Guid>, IVersionedEntity, IMerg
 
         public sealed class BoostActivatedEntry : Entry
         {
-            public string ItemId { get; init; }
+            public Guid ItemId { get; init; }
 
-            public BoostActivatedEntry(long timestamp, string itemId)
+            public BoostActivatedEntry(long timestamp, Guid itemId)
                 : base(timestamp, TypeE.BOOST_ACTIVATED)
             {
                 ItemId = itemId;

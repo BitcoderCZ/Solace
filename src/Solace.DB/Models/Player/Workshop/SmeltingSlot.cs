@@ -52,7 +52,7 @@ public sealed class SmeltingSlot : IEquatable<SmeltingSlot>, ICloneable<Smelting
 
     public sealed record ActiveJobR(
         string SessionId,
-        string RecipeId,
+        Guid RecipeId,
         long StartTime,
         InputItem Input,
         Fuel? AddedFuel,
@@ -126,7 +126,7 @@ public sealed class SmeltingSlot : IEquatable<SmeltingSlot>, ICloneable<Smelting
 
         public sealed record ActiveJobR(
             string SessionId,
-            string RecipeId,
+            Guid RecipeId,
             long StartTime,
             InputItem.Legacy Input,
             Fuel? AddedFuel,

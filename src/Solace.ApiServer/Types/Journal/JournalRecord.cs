@@ -6,7 +6,7 @@ using static Solace.ApiServer.Types.Journal.JournalRecord;
 namespace Solace.ApiServer.Types.Journal;
 
 public sealed record JournalRecord(
-     Dictionary<string, InventoryJournalEntry> InventoryJournal,
+     Dictionary<Guid, InventoryJournalEntry> InventoryJournal,
      ActivityLogEntry[] ActivityLog
 )
 {

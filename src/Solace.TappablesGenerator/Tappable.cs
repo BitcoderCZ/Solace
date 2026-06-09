@@ -24,7 +24,7 @@ public sealed record Tappable(
     }
 
     public sealed record Item(
-        string Id,
+        Guid Id,
         int Count
     );
 }

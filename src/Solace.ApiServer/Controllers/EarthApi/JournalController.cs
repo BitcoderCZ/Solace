@@ -44,7 +44,7 @@ internal sealed class JournalController : SolaceControllerBase
             .AsNoTracking()
             .FirstOrNewAsync(activityLogs => activityLogs.Id == accountId, trackNew: false, cancellationToken: cancellationToken);
 
-        Dictionary<string, Types.Journal.JournalRecord.InventoryJournalEntry> inventoryJournal = [];
+        Dictionary<Guid, Types.Journal.JournalRecord.InventoryJournalEntry> inventoryJournal = [];
         foreach (var (uuid, itemJournalEntry) in journal.Items)
         {
             inventoryJournal[uuid] = new Types.Journal.JournalRecord.InventoryJournalEntry(
@@ -79,7 +79,7 @@ internal sealed class JournalController : SolaceControllerBase
         {
             case ActivityLogEF.BoostActivatedEntry boostActivated:
                 {
-                    properties["boostId"] = boostActivated.ItemId;
+                    properties["boostId"] = boostActivated.ItemId.ToString();
                 }
 
                 break;

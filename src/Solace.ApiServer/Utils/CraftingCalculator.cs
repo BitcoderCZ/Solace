@@ -80,7 +80,7 @@ public static class CraftingCalculator
     )
     {
         public sealed record OutputItem(
-            string Id,
+            Guid Id,
             int Count
         );
     }

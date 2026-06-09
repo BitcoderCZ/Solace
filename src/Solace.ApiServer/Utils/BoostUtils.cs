@@ -184,7 +184,6 @@ public static class BoostUtils
             },
             effect.Type == CICIBIEType.CRAFTING || effect.Type == CICIBIEType.SMELTING ? "UtilityBlock" : "Player",
             effect.ApplicableItemIds,
-
             effect.Type switch
             {
                 CICIBIEType.ITEM_XP => ["Tappable"],

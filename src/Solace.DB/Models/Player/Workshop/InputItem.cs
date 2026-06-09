@@ -4,7 +4,7 @@ using Solace.DB.Models.Common;
 namespace Solace.DB.Models.Player.Workshop;
 
 public sealed record InputItem(
-     string Id,
+     Guid Id,
      int Count,
      NonStackableItemInstance[] Instances
 ) : ICloneable<InputItem>
@@ -35,7 +35,7 @@ public sealed record InputItem(
      }
 
     public sealed record Legacy(
-          string Id,
+          Guid Id,
           int Count,
           NonStackableItemInstance.Legacy[] Instances
      );

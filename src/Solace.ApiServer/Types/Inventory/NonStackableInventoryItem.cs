@@ -1,7 +1,7 @@
 ﻿namespace Solace.ApiServer.Types.Inventory;
 
 public sealed record NonStackableInventoryItem(
-    string Id,
+    Guid Id,
     NonStackableInventoryItem.Instance[] Instances,
     int Fragments,
     NonStackableInventoryItem.OnR Unlocked,
@@ -9,7 +9,7 @@ public sealed record NonStackableInventoryItem(
 )
 {
     public sealed record Instance(
-        string Id,
+        Guid Id,
         float Health
     );
 

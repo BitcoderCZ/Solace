@@ -1153,30 +1153,30 @@ internal sealed class WorkshopRouter : SolaceControllerBase
 
     private sealed record StartRequestCrafting(
         string SessionId,
-        string RecipeId,
+        Guid RecipeId,
         int Multiplier,
         StartRequestCrafting.Item[] Ingredients
     )
     {
         public sealed record Item(
-            string ItemId,
+            Guid ItemId,
             int Quantity,
-            string[] ItemInstanceIds
+            Guid[] ItemInstanceIds
         );
     }
 
     private sealed record StartRequestSmelting(
         string SessionId,
-        string RecipeId,
+        Guid RecipeId,
         int Multiplier,
         StartRequestSmelting.Item Input,
         StartRequestSmelting.Item Fuel
     )
     {
         public sealed record Item(
-            string ItemId,
+            Guid ItemId,
             int Quantity,
-            string[] ItemInstanceIds
+            Guid[] ItemInstanceIds
         );
     }
 }

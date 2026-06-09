@@ -133,6 +133,9 @@ public static class Program
 
         Log.Logger = log;
 
+        var globalLoggerFactory = new SerilogLoggerFactory(log);
+        GlobalLoggerFactory.Initialize(globalLoggerFactory);
+
         if (options.LocalLoginOnly)
         {
             Log.Information("Local account only login enabled, Microsoft accounts will not work");
@@ -264,11 +267,14 @@ public static class Program
 
         Log.Information("Imported shop buidplates");
 
-        var tappablesManager = await TappablesManager.CreateAsync(eventBus);
-        var buildplateInstancesManager = await BuildplateInstancesManager.CreateAsync(eventBus);
+        var tappablesManagerLogger = GlobalLoggerFactory.CreateLogger<TappablesManager>();
+        var tappablesManager = await TappablesManager.CreateAsync(eventBus, tappablesManagerLogger);
+        var buildplateInstancesManagerLogger = GlobalLoggerFactory.CreateLogger<BuildplateInstancesManager>();
+        var buildplateInstancesManager = await BuildplateInstancesManager.CreateAsync(eventBus, buildplateInstancesManagerLogger);
 
         using var birhEarthDb = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!);
-        BuildplateInstanceRequestHandler.Start(birhEarthDb, eventBus, objectStore, staticData.Catalog, buildplateInstancesManager);
+        var birhLogger = GlobalLoggerFactory.CreateLogger<BuildplateInstanceRequestHandler>();
+        BuildplateInstanceRequestHandler.Start(birhEarthDb, eventBus, objectStore, staticData.Catalog, buildplateInstancesManager, birhLogger);
 
         var builder = WebApplication.CreateBuilder(args);
 
@@ -323,9 +329,6 @@ public static class Program
         }
 
         var app = builder.Build();
-
-        var globalLoggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
-        GlobalLoggerFactory.Initialize(globalLoggerFactory);
 
         var forwardedHeadersOptions = new ForwardedHeadersOptions
         {

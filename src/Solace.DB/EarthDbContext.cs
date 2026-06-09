@@ -208,17 +208,17 @@ public sealed class EarthDbContext : DbContext
             .Property(x => x.StackableItemsData)
             .HasConversion(
                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
-                v => JsonSerializer.Deserialize<Dictionary<string, int>>(v, (JsonSerializerOptions)null!)
-                    ?? new Dictionary<string, int>()
+                v => JsonSerializer.Deserialize<Dictionary<Guid, int>>(v, (JsonSerializerOptions)null!)
+                    ?? new Dictionary<Guid, int>()
             )
-            .Metadata.SetValueComparer(new DictionaryStringIntValueComparer());
+            .Metadata.SetValueComparer(new DictionaryGuidIntValueComparer());
 
         modelBuilder.Entity<InventoryEF>()
             .Property(x => x.NonStackableItemsData)
             .HasConversion(
                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
-                v => JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, NonStackableItemInstance>>>(v, (JsonSerializerOptions)null!)
-                    ?? new Dictionary<string, Dictionary<string, NonStackableItemInstance>>()
+                v => JsonSerializer.Deserialize<Dictionary<Guid, Dictionary<Guid, NonStackableItemInstance>>>(v, (JsonSerializerOptions)null!)
+                    ?? new Dictionary<Guid, Dictionary<Guid, NonStackableItemInstance>>()
             )
             .Metadata.SetValueComparer(new NestedDictionaryValueComparer());
 
@@ -227,10 +227,10 @@ public sealed class EarthDbContext : DbContext
             .Property(x => x.Items)
             .HasConversion(
                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null!),
-                v => JsonSerializer.Deserialize<Dictionary<string, JournalEF.ItemJournalEntry>>(v, (JsonSerializerOptions)null!)
-                    ?? new Dictionary<string, JournalEF.ItemJournalEntry>()
+                v => JsonSerializer.Deserialize<Dictionary<Guid, JournalEF.ItemJournalEntry>>(v, (JsonSerializerOptions)null!)
+                    ?? new Dictionary<Guid, JournalEF.ItemJournalEntry>()
             )
-            .Metadata.SetValueComparer(new DictionaryStringTValueComparer<JournalEF.ItemJournalEntry>(JournalEF.ItemJournalEntry.Comparer.Instance));
+            .Metadata.SetValueComparer(new DictionaryGuidTValueComparer<JournalEF.ItemJournalEntry>(JournalEF.ItemJournalEntry.Comparer.Instance));
 
         // redeemed tappables
         modelBuilder.Entity<RedeemedTappablesEF>()
@@ -386,6 +386,7 @@ public sealed class EarthDbContext : DbContext
     }
 }
 
+// todo: clean this up
 public sealed class ListValueComparer<T> : ValueComparer<List<T>>
     where T : IEquatable<T>, ICloneable<T>
 {
@@ -460,17 +461,79 @@ public sealed class DictionaryStringTValueComparer<TValue> : ValueComparer<Dicti
     }
 }
 
-public sealed class DictionaryStringIntValueComparer : ValueComparer<Dictionary<string, int>>
+public sealed class DictionaryGuidTValueComparer<TValue> : ValueComparer<Dictionary<Guid, TValue>>
+    where TValue : ICloneable<TValue>
 {
-    public DictionaryStringIntValueComparer()
+    public DictionaryGuidTValueComparer(IEqualityComparer<TValue> equalityComparer)
         : base(
-            (d1, d2) => DictionariesEqual(d1, d2),
-            d => ComputeHashCode(d),
-            d => new Dictionary<string, int>(d.Select(item => new KeyValuePair<string, int>(item.Key, item.Value))))
+            (d1, d2) => DictionariesEqual(d1, d2, equalityComparer),
+            d => ComputeHashCode(d, equalityComparer),
+            d => new Dictionary<Guid, TValue>(d.Select(item => new KeyValuePair<Guid, TValue>(item.Key, item.Value.DeepCopy()))))
     {
     }
 
-    private static bool DictionariesEqual(Dictionary<string, int>? d1, Dictionary<string, int>? d2)
+    private static bool DictionariesEqual(Dictionary<Guid, TValue>? d1, Dictionary<Guid, TValue>? d2, IEqualityComparer<TValue> equalityComparer)
+    {
+        if (d1 == d2)
+        {
+            return true;
+        }
+
+        if (d1 == null || d2 == null)
+        {
+            return false;
+        }
+
+        if (d1.Count != d2.Count)
+        {
+            return false;
+        }
+
+        foreach (var kvp in d1)
+        {
+            if (!d2.TryGetValue(kvp.Key, out var value2))
+            {
+                return false;
+            }
+
+            if (!equalityComparer.Equals(kvp.Value, value2))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int ComputeHashCode(Dictionary<Guid, TValue>? d, IEqualityComparer<TValue> equalityComparer)
+    {
+        if (d == null)
+        {
+            return 0;
+        }
+
+        var hash = new HashCode();
+        foreach (var kvp in d.OrderBy(x => x.Key))
+        {
+            hash.Add(kvp.Key);
+            hash.Add(kvp.Value, equalityComparer);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
+public sealed class DictionaryGuidIntValueComparer : ValueComparer<Dictionary<Guid, int>>
+{
+    public DictionaryGuidIntValueComparer()
+        : base(
+            (d1, d2) => DictionariesEqual(d1, d2),
+            d => ComputeHashCode(d),
+            d => new Dictionary<Guid, int>(d.Select(item => new KeyValuePair<Guid, int>(item.Key, item.Value))))
+    {
+    }
+
+    private static bool DictionariesEqual(Dictionary<Guid, int>? d1, Dictionary<Guid, int>? d2)
     {
         if (d1 == d2)
         {
@@ -503,7 +566,7 @@ public sealed class DictionaryStringIntValueComparer : ValueComparer<Dictionary<
         return true;
     }
 
-    private static int ComputeHashCode(Dictionary<string, int>? d)
+    private static int ComputeHashCode(Dictionary<Guid, int>? d)
     {
         if (d == null)
         {
@@ -511,7 +574,7 @@ public sealed class DictionaryStringIntValueComparer : ValueComparer<Dictionary<
         }
 
         var hash = new HashCode();
-        foreach (var kvp in d.OrderBy(x => x.Key, StringComparer.Ordinal))
+        foreach (var kvp in d.OrderBy(x => x.Key))
         {
             hash.Add(kvp.Key);
             hash.Add(kvp.Value);
@@ -521,17 +584,17 @@ public sealed class DictionaryStringIntValueComparer : ValueComparer<Dictionary<
     }
 }
 
-public sealed class NestedDictionaryValueComparer : ValueComparer<Dictionary<string, Dictionary<string, NonStackableItemInstance>>>
+public sealed class NestedDictionaryValueComparer : ValueComparer<Dictionary<Guid, Dictionary<Guid, NonStackableItemInstance>>>
 {
     public NestedDictionaryValueComparer()
         : base(
             (d1, d2) => OuterDictionariesEqual(d1, d2),
             d => ComputeOuterHashCode(d),
-            d => d.ToDictionary(x => x.Key, x => new Dictionary<string, NonStackableItemInstance>(x.Value.Select(item => new KeyValuePair<string, NonStackableItemInstance>(item.Key, item.Value.DeepCopy())))))
+            d => d.ToDictionary(x => x.Key, x => new Dictionary<Guid, NonStackableItemInstance>(x.Value.Select(item => new KeyValuePair<Guid, NonStackableItemInstance>(item.Key, item.Value.DeepCopy())))))
     {
     }
 
-    private static bool OuterDictionariesEqual(Dictionary<string, Dictionary<string, NonStackableItemInstance>>? d1, Dictionary<string, Dictionary<string, NonStackableItemInstance>>? d2)
+    private static bool OuterDictionariesEqual(Dictionary<Guid, Dictionary<Guid, NonStackableItemInstance>>? d1, Dictionary<Guid, Dictionary<Guid, NonStackableItemInstance>>? d2)
     {
         if (d1 == d2)
         {
@@ -564,7 +627,7 @@ public sealed class NestedDictionaryValueComparer : ValueComparer<Dictionary<str
         return true;
     }
 
-    private static bool InnerDictionariesEqual(Dictionary<string, NonStackableItemInstance>? d1, Dictionary<string, NonStackableItemInstance>? d2)
+    private static bool InnerDictionariesEqual(Dictionary<Guid, NonStackableItemInstance>? d1, Dictionary<Guid, NonStackableItemInstance>? d2)
     {
         if (d1 == d2)
         {
@@ -597,7 +660,7 @@ public sealed class NestedDictionaryValueComparer : ValueComparer<Dictionary<str
         return true;
     }
 
-    private static int ComputeOuterHashCode(Dictionary<string, Dictionary<string, NonStackableItemInstance>>? d)
+    private static int ComputeOuterHashCode(Dictionary<Guid, Dictionary<Guid, NonStackableItemInstance>>? d)
     {
         if (d == null)
         {

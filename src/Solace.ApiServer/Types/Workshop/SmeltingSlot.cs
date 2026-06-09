@@ -6,7 +6,7 @@ public record SmeltingSlot(
     SmeltingSlot.FuelR? Fuel,
     SmeltingSlot.BurningR? Burning,
     string? SessionId,
-    string? RecipeId,
+    Guid? RecipeId,
     OutputItem? Output,
     InputItem[]? Escrow,
     int Completed,
@@ -22,9 +22,9 @@ public record SmeltingSlot(
 {
     public sealed record FuelR(
         BurnRate BurnRate,
-        string ItemId,
+        Guid ItemId,
         int Quantity,
-        string[] ItemInstanceIds
+        Guid[] ItemInstanceIds
     );
 
     public sealed record BurningR(

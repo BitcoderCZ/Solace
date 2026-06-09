@@ -47,7 +47,7 @@ public sealed class LevelUtils
             rewards.AddItem(item.Id, item.Count);
         }
 
-        foreach (string buildplate in level.Buildplates)
+        foreach (var buildplate in level.Buildplates)
         {
             rewards.AddBuildplate(buildplate);
         }

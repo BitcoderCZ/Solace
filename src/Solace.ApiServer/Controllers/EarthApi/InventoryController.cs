@@ -54,7 +54,7 @@ internal sealed class InventoryController : SolaceControllerBase
             .AsNoTracking()
             .FirstOrNewAsync(journal => journal.Id == accountId, trackNew: false, cancellationToken: cancellationToken);
 
-        Dictionary<string, int> hotbarItemCounts = [];
+        Dictionary<Guid, int> hotbarItemCounts = [];
         foreach (var item in hotbar.Items)
         {
             if (item is not null)
@@ -63,12 +63,12 @@ internal sealed class InventoryController : SolaceControllerBase
             }
         }
 
-        HashSet<string> hotbarItemInstances = [];
+        HashSet<Guid> hotbarItemInstances = [];
         foreach (var item in hotbar.Items)
         {
             if (item is not null && item.InstanceId is not null)
             {
-                hotbarItemInstances.Add(item.InstanceId);
+                hotbarItemInstances.Add(item.InstanceId.Value);
             }
         }
 
@@ -77,11 +77,11 @@ internal sealed class InventoryController : SolaceControllerBase
                 item.Uuid,
                 item.Count,
                 item.InstanceId,
-                item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId)?.Wear ?? 0, _catalog.ItemsCatalog, _logger) : 0.0f
+                item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId.Value)?.Wear ?? 0, _catalog.ItemsCatalog, _logger) : 0.0f
                     ) : null)],
             [.. inventory.StackableItems.Select(item =>
             {
-                string uuid = item.Id;
+                var uuid = item.Id;
                 int count = item.Count - hotbarItemCounts.GetValueOrDefault(uuid);
                 JournalEF.ItemJournalEntry itemJournalEntry = journal.GetItem(uuid)!;
                 string firstSeen = TimeFormatter.FormatTime(itemJournalEntry.FirstSeen);
@@ -97,7 +97,7 @@ internal sealed class InventoryController : SolaceControllerBase
             })],
             [.. inventory.NonStackableItems.Select(item =>
             {
-                string uuid = item.Id;
+                var uuid = item.Id;
                 JournalEF.ItemJournalEntry itemJournalEntry = journal.GetItem(uuid)!;
                 string firstSeen = TimeFormatter.FormatTime(itemJournalEntry.FirstSeen);
                 string lastSeen = TimeFormatter.FormatTime(itemJournalEntry.LastSeen);
@@ -151,7 +151,7 @@ internal sealed class InventoryController : SolaceControllerBase
             item.Uuid,
             item.Count,
             item.InstanceId,
-            item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId)!.Wear, _catalog.ItemsCatalog, _logger) : 0.0f
+            item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId.Value)!.Wear, _catalog.ItemsCatalog, _logger) : 0.0f
         ) : null)];
 
         string resp = Json.Serialize(hotbarItems);
@@ -159,7 +159,7 @@ internal sealed class InventoryController : SolaceControllerBase
     }
 
     [HttpPost("{itemId}/consume")]
-    public async Task<Results<ContentHttpResult, BadRequest>> ConsumeItem(string itemId, CancellationToken cancellationToken)
+    public async Task<Results<ContentHttpResult, BadRequest>> ConsumeItem(Guid itemId, CancellationToken cancellationToken)
     {
         if (!TryGetAccountId(out var accountId))
         {
@@ -199,8 +199,8 @@ internal sealed class InventoryController : SolaceControllerBase
 
         var results = new EarthDbContext.Results(_earthDB);
 
-        string? returnItemId = item.ConsumeInfo.ReturnItemId;
-        if (returnItemId is not null)
+        var returnItemIdNullable = item.ConsumeInfo.ReturnItemId;
+        if (returnItemIdNullable is { } returnItemId)
         {
             Catalog.ItemsCatalogR.Item? returnItem = _catalog.ItemsCatalog.GetItem(returnItemId);
             Debug.Assert(returnItem is not null);
@@ -211,7 +211,7 @@ internal sealed class InventoryController : SolaceControllerBase
             }
             else
             {
-                inventory.AddItems(returnItemId, [new NonStackableItemInstance(Guid.NewGuid().ToString(), 0)]);
+                inventory.AddItems(returnItemId, [new NonStackableItemInstance(Guid.NewGuid(), 0)]);
             }
 
             if (journal.AddCollectedItem(returnItemId, requestStartedOn, 1) == 0)
@@ -249,8 +249,8 @@ internal sealed class InventoryController : SolaceControllerBase
     }
 
     private sealed record SetHotbarRequestItem(
-        string Id,
+        Guid Id,
         int Count,
-        string? InstanceId
+        Guid? InstanceId
     );
 }

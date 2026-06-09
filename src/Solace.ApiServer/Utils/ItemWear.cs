@@ -4,7 +4,7 @@ namespace Solace.ApiServer.Utils;
 
 public static partial class ItemWear
 {
-    public static float WearToHealth(string itemId, int wear, Catalog.ItemsCatalogR itemsCatalog, ILogger logger)
+    public static float WearToHealth(Guid itemId, int wear, Catalog.ItemsCatalogR itemsCatalog, ILogger logger)
     {
         Catalog.ItemsCatalogR.Item? catalogItem = itemsCatalog.GetItem(itemId);
 
@@ -18,5 +18,5 @@ public static partial class ItemWear
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Attempt to get item health for non-tool item '{ItemId}'")]
-    private static partial void LogHealthForNonTool(ILogger logger, string ItemId);
+    private static partial void LogHealthForNonTool(ILogger logger, Guid ItemId);
 }

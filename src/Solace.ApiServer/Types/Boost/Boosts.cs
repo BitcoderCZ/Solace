@@ -14,8 +14,8 @@ internal sealed record Boosts(
 {
     internal sealed record Potion(
         bool Enabled,
-        string ItemId,
-        string InstanceId,
+        Guid ItemId,
+        Guid InstanceId,
         string Expiration
     );
 
@@ -30,7 +30,7 @@ internal sealed record Boosts(
 
     internal sealed record ScenarioBoost(
         bool Enabled,
-        string InstanceId,
+        Guid InstanceId,
         Effect[] Effects,
         string Expiration
     );

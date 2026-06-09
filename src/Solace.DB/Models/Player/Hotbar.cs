@@ -135,9 +135,9 @@ public sealed class HotbarEF : IEntityWithId<Guid>, IVersionedEntity, IMergeable
         }
 
         public sealed record Item(
-            string Uuid,
+            Guid Uuid,
             int Count,
-            string? InstanceId
+            Guid? InstanceId
         );
     }
 }

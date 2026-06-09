@@ -327,8 +327,8 @@ public sealed class CatalogResponseCacheService
                 1,
                 item.Stackable,
                 item.FuelInfo is not null ? new Types.Common.BurnRate(item.FuelInfo.BurnTime, item.FuelInfo.HeatPerSecond) : null,
-                item.FuelInfo is not null && item.FuelInfo.ReturnItemId is not null ? [new ItemsCatalog.ItemR.ReturnItem(item.FuelInfo.ReturnItemId, 1)] : [],
-                item.ConsumeInfo is not null && item.ConsumeInfo.ReturnItemId is not null ? [new ItemsCatalog.ItemR.ReturnItem(item.ConsumeInfo.ReturnItemId, 1)] : [],
+                item.FuelInfo is not null && item.FuelInfo.ReturnItemId is not null ? [new ItemsCatalog.ItemR.ReturnItem(item.FuelInfo.ReturnItemId.Value, 1)] : [],
+                item.ConsumeInfo is not null && item.ConsumeInfo.ReturnItemId is not null ? [new ItemsCatalog.ItemR.ReturnItem(item.ConsumeInfo.ReturnItemId.Value, 1)] : [],
                 item.Experience.Tappable,
                 new Dictionary<string, int?>() { ["tappable"] = item.Experience.Tappable, ["encounter"] = item.Experience.Encounter, ["crafting"] = item.Experience.Crafting },
                 false
@@ -389,7 +389,7 @@ public sealed class CatalogResponseCacheService
                 recipe.HeatRequired,
                 recipe.Input,
                 new RecipesCatalog.SmeltingRecipe.OutputR(recipe.Output, 1),
-                recipe.ReturnItemId is not null ? [new RecipesCatalog.SmeltingRecipe.ReturnItem(recipe.ReturnItemId, 1)] : [],
+                recipe.ReturnItemId is not null ? [new RecipesCatalog.SmeltingRecipe.ReturnItem(recipe.ReturnItemId.Value, 1)] : [],
                 false
             );
         })];

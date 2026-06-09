@@ -6,13 +6,13 @@ public sealed record Rewards(
     int Rubies,
     int ExperiencePoints,
     int? Level,
-    Dictionary<string, int?> Items, // keep int? for back compatibility
-    string[] Buildplates,
+    Dictionary<Guid, int?> Items, // keep int? for back compatibility
+    Guid[] Buildplates,
     string[] Challenges
 ) : ICloneable<Rewards>
 {
     public Rewards DeepCopy()
-        => new Rewards(Rubies, ExperiencePoints, Level, new Dictionary<string, int?>(Items), [.. Buildplates], [.. Challenges]);
+        => new Rewards(Rubies, ExperiencePoints, Level, new Dictionary<Guid, int?>(Items), [.. Buildplates], [.. Challenges]);
 
     public bool Equals(Rewards? other)
         => other is not null && Rubies == other.Rubies && ExperiencePoints == other.ExperiencePoints && Level == other.Level && Items.OrderBy(item => item.Key).Select(item => (item.Key, item.Value)).SequenceEqual(other.Items.OrderBy(item => item.Key).Select(item => (item.Key, item.Value))) && Buildplates.SequenceEqual(other.Buildplates) && Challenges.SequenceEqual(other.Challenges);

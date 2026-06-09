@@ -183,7 +183,7 @@ internal sealed partial class BuildplatesController : SolaceControllerBase
             }
             else
             {
-                sharedBuildplateHotbarItem = new SharedBuildplateEF.HotbarItem(item.Uuid, 1, item.InstanceId, inventory.GetItemInstance(item.Uuid, item.InstanceId)?.Wear ?? 0);
+                sharedBuildplateHotbarItem = new SharedBuildplateEF.HotbarItem(item.Uuid, 1, item.InstanceId, inventory.GetItemInstance(item.Uuid, item.InstanceId.Value)?.Wear ?? 0);
             }
 
             sharedBuildplate.Hotbar[index] = sharedBuildplateHotbarItem;

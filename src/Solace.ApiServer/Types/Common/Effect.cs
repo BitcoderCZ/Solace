@@ -6,7 +6,7 @@ public sealed record Effect(
     int? Value,
     string? Unit,
     string Targets,
-    string[] Items,
+    Guid[] Items,
     string[] ItemScenarios,
     string Activation,
     string? ModifiesType

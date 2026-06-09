@@ -174,13 +174,13 @@ public sealed class Catalog
 
             public sealed record ConsumeInfoR(
                 int Heal,
-                string? ReturnItemId
+                Guid? ReturnItemId
             );
 
             public sealed record FuelInfoR(
                 int BurnTime,
                 int HeatPerSecond,
-                string? ReturnItemId
+                Guid? ReturnItemId
             );
 
             public sealed record ProjectileInfoR(
@@ -213,7 +213,7 @@ public sealed class Catalog
                 public record Effect(
                     Effect.TypeE Type,
                     int Value,
-                    string[] ApplicableItemIds,
+                    Guid[] ApplicableItemIds,
                     Effect.ActivationE Activation
                 )
                 {
@@ -401,8 +401,8 @@ public sealed class Catalog
         public readonly ImmutableArray<CraftingRecipe> Crafting;
         public readonly ImmutableArray<SmeltingRecipe> Smelting;
 
-        private readonly Dictionary<string, CraftingRecipe> craftingRecipesById = [];
-        private readonly Dictionary<string, SmeltingRecipe> smeltingRecipesById = [];
+        private readonly Dictionary<Guid, CraftingRecipe> craftingRecipesById = [];
+        private readonly Dictionary<Guid, SmeltingRecipe> smeltingRecipesById = [];
 
         private sealed record RecipesCatalogFile(
             CraftingRecipe[] Crafting,
@@ -422,8 +422,8 @@ public sealed class Catalog
             Crafting = ImmutableCollectionsMarshal.AsImmutableArray(recipesCatalogFile.Crafting);
             Smelting = ImmutableCollectionsMarshal.AsImmutableArray(recipesCatalogFile.Smelting);
 
-            HashSet<string> craftingIds = [];
-            HashSet<string> smeltingIds = [];
+            HashSet<Guid> craftingIds = [];
+            HashSet<Guid> smeltingIds = [];
             foreach (CraftingRecipe craftingRecipe in Crafting)
             {
                 if (!craftingIds.Add(craftingRecipe.Id))
@@ -451,14 +451,14 @@ public sealed class Catalog
             }
         }
 
-        public CraftingRecipe? GetCraftingRecipe(string id)
+        public CraftingRecipe? GetCraftingRecipe(Guid id)
             => craftingRecipesById.GetValueOrDefault(id);
 
-        public SmeltingRecipe? GetSmeltingRecipe(string id)
+        public SmeltingRecipe? GetSmeltingRecipe(Guid id)
             => smeltingRecipesById.GetValueOrDefault(id);
 
         public sealed record CraftingRecipe(
-            string Id,
+            Guid Id,
             int Duration,
             CraftingRecipe.CategoryE Category,
             CraftingRecipe.Ingredient[] Ingredients,
@@ -477,26 +477,26 @@ public sealed class Catalog
 
             public sealed record Ingredient(
                 int Count,
-                string[] PossibleItemIds
+                Guid[] PossibleItemIds
             );
 
             public record OutputR(
-                string ItemId,
+                Guid ItemId,
                 int Count
             );
 
             public record ReturnItem(
-                string ItemId,
+                Guid ItemId,
                 int Count
             );
         }
 
         public sealed record SmeltingRecipe(
-            string Id,
+            Guid Id,
             int HeatRequired,
-            string Input,
-            string Output,
-            string ReturnItemId
+            Guid Input,
+            Guid Output,
+            Guid? ReturnItemId
         );
     }
 
@@ -547,7 +547,7 @@ public sealed class Catalog
             double? Value,
             string? Unit,
             string Targets,
-            string[] Items,
+            Guid[] Items,
             string[] ItemScenarios,
             string Activation,
             string? ModifiesType
@@ -558,14 +558,14 @@ public sealed class Catalog
             int? ExperiencePoints,
             int? Level,
             Rewards.RewardItem[] Inventory,
-            string[] Buildplates,
+            Guid[] Buildplates,
             Rewards.RewardChallenge[] Challenges,
             string[] PersonaItems,
             Rewards.RewardUtilityBlock[] UtilityBlocks
         )
         {
             public sealed record RewardItem(
-                string Id,
+                Guid Id,
                 int Amount
             );
 

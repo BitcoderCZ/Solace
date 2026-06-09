@@ -172,5 +172,5 @@ internal sealed class DailyGoodiesController : SolaceControllerBase
         })];
 
     private static DBRewards DailyLoginRewards()
-        => new(0, 25, null, new Dictionary<string, int?> { [AdventuresConfig.CommonAdventureCrystalId] = 1 }, [], []);
+        => new(0, 25, null, new Dictionary<Guid, int?> { [AdventuresConfig.CommonAdventureCrystalId] = 1 }, [], []);
 }
