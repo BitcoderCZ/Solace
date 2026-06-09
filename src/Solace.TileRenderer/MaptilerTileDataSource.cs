@@ -1,10 +1,10 @@
-﻿using NetTopologySuite.IO.VectorTiles.Mapbox;
-using Serilog;
+﻿using Microsoft.Extensions.Logging;
+using NetTopologySuite.IO.VectorTiles.Mapbox;
 using Solace.TileRenderer.Wkb;
 
 namespace Solace.TileRenderer;
 
-internal sealed class MaptilerTileDataSource : ITileDataSource
+internal sealed partial class MaptilerTileDataSource : ITileDataSource
 {
     private readonly string _apiKey;
     private readonly int _maxZoom;
@@ -20,7 +20,7 @@ internal sealed class MaptilerTileDataSource : ITileDataSource
     public string GetTagMapJson(StaticData.TileRenderer tileRenderer)
         => tileRenderer.TagMap2Json;
 
-    public async Task<List<List<IWKBObject>>> GetTileAsync(RenderContext ctx, int zoom, int tileX, int tileY, CancellationToken cancellationToken = default)
+    public async Task<List<List<IWKBObject>>> GetTileAsync(RenderContext ctx, int zoom, int tileX, int tileY, ILogger logger, CancellationToken cancellationToken = default)
     {
         if (zoom > _maxZoom)
         {
@@ -33,7 +33,7 @@ internal sealed class MaptilerTileDataSource : ITileDataSource
 
         var response = await _httpClient.GetAsync($"https://api.maptiler.com/tiles/v3/{zoom}/{tileX}/{tileY}.pbf?key={_apiKey}", cancellationToken);
         response.EnsureSuccessStatusCode();
-        
+
         try
         {
             var reader = new MapboxTileReader();
@@ -96,9 +96,9 @@ internal sealed class MaptilerTileDataSource : ITileDataSource
 
             return layers;
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error(ex.ToString());
+            LogErrorConvertingMapData(logger, exception);
 
             List<List<IWKBObject>> layers = [];
             for (int i = 0; i <= (int)RenderLayer.LAYER_NONE; i++)
@@ -126,4 +126,7 @@ internal sealed class MaptilerTileDataSource : ITileDataSource
 
     public void Dispose()
         => _httpClient.Dispose();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error while converting map data")]
+    private static partial void LogErrorConvertingMapData(ILogger logger, Exception ex);
 }

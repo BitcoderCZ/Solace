@@ -17,6 +17,7 @@
 @inject ServerManager ServerManager
 @inject IJSRuntime JS
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject ILogger<DataManagement> Logger
 
 <PageTitle>Data - Solace</PageTitle>
 
@@ -610,7 +611,7 @@
 
             await tempDb.Database.MigrateAsync();
 
-            var migrator = new DatabaseMigrator(tempDb, importDb, null);
+            var migrator = new DatabaseMigrator(tempDb, importDb, null, Logger);
 
             await migrator.MigrateAsync();
 

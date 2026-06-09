@@ -1,11 +1,11 @@
-﻿using Serilog;
+﻿using Microsoft.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.EventBus.Client;
 
 namespace Solace.TappablesGenerator;
 
-public sealed class ActiveTiles
+public sealed partial class ActiveTiles
 {
     private static readonly int ACTIVE_TILE_RADIUS = 3;
     private static readonly long ACTIVE_TILE_EXPIRY_TIME = 2 * 60 * 1000;
@@ -13,14 +13,17 @@ public sealed class ActiveTiles
     private readonly Dictionary<int, ActiveTile> _activeTiles = [];
     private readonly IActiveTileListener _activeTileListener;
 
-    private ActiveTiles(IActiveTileListener activeTileListener)
+    private readonly ILogger _logger;
+
+    private ActiveTiles(IActiveTileListener activeTileListener, ILogger logger)
     {
         _activeTileListener = activeTileListener;
+        _logger = logger;
     }
 
-    public static async Task<ActiveTiles> CreateAsync(EventBusClient eventBusClient, IActiveTileListener activeTileListener)
+    public static async Task<ActiveTiles> CreateAsync(EventBusClient eventBusClient, IActiveTileListener activeTileListener, ILogger logger)
     {
-        var tiles = new ActiveTiles(activeTileListener);
+        var tiles = new ActiveTiles(activeTileListener, logger);
 
         await eventBusClient.AddRequestHandlerAsync("tappables", new RequestHandlerLister(async request =>
         {
@@ -31,9 +34,9 @@ public sealed class ActiveTiles
                 {
                     activeTileNotification = Json.Deserialize<ActiveTileNotification>(request.Data)!;
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    Log.Error($"Could not deserialise active tile notification event: {ex}");
+                    LogCouldNotDeserialiseActiveTileNotificationEvent(logger, exception);
                     return null;
                 }
 
@@ -69,8 +72,8 @@ public sealed class ActiveTiles
         },
         async () =>
         {
-            Log.Error("Event bus subscriber error");
-            Log.CloseAndFlush();
+            LogEventBusSubscriberError(logger);
+            Serilog.Log.CloseAndFlush();
             Environment.Exit(1);
         }));
 
@@ -85,7 +88,7 @@ public sealed class ActiveTiles
         var activeTile = _activeTiles.GetValueOrDefault((tileX << 16) + tileY);
         if (activeTile is null)
         {
-            Log.Information($"Tile {tileX},{tileY} is becoming active");
+            LogTileIsBecomingActive(tileX, tileY);
             activeTile = new ActiveTile(tileX, tileY, currentTime, currentTime);
         }
         else
@@ -107,7 +110,7 @@ public sealed class ActiveTiles
             ActiveTile activeTile = item.Value;
             if (activeTile.LatestActiveTime + ACTIVE_TILE_EXPIRY_TIME <= currentTime)
             {
-                Log.Information($"Tile {activeTile.TileX},{activeTile.TileY} is inactive");
+                LogTileIsInactive(activeTile.TileX, activeTile.TileY);
                 entriesToRemove.Add(item);
             }
         }
@@ -157,4 +160,17 @@ public sealed class ActiveTiles
         public Task Inactive(IEnumerable<ActiveTile> activeTiles)
             => OnInactive?.Invoke(activeTiles) ?? Task.CompletedTask;
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not deserialise active tile notification event")]
+    private static partial void LogCouldNotDeserialiseActiveTileNotificationEvent(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus subscriber error")]
+    private static partial void LogEventBusSubscriberError(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tile ({PosX}, {PosY}) is becoming active")]
+    private partial void LogTileIsBecomingActive(int PosX, int PosY);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tile ({PosX}, {PosY}) is inactive")]
+    private partial void LogTileIsInactive(int PosX, int PosY);
 }
+

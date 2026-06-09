@@ -1,14 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
-using Serilog;
 using Solace.BuildplateRenderer;
+using Solace.Common;
 
 namespace Solace.LauncherUI;
 
-internal static class ResourcePackManagerSingleton
+internal static partial class ResourcePackManagerSingleton
 {
     private static ResourcePackManager? resourcePackManager;
     private static readonly SemaphoreSlim resourcePackLock = new(1, 1);
-    
+
     public static async Task<ResourcePackManager> GetResourcePackManagerAsync()
     {
         await EnsureResourcePackLoadedAsync();
@@ -37,13 +37,17 @@ internal static class ResourcePackManagerSingleton
                     resourcePackManager = await ResourcePackManager.LoadAllAsync(dir);
                     if (resourcePackManager.LoadedPackCount < 2)
                     {
-                        Log.Warning($"Only loaded {resourcePackManager.LoadedPackCount} resourcepacks, make sure staticdata/resourcepacks/java contains minecraft/ and fountain/");
+                        var logger = GlobalLoggerFactory.CreateLogger(nameof(ResourcePackManagerSingleton));
+
+                        LogNotLoadedAllResourcepacks(logger, resourcePackManager.LoadedPackCount);
                         resourcePackManager = null;
                     }
                 }
                 else
                 {
-                    Log.Warning("Resource pack directory not found. Previews will likely fail.");
+                    var logger = GlobalLoggerFactory.CreateLogger(nameof(ResourcePackManagerSingleton));
+
+                    LogResourcePackDirectoryNotFound(logger);
                 }
             }
         }
@@ -53,4 +57,10 @@ internal static class ResourcePackManagerSingleton
         }
     }
 #pragma warning restore CS8774 // Member must have a non-null value when exiting.
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Only loaded {LoadedPackCount} resourcepacks, make sure staticdata/resourcepacks/java contains minecraft/ and fountain/")]
+    private static partial void LogNotLoadedAllResourcepacks(ILogger logger, int LoadedPackCount);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Resource pack directory not found. Previews will fail")]
+    private static partial void LogResourcePackDirectoryNotFound(ILogger logger);
 }

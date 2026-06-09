@@ -1,15 +1,15 @@
-﻿using Serilog;
+﻿using Microsoft.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.PreviewGenerator.Registry;
 
 namespace Solace.PreviewGenerator;
 
-public static class Generator
+public static partial class Generator
 {
     private static readonly int CHUNK_RADIUS = 2;
 
-    public static string Generate(Stream stream)
+    public static string Generate(Stream stream, ILogger logger)
     {
         var serverDataZip = ServerDataZip.Read(stream);
 
@@ -20,10 +20,10 @@ public static class Generator
         {
             for (int chunkZ = -CHUNK_RADIUS; chunkZ < CHUNK_RADIUS; chunkZ++)
             {
-                var chunk = Chunk.Read(serverDataZip.GetChunkNBT(chunkX, chunkZ));
+                var chunk = Chunk.Read(serverDataZip.GetChunkNBT(chunkX, chunkZ), logger);
                 if (chunk is null)
                 {
-                    Log.Error($"Could not convert chunk {chunkX}, {chunkZ}");
+                    LogCouldNotConvertChunk(logger, chunkX, chunkZ);
                 }
                 else
                 {
@@ -127,4 +127,7 @@ public static class Generator
 
         return Json.Serialize(previewModel);
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not convert chunk at ({PosX}, {PosZ})")]
+    private static partial void LogCouldNotConvertChunk(ILogger logger, int PosX, int PosZ);
 }

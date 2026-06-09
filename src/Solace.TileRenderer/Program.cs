@@ -7,6 +7,8 @@ using System.Text.Json.Nodes;
 using Solace.EventBus.Client;
 using Solace.StaticData;
 using System.Globalization;
+using Serilog.Core;
+using Microsoft.Extensions.Logging;
 
 namespace Solace.TileRenderer;
 
@@ -74,6 +76,8 @@ internal static class Program
         var log = loggerConfig.CreateLogger();
 
         Log.Logger = log;
+
+        var globalLoggerFactory = (ILoggerFactory)new SerilogLoggerFactory(log);
 
         if (string.IsNullOrEmpty(options.MapTilerApiKey) && string.IsNullOrEmpty(options.TileDatabaseConnectionString))
         {
@@ -182,11 +186,22 @@ internal static class Program
 
         Log.Information("Loaded static data");
 
-        await using (var renderer = new EventBusTileRenderer(tileDataSource, eventBusClient, staticData))
+        var rendererLogger = globalLoggerFactory.CreateLogger<EventBusTileRenderer>();
+        await using (var renderer = new EventBusTileRenderer(tileDataSource, eventBusClient, staticData, rendererLogger))
         {
             await renderer.RunAsync();
         }
 
         return 0;
+    }
+}
+
+internal class SerilogLoggerFactory
+{
+    private Logger log;
+
+    public SerilogLoggerFactory(Logger log)
+    {
+        this.log = log;
     }
 }

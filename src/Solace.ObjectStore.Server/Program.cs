@@ -81,7 +81,9 @@ internal static class Program
         NetworkServer server;
         try
         {
-            server = new NetworkServer(new Server(new DataStore(new DirectoryInfo(options.DataDir))), options.Port);
+            var networkServerLogger = GlobalLoggerFactory.CreateLogger<NetworkServer>();
+            var serverLogger = GlobalLoggerFactory.CreateLogger<Server>();
+            server = new NetworkServer(new Server(new DataStore(new DirectoryInfo(options.DataDir)), serverLogger), options.Port, networkServerLogger);
         }
         catch (Exception ex) when (
             ex is IOException

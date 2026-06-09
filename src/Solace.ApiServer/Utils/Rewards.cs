@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
-using Serilog;
 using Solace.Common.Utils;
 using Solace.DB;
 using Solace.DB.Models.Common;

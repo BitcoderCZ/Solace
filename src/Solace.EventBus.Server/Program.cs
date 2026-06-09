@@ -78,7 +78,9 @@ internal static class Program
         NetworkServer server;
         try
         {
-            server = new NetworkServer(new Server(), options.Port);
+            var networkServerLogger = GlobalLoggerFactory.CreateLogger<NetworkServer>();
+            var serverLogger = GlobalLoggerFactory.CreateLogger<Server>();
+            server = new NetworkServer(new Server(serverLogger), options.Port, networkServerLogger);
         }
         catch (IOException ex)
         {

@@ -15,7 +15,6 @@ using Solace.DB.Models.Player;
 using Solace.StaticData;
 using Microsoft.EntityFrameworkCore;
 using Solace.DB.Utils;
-using Serilog;
 
 namespace Solace.ApiServer.Controllers.EarthApi;
 

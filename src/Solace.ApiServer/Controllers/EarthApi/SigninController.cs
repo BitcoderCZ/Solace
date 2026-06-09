@@ -1,7 +1,6 @@
 ﻿using Asp.Versioning;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
 using System.Text.RegularExpressions;
 using Solace.Common.Utils;
 using Solace.Common;

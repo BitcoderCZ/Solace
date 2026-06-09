@@ -6,6 +6,7 @@ using Solace.StaticData;
 using System.Globalization;
 using Solace.Common;
 using Serilog.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace Solace.TappablesGenerator;
 
@@ -112,21 +113,27 @@ internal static class Program
 
         Log.Information("Connected to event bus");
 
-        var tappableGenerator = new TappableGenerator(staticData);
-        var encounterGenerator = new EncounterGenerator(staticData);
-        var spawner = new Spawner[1];
-        ActiveTiles activeTiles = await ActiveTiles.CreateAsync(eventBusClient, new ActiveTiles.ActiveTileListener(
+        var tappableGeneratorLogger = GlobalLoggerFactory.CreateLogger<TappableGenerator>();
+        var tappableGenerator = new TappableGenerator(staticData, tappableGeneratorLogger);
+        var encounterGeneratorLogger = GlobalLoggerFactory.CreateLogger<EncounterGenerator>();
+        var encounterGenerator = new EncounterGenerator(staticData, encounterGeneratorLogger);
+        var spawners = new Spawner[1];
+
+        var activeTilesLogger = GlobalLoggerFactory.CreateLogger<ActiveTiles>();
+        var activeTiles = await ActiveTiles.CreateAsync(eventBusClient, new ActiveTiles.ActiveTileListener(
             async activeTiles =>
             {
-                await spawner[0].SpawnTiles(activeTiles);
+                await spawners[0].SpawnTiles(activeTiles);
             },
             async activeTile =>
             {
                 // empty
             }
-        ));
-        spawner[0] = await Spawner.CreateAsync(eventBusClient, activeTiles, tappableGenerator, encounterGenerator);
-        await spawner[0].Run();
+        ), activeTilesLogger);
+
+        var spawnerLogger = GlobalLoggerFactory.CreateLogger<Spawner>(); 
+        spawners[0] = await Spawner.CreateAsync(eventBusClient, activeTiles, tappableGenerator, encounterGenerator, spawnerLogger);
+        await spawners[0].Run();
 
         return 0;
     }

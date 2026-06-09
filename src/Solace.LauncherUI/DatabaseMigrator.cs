@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Serilog;
 using Solace.Common;
 using Solace.DB;
 using Solace.DB.Models.Common;
@@ -12,7 +11,7 @@ using Solace.DB.Models.Player.Workshop;
 
 namespace Solace.LauncherUI;
 
-internal sealed class DatabaseMigrator
+internal sealed partial class DatabaseMigrator
 {
     private static readonly JsonSerializerOptions legacyDbJsonOptions = new JsonSerializerOptions()
     {
@@ -26,13 +25,16 @@ internal sealed class DatabaseMigrator
     private readonly LiveDbContext? _liveDb;
 #pragma warning restore CS0618 // Type or member is obsolete
 
+    private readonly ILogger _logger;
+
 #pragma warning disable CS0618 // Type or member is obsolete - needed for migration
-    public DatabaseMigrator(EarthDbContext earthDb, SqliteConnection legacyEarthDb, LiveDbContext? liveDb)
+    public DatabaseMigrator(EarthDbContext earthDb, SqliteConnection legacyEarthDb, LiveDbContext? liveDb, ILogger logger)
 #pragma warning restore CS0618 // Type or member is obsolete
     {
         _earthDb = earthDb;
         _legacyEarthDb = legacyEarthDb;
         _liveDb = liveDb;
+        _logger = logger;
     }
 
     public async Task MigrateAsync()
@@ -58,9 +60,9 @@ internal sealed class DatabaseMigrator
 
                         await SaveEarthChanges();
                     }
-                    catch (Exception ex)
+                    catch (Exception exception)
                     {
-                        Log.Error(ex, $"Failed to migrate object '{type}', id: '{id}': {ex.Message}");
+                        LogFailedToMigrateObject(exception, type, id);
 
                         _earthDb.ChangeTracker.Clear();
 
@@ -390,7 +392,7 @@ internal sealed class DatabaseMigrator
                         }
                         else
                         {
-                            Log.Warning($"Failed to parse tappable id '{item.Key}' as UUID");
+                            LogFailedToParseTappableId(item.Key);
                         }
                     }
                 }
@@ -526,7 +528,7 @@ internal sealed class DatabaseMigrator
                 break;
             default:
                 {
-                    Log.Warning($"Unknown object type '{type}', will not be migrated.");
+                    LogUnknownObjectType(type);
                 }
 
                 break;
@@ -535,4 +537,13 @@ internal sealed class DatabaseMigrator
 
     private static Guid GetId(string idString)
         => IdTranslator.ToGuid(idString);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to migrate object '{Type}', id: '{Id}'")]
+    private partial void LogFailedToMigrateObject(Exception exception, string Type, string Id);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to parse tappable id '{Id}' as UUID")]
+    private partial void LogFailedToParseTappableId(string Id);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Unknown object type '{Type}', will not be migrated")]
+    private partial void LogUnknownObjectType(string Type);
 }

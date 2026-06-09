@@ -1,6 +1,6 @@
-﻿using Serilog;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Solace.Common.Utils;
 
 namespace Solace.EventBus.Server;
@@ -13,6 +13,13 @@ public sealed partial class Server : IDisposable
     private readonly ReaderWriterLockSlim _requestHandlersLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
     private readonly Dictionary<string, HashSet<RequestHandler>> _requestHandlers = [];
 
+    private readonly ILogger _logger;
+
+    public Server(ILogger logger)
+    {
+        _logger = logger;
+    }
+
     public Subscriber? AddSubscriber(string queueName, Action<Subscriber.Message> consumer)
     {
         if (!ValidateQueueName(queueName))
@@ -20,11 +27,11 @@ public sealed partial class Server : IDisposable
             return null;
         }
 
-        Log.Debug($"Adding subscriber for {queueName}");
+        LogAddingSubscriber(queueName);
 
         _subscribersLock.EnterWriteLock();
 
-        var subscriber = new Subscriber(this, queueName, consumer);
+        var subscriber = new Subscriber(this, queueName, consumer, _logger);
         _subscribers.ComputeIfAbsent(queueName, name => [])!.Add(subscriber);
 
         _subscribersLock.ExitWriteLock();
@@ -32,7 +39,7 @@ public sealed partial class Server : IDisposable
         return subscriber;
     }
 
-    public sealed class Subscriber
+    public sealed partial class Subscriber
     {
         private readonly Server _server;
 
@@ -40,11 +47,14 @@ public sealed partial class Server : IDisposable
         private readonly Action<Message> _consumer;
         private bool _ended;
 
-        internal Subscriber(Server server, string queueName, Action<Message> consumer)
+        private readonly ILogger _logger;
+
+        internal Subscriber(Server server, string queueName, Action<Message> consumer, ILogger logger)
         {
             _server = server;
             _queueName = queueName;
             _consumer = consumer;
+            _logger = logger;
         }
 
         [MethodImpl(MethodImplOptions.Synchronized)]
@@ -54,7 +64,8 @@ public sealed partial class Server : IDisposable
 
             Task.Run(() =>
             {
-                Log.Debug("Removing subscriber");
+                LogRemovingSubscriber();
+
                 _server._subscribersLock.EnterWriteLock();
                 try
                 {
@@ -118,6 +129,9 @@ public sealed partial class Server : IDisposable
                 // empty
             }
         }
+
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Removing subscriber")]
+        private partial void LogRemovingSubscriber();
     }
 
     private HashSet<Subscriber> GetSubscribers(string queueName)
@@ -130,23 +144,26 @@ public sealed partial class Server : IDisposable
 
     public Publisher AddPublisher()
     {
-        Log.Debug("Adding publisher");
-        return new Publisher(this);
+        LogAddingPublisher();
+        return new Publisher(this, _logger);
     }
 
-    public sealed class Publisher
+    public sealed partial class Publisher
     {
         private readonly Server _server;
         private bool _closed;
 
-        public Publisher(Server server)
+        private readonly ILogger _logger;
+
+        public Publisher(Server server, ILogger logger)
         {
             _server = server;
+            _logger = logger;
         }
 
         public void Remove()
         {
-            Log.Debug("Removing publisher");
+            LogRemovingPublisher();
             _closed = true;
         }
 
@@ -181,6 +198,9 @@ public sealed partial class Server : IDisposable
 
             return true;
         }
+    
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Removing publisher")]
+        private partial void LogRemovingPublisher();
     }
 
     public Server.RequestHandler? AddRequestHandler(string queueName, Func<RequestHandler.RequestR, TaskCompletionSource<string?>> requestHandler, Action<RequestHandler.ErrorMessage> errorConsumer)
@@ -190,11 +210,11 @@ public sealed partial class Server : IDisposable
             return null;
         }
 
-        Log.Debug($"Adding request handler for {queueName}");
+        LogAddingRequestHandler(queueName);
 
         _requestHandlersLock.EnterWriteLock();
 
-        var handler = new RequestHandler(this, queueName, requestHandler, errorConsumer);
+        var handler = new RequestHandler(this, queueName, requestHandler, errorConsumer, _logger);
         _requestHandlers.ComputeIfAbsent(queueName, name => [])!.Add(handler);
 
         _requestHandlersLock.ExitWriteLock();
@@ -208,7 +228,7 @@ public sealed partial class Server : IDisposable
         _requestHandlersLock.Dispose();
     }
 
-    public sealed class RequestHandler
+    public sealed partial class RequestHandler
     {
         private readonly Server _server;
 
@@ -217,12 +237,15 @@ public sealed partial class Server : IDisposable
         private readonly Action<ErrorMessage> _errorConsumer;
         private bool _ended;
 
-        internal RequestHandler(Server server, string queueName, Func<RequestR, TaskCompletionSource<string?>> requestHandler, Action<ErrorMessage> errorConsumer)
+        private readonly ILogger _logger;
+
+        internal RequestHandler(Server server, string queueName, Func<RequestR, TaskCompletionSource<string?>> requestHandler, Action<ErrorMessage> errorConsumer, ILogger logger)
         {
             _server = server;
             _queueName = queueName;
             _requestHandler = requestHandler;
             _errorConsumer = errorConsumer;
+            _logger = logger;
         }
 
         [MethodImpl(MethodImplOptions.Synchronized)]
@@ -232,7 +255,8 @@ public sealed partial class Server : IDisposable
 
             Task.Run(() =>
             {
-                Log.Debug("Removing handler");
+                LogRemovingHandler();
+
                 _server._requestHandlersLock.EnterWriteLock();
                 try
                 {
@@ -294,6 +318,9 @@ public sealed partial class Server : IDisposable
                 // empty
             }
         }
+    
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Removing handler")]
+        private partial void LogRemovingHandler();
     }
 
     private HashSet<RequestHandler> GetHandlers(string queueName)
@@ -306,24 +333,27 @@ public sealed partial class Server : IDisposable
 
     public RequestSender AddRequestSender()
     {
-        Log.Debug("Adding request sender");
-        return new RequestSender(this);
+        LogAddingRequestSender();
+        return new RequestSender(this, _logger);
     }
 
-    public sealed class RequestSender
+    public sealed partial class RequestSender
     {
         private readonly Server _server;
 
         private bool _closed;
 
-        internal RequestSender(Server server)
+        private readonly ILogger _logger;
+
+        internal RequestSender(Server server, ILogger logger)
         {
             _server = server;
+            _logger = logger;
         }
 
         public void Remove()
         {
-            Log.Debug("Removing request sender");
+            LogRemovingRequestSender();
             _closed = true;
         }
 
@@ -375,6 +405,9 @@ public sealed partial class Server : IDisposable
 
             return null;
         }
+    
+        [LoggerMessage(Level = LogLevel.Debug, Message = "Removing request sender")]
+        private partial void LogRemovingRequestSender();
     }
 
     private static bool ValidateQueueName(string queueName)
@@ -401,4 +434,16 @@ public sealed partial class Server : IDisposable
 
     [GeneratedRegex("^[^A-Za-z0-9]")]
     private static partial Regex GetValitationRegex2();
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Adding subscriber for queue '{QueueName}'")]
+    private partial void LogAddingSubscriber(string QueueName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Adding publisher")]
+    private partial void LogAddingPublisher();
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Adding request handler for queue '{QueueName}'")]
+    private partial void LogAddingRequestHandler(string QueueName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Adding request sender")]
+    private partial void LogAddingRequestSender();
 }

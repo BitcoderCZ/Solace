@@ -1,11 +1,11 @@
-﻿using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Solace.Common.Utils;
 using Solace.StaticData;
 
 namespace Solace.TappablesGenerator;
 
-public class EncounterGenerator
+public sealed partial class EncounterGenerator
 {
     // TODO: make these configurable
     private static readonly int CHANCE_PER_TILE = 4;
@@ -17,13 +17,13 @@ public class EncounterGenerator
 
     private readonly Random _random;
 
-    public EncounterGenerator(StaticData.StaticData staticData)
+    public EncounterGenerator(StaticData.StaticData staticData, ILogger logger)
     {
         _staticData = staticData;
 
         if (_staticData.EncountersConfig.Encounters.Length == 0)
         {
-            Log.Warning("No encounter configs provided");
+            LogNoEncounterConfigsProvided(logger);
         }
 
         _maxDuration = _staticData.EncountersConfig.Encounters.Select(encounterConfig => encounterConfig.Duration).DefaultIfEmpty().Max() * 1000;
@@ -85,4 +85,7 @@ public class EncounterGenerator
 
     private static float YToLat(float y)
         => (float.Atan(float.Sinh((1.0f - y * 2.0f) * float.Pi))) * (180f / float.Pi);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No encounter configs provided")]
+    private static partial void LogNoEncounterConfigsProvided(ILogger logger);
 }

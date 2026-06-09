@@ -1,14 +1,17 @@
-﻿using Serilog;
+﻿using Microsoft.Extensions.Logging;
 
 namespace Solace.ObjectStore.Server;
 
-public class Server
+public sealed partial class Server
 {
     private readonly DataStore _dataStore;
 
-    public Server(DataStore dataStore)
+    private readonly ILogger _logger;
+
+    public Server(DataStore dataStore, ILogger logger)
     {
         _dataStore = dataStore;
+        _logger = logger;
     }
 
     public async Task<string?> StoreAsync(byte[] data)
@@ -16,40 +19,59 @@ public class Server
         try
         {
             string id = await _dataStore.StoreAsync(data);
-            Log.Information($"Stored new object {id}");
+            LogStoredNewObject(id);
             return id;
         }
-        catch (DataStore.DataStoreException ex)
+        catch (DataStore.DataStoreException exception)
         {
-            Log.Error("Could not store object", ex);
+            LogFailedToStoreObject(exception);
             return null;
         }
     }
 
     public async Task<byte[]?> LoadAsync(string id)
     {
-        Log.Information($"Request for object {id}");
+        LogRequestForObject(id);
+
         try
         {
             byte[]? data = await _dataStore.LoadAsync(id);
             if (data is null)
             {
-                Log.Information($"Requested object {id} does not exist");
+                LogRequestedObjectDoesNotExist(id);
             }
 
             return data;
         }
-        catch (DataStore.DataStoreException ex)
+        catch (DataStore.DataStoreException exception)
         {
-            Log.Error($"Could not load object {id}: {ex}");
+            LogFailedToLoadObject(exception, id);
             return null;
         }
     }
 
     public async Task<bool> DeleteAsync(string id)
     {
-        Log.Information($"Request to delete object {id}");
+        LogRequestToDeleteObject(id);
         await _dataStore.DeleteAsync(id);
         return true;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Stored new object '{Id}'")]
+    private partial void LogStoredNewObject(string Id);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to store object")]
+    private partial void LogFailedToStoreObject(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Request for object '{Id}'")]
+    private partial void LogRequestForObject(string Id);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Requested object '{Id}' does not exist")]
+    private partial void LogRequestedObjectDoesNotExist(string Id);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to load object '{Id}'")]
+    private partial void LogFailedToLoadObject(Exception exception, string Id);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Request to delete object '{Id}'")]
+    private partial void LogRequestToDeleteObject(string Id);
 }

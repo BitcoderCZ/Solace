@@ -1,14 +1,15 @@
-﻿using Serilog;
-using System.Buffers;
+﻿using System.Buffers;
 using System.Collections.Concurrent;
 using System.IO.Pipelines;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
+using Solace.Common;
 
 namespace Solace.EventBus.Client;
 
-public sealed class EventBusClient : IAsyncDisposable
+public sealed partial class EventBusClient : IAsyncDisposable
 {
     private readonly TcpClient _tcpClient;
     private readonly NetworkStream _networkStream;
@@ -183,9 +184,10 @@ public sealed class EventBusClient : IAsyncDisposable
                 }
             }
         }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException or SocketException)
+        catch (Exception exception) when (exception is OperationCanceledException or IOException or SocketException)
         {
-            Log.Error(ex, "EventBusClient error");
+            var logger = GlobalLoggerFactory.CreateLogger<EventBusClient>();
+            LogEventBusClientError(logger, exception);
             SetError();
         }
 
@@ -354,4 +356,7 @@ public sealed class EventBusClient : IAsyncDisposable
             return false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "EventBusClient error")]
+    private static partial void LogEventBusClientError(ILogger logger, Exception exception);
 }

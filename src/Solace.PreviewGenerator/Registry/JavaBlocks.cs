@@ -1,14 +1,13 @@
-﻿using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Solace.Common.Utils;
+using Microsoft.Extensions.Logging;
 using Solace.PreviewGenerator.NBT;
 using Solace.PreviewGenerator.Utils;
 
 namespace Solace.PreviewGenerator.Registry;
 
-public static class JavaBlocks
+public static partial class JavaBlocks
 {
     private static readonly Dictionary<int, string> map = [];
     private static readonly Dictionary<string, List<string>> nonVanillaStatesList = [];
@@ -34,7 +33,7 @@ public static class JavaBlocks
         }
     }
 
-    public static void Initialize(string staticData)
+    public static void Initialize(string staticData, ILogger logger)
     {
         if (!_isInitialized)
         {
@@ -42,16 +41,16 @@ public static class JavaBlocks
             {
                 if (!_isInitialized)
                 {
-                    InitializeInternal(staticData);
+                    InitializeInternal(staticData, logger);
                     _isInitialized = true;
                 }
             }
         }
     }
 
-    private static void InitializeInternal(string staticData)
+    private static void InitializeInternal(string staticData, ILogger logger)
     {
-        DataFile.Load(Path.Combine(staticData, "registry", "blocks_java.json"), jToken =>
+        DataFile.Load(Path.Combine(staticData, "registry", "blocks_java.json"), logger, jToken =>
         {
             var jArray = (JsonArray)jToken;
 
@@ -60,11 +59,11 @@ public static class JavaBlocks
                 var element = _element as JsonObject;
                 Debug.Assert(element is not null);
 
-                int id = element["id"]!.GetValue<int>();
-                string name = element["name"]!.GetValue<string>()!;
+                var id = element["id"]!.GetValue<int>();
+                var name = element["name"]!.GetValue<string>()!;
                 if (!map.TryAdd(id, name))
                 {
-                    Log.Warning($"Duplicate Java block ID {id}");
+                    LogDuplicateJavaBlockId(logger, id);
                 }
 
                 try
@@ -72,21 +71,21 @@ public static class JavaBlocks
                     BedrockMapping? bedrockMapping = ReadBedrockMapping((JsonObject)element["bedrock"]!, jArray);
                     if (bedrockMapping is null)
                     {
-                        Log.Debug($"Ignoring Java block {name}");
+                        LogIgnoringJavaBlock(logger, name);
                         continue;
                     }
 
                     bedrockMap[id] = bedrockMapping;
                     bedrockMapByName[name] = bedrockMapping;
                 }
-                catch (BedrockMappingFailException ex)
+                catch (BedrockMappingFailException exception)
                 {
-                    Log.Warning($"Cannot find Bedrock block for Java block {name}: {ex.Message}");
+                    LogCannotFindBedrockBlockForJavaBlock(logger, exception, name);
                 }
             }
         });
 
-        DataFile.Load(Path.Combine(staticData, "registry", "blocks_java_nonvanilla.json"), jToken =>
+        DataFile.Load(Path.Combine(staticData, "registry", "blocks_java_nonvanilla.json"), logger, jToken =>
         {
             var jArray = (JsonArray)jToken;
 
@@ -114,21 +113,21 @@ public static class JavaBlocks
                         BedrockMapping? bedrockMapping = ReadBedrockMapping((JsonObject)stateElement["bedrock"]!, null);
                         if (bedrockMapping is null)
                         {
-                            Log.Debug($"Ignoring Java block {name}");
+                            LogIgnoringJavaBlock(logger, name);
                             continue;
                         }
 
                         bedrockNonVanillaMap[name] = bedrockMapping;
                     }
-                    catch (BedrockMappingFailException ex)
+                    catch (BedrockMappingFailException exception)
                     {
-                        Log.Warning($"Cannot find Bedrock block for Java block {name}: {ex.Message}");
+                        LogCannotFindBedrockBlockForJavaBlock(logger, exception, name);
                     }
                 }
 
                 if (!nonVanillaStatesList.TryAdd(baseName, stateNames))
                 {
-                    Log.Warning($"Duplicate Java non-vanilla block name {baseName}");
+                    LogDuplicateJavaNonVanillaBlockName(logger, baseName);
                 }
             }
         });
@@ -239,7 +238,7 @@ public static class JavaBlocks
                                             stateBuilder.PutInt(key, stateElement.GetValue<int>());
                                         }
                                     }
-                                    
+
                                     builder.PutCompound("states", stateBuilder.Build());
                                 }
 
@@ -452,4 +451,16 @@ public static class JavaBlocks
             }
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Duplicate Java block ID '{Id}'")]
+    private static partial void LogDuplicateJavaBlockId(ILogger logger, int Id);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Ignoring Java block '{Name}'")]
+    private static partial void LogIgnoringJavaBlock(ILogger logger, string Name);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Cannot find Bedrock block for Java block '{Name}'")]
+    private static partial void LogCannotFindBedrockBlockForJavaBlock(ILogger logger, Exception exception, string Name);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Duplicate Java non-vanilla block name '{BaseName}'")]
+    private static partial void LogDuplicateJavaNonVanillaBlockName(ILogger logger, string BaseName);
 }

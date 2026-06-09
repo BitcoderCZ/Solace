@@ -1,21 +1,24 @@
-﻿using Serilog;
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Solace.Common;
 
 namespace Solace.PreviewGenerator.Utils;
 
-public static class DataFile
+public static partial class DataFile
 {
-    public static void Load(string path, Action<JsonNode> consumer)
+    public static void Load(string path, ILogger logger, Action<JsonNode> consumer)
     {
         try
         {
             consumer(Json.Deserialize<JsonNode>(File.ReadAllText(path))!);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Fatal($"Cannot read resource '{path}': {ex}");
-            Log.CloseAndFlush();
+            LogFailedToReadResource(logger, exception, path);
+            throw;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Failed to read resource '{Path}'")]
+    private static partial void LogFailedToReadResource(ILogger logger, Exception exception, string Path);
 }

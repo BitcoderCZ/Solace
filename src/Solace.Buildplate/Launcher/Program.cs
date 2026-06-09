@@ -112,10 +112,11 @@ internal static class Program
 
         Log.Information("Connected to event bus");
 
-        string javaCmd = JavaLocator.Locate(globalLoggerFactory.CreateLogger(nameof(JavaLocator)));
+        string javaCmd = JavaLocator.Locate(GlobalLoggerFactory.CreateLogger(nameof(JavaLocator)));
         var starterLogger = GlobalLoggerFactory.CreateLogger<Starter>();
         var starter = new Starter(eventBusClient, options.EventBusConnectionString, options.PublicAddress, javaCmd, options.BridgeJar, options.ServerTemplateDir, options.FabricJarName, options.ConnectorPluginJar, starterLogger);
-        var instanceManager = await InstanceManager.CreateAsync(eventBusClient, starter);
+        var instanceManagerLogger = GlobalLoggerFactory.CreateLogger<InstanceManager>();
+        var instanceManager = await InstanceManager.CreateAsync(eventBusClient, starter, instanceManagerLogger);
 
         Console.CancelKeyPress += (sender, e) =>
         {

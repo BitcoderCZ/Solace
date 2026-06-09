@@ -1,11 +1,11 @@
-﻿using Serilog;
+﻿using Microsoft.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.StaticData;
 
 namespace Solace.TappablesGenerator;
 
-public class TappableGenerator
+public sealed partial class TappableGenerator
 {
     // TODO: make these configurable
     private static readonly int MIN_COUNT = 1;
@@ -19,13 +19,13 @@ public class TappableGenerator
 
     private readonly Random _random;
 
-    public TappableGenerator(StaticData.StaticData staticData)
+    public TappableGenerator(StaticData.StaticData staticData, ILogger logger)
     {
         _staticData = staticData;
 
         if (_staticData.TappablesConfig.Tappables.Length == 0)
         {
-            Log.Warning("No tappable configs provided");
+            LogNoTappableConfigsProvided(logger);
         }
 
         _random = new Random();
@@ -114,4 +114,7 @@ public class TappableGenerator
 
     private static float YToLat(float y)
         => (float)MathE.ToDegrees(double.Atan(double.Sinh((1.0d - y * 2.0d) * double.Pi)));
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No tappable configs provided")]
+    private static partial void LogNoTappableConfigsProvided(ILogger logger);
 }

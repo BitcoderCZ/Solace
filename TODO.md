@@ -1,6 +1,6 @@
 # TODO
 
-- Logging - Inject Microsoft.Extensions.Logging.ILogger`T via constructors, use Serilog as the backend engine, replace string interpolation with structured templates - assign event id in LoggerMessage
+- Logging - assign event id in LoggerMessage
 - Make sure only 1 instance of the launcher can run at a time (with migrations and stuff it could screw up the db) - lock a file, if fail, log and exit
 - Launcher buildplate preview - liquid rendering
 - Shop management

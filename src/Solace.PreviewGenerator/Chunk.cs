@@ -1,5 +1,5 @@
 ﻿using System.Globalization;
-using Serilog;
+using Microsoft.Extensions.Logging;
 using SharpNBT;
 using Solace.PreviewGenerator.BlockEntity;
 using Solace.PreviewGenerator.NBT;
@@ -8,17 +8,17 @@ using Solace.PreviewGenerator.Utils;
 
 namespace Solace.PreviewGenerator;
 
-internal sealed class Chunk
+internal sealed partial class Chunk
 {
-    public static Chunk? Read(CompoundTag chunkTag)
+    public static Chunk? Read(CompoundTag chunkTag, ILogger logger)
     {
         try
         {
-            return new Chunk(chunkTag);
+            return new Chunk(chunkTag, logger);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error($"Could not read chunk: {ex}");
+            LogFailedToReadCunk(logger, exception);
             return null;
         }
     }
@@ -29,7 +29,7 @@ internal sealed class Chunk
     public readonly int[] Blocks = new int[16 * 256 * 16];
     public readonly NbtMap?[] BlockEntities = new NbtMap[16 * 256 * 16];
 
-    private Chunk(CompoundTag chunkTag)
+    private Chunk(CompoundTag chunkTag, ILogger logger)
     {
         ChunkX = chunkTag.Get<IntTag>("xPos");
         ChunkZ = chunkTag.Get<IntTag>("zPos");
@@ -91,7 +91,7 @@ internal sealed class Chunk
                         {
                             if (alreadyNotifiedMissingBlocks.Add(javaName))
                             {
-                                Log.Warning($"Chunk contained block with no mapping {javaName}");
+                                LogChunkContainedBlockWithNoMapping(logger, javaName);
                             }
                         }
 
@@ -100,7 +100,7 @@ internal sealed class Chunk
                         Blocks[(x * 256 + y + subchunkY * 16) * 16 + z] = bedrockId;
 
                         JavaBlocks.BedrockMapping.BlockEntityR? blockEntityMapping = bedrockMapping is not null && bedrockMapping.BlockEntity is not null ? bedrockMapping.BlockEntity : null;
-                        NbtMap? bedrockBlockEntityData = blockEntityMapping is not null ? BlockEntityTranslator.TranslateBlockEntity(blockEntityMapping, null) : null;
+                        NbtMap? bedrockBlockEntityData = blockEntityMapping is not null ? BlockEntityTranslator.TranslateBlockEntity(blockEntityMapping, null, logger) : null;
                         if (bedrockBlockEntityData is not null)
                         {
                             bedrockBlockEntityData = bedrockBlockEntityData.ToBuilder().PutInt("x", x + ChunkX * 16).PutInt("y", y + subchunkY * 16).PutInt("z", z + ChunkZ * 16).PutBoolean("isMovable", false).Build();
@@ -127,10 +127,10 @@ internal sealed class Chunk
             JavaBlocks.BedrockMapping.BlockEntityR? blockEntityMapping = blockEntityMappings[(x * 256 + y) * 16 + z];
             if (blockEntityMapping is null)
             {
-                Log.Debug($"Ignoring block entity of type {type}");
+                LogIgnoringBlockEntityOfType(logger, type);
             }
 
-            NbtMap? bedrockBlockEntityData = blockEntityMapping is not null ? BlockEntityTranslator.TranslateBlockEntity(blockEntityMapping, blockEntityInfo) : null;
+            NbtMap? bedrockBlockEntityData = blockEntityMapping is not null ? BlockEntityTranslator.TranslateBlockEntity(blockEntityMapping, blockEntityInfo, logger) : null;
             if (bedrockBlockEntityData is not null)
             {
                 bedrockBlockEntityData = bedrockBlockEntityData.ToBuilder().PutInt("x", x + ChunkX * 16).PutInt("y", y).PutInt("z", z + ChunkZ * 16).PutBoolean("isMovable", false).Build();
@@ -217,4 +217,13 @@ internal sealed class Chunk
             StringTag @string => @string.Value,
             _ => throw new ArgumentException($"Unsuported tag type '{tag?.GetType().ToString() ?? "null"}'", nameof(tag)),
         };
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to read chunk")]
+    private static partial void LogFailedToReadCunk(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Chunk contained block with no mapping '{JavaName}'")]
+    private static partial void LogChunkContainedBlockWithNoMapping(ILogger logger, string JavaName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Ignoring block entity of type '{Type}'")]
+    private static partial void LogIgnoringBlockEntityOfType(ILogger logger, string Type);
 }

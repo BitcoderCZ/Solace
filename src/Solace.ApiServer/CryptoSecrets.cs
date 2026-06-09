@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 using BitcoderCZ.Utils;
-using Serilog;
 
 namespace Solace.ApiServer;
 

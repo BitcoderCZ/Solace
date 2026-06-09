@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
 using System.Diagnostics;
 using System.Text;
 using Solace.ApiServer.Types.Buildplates;

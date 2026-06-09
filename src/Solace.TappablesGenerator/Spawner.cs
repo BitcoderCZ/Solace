@@ -1,11 +1,11 @@
-﻿using Serilog;
+﻿using Microsoft.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.EventBus.Client;
 
 namespace Solace.TappablesGenerator;
 
-public class Spawner
+public sealed partial class Spawner
 {
     private static readonly long SPAWN_INTERVAL = 15 * 1000;
 
@@ -14,13 +14,15 @@ public class Spawner
     private readonly EncounterGenerator _encounterGenerator;
     private readonly Publisher _publisher;
 
+    private readonly ILogger _logger;
+
     private readonly int _maxTappableLifetimeIntervals;
 
     private long _spawnCycleTime;
     private int _spawnCycleIndex;
     private readonly Dictionary<int, int> _lastSpawnCycleForTile = [];
 
-    public Spawner(ActiveTiles activeTiles, TappableGenerator tappableGenerator, EncounterGenerator encounterGenerator, Publisher publisher)
+    public Spawner(ActiveTiles activeTiles, TappableGenerator tappableGenerator, EncounterGenerator encounterGenerator, Publisher publisher, ILogger logger)
     {
         _activeTiles = activeTiles;
 
@@ -28,17 +30,19 @@ public class Spawner
         _encounterGenerator = encounterGenerator;
         _publisher = publisher;
 
+        _logger = logger;
+
         _maxTappableLifetimeIntervals = (int)(long.Max(TappableGenerator.GetMaxTappableLifetime(), _encounterGenerator.GetMaxEncounterLifetime()) / SPAWN_INTERVAL + 1);
 
         _spawnCycleTime = U.CurrentTimeMillis();
         _spawnCycleIndex = _maxTappableLifetimeIntervals;
     }
 
-    public static async Task<Spawner> CreateAsync(EventBusClient eventBusClient, ActiveTiles activeTiles, TappableGenerator tappableGenerator, EncounterGenerator encounterGenerator)
+    public static async Task<Spawner> CreateAsync(EventBusClient eventBusClient, ActiveTiles activeTiles, TappableGenerator tappableGenerator, EncounterGenerator encounterGenerator, ILogger logger)
     {
         var publisher = await eventBusClient.AddPublisherAsync();
 
-        return new Spawner(activeTiles, tappableGenerator, encounterGenerator, publisher);
+        return new Spawner(activeTiles, tappableGenerator, encounterGenerator, publisher, logger);
     }
 
     public async Task Run()
@@ -46,15 +50,7 @@ public class Spawner
         long nextTime = U.CurrentTimeMillis() + SPAWN_INTERVAL;
         while (true)
         {
-            try
-            {
-                Thread.Sleep(Math.Max(0, (int)(nextTime - U.CurrentTimeMillis())));
-            }
-            catch (ThreadInterruptedException)
-            {
-                Log.Information("Spawn thread was interrupted, exiting");
-                break;
-            }
+            await Task.Delay(Math.Max(0, (int)(nextTime - U.CurrentTimeMillis())));
 
             nextTime += SPAWN_INTERVAL;
 
@@ -158,12 +154,18 @@ public class Spawner
     {
         if (!await _publisher.PublishAsync("tappables", "tappableSpawn", Json.Serialize(tappables)))
         {
-            Log.Error("Event bus server rejected tappable spawn event");
+            LogEventBusServerRejectedTappableSpawnEvent();
         }
 
         if (!await _publisher.PublishAsync("tappables", "encounterSpawn", Json.Serialize(encounters)))
         {
-            Log.Error("Event bus server rejected encounter spawn event");
+            LogEventBusServerRejectedEncounterSpawnEvent();
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus server rejected tappable spawn event")]
+    private partial void LogEventBusServerRejectedTappableSpawnEvent();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus server rejected encounter spawn event")]
+    private partial void LogEventBusServerRejectedEncounterSpawnEvent();
 }

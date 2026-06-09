@@ -400,7 +400,8 @@ public partial class Program
         using var legacyEarthDb = new SqliteConnection("Data Source=" + legacyDbPath);
         await legacyEarthDb.OpenAsync();
 
-        var migrator = new DatabaseMigrator(earthDb, legacyEarthDb, liveDb);
+        var migratorLogger = GlobalLoggerFactory.CreateLogger<DatabaseMigrator>();
+        var migrator = new DatabaseMigrator(earthDb, legacyEarthDb, liveDb, migratorLogger);
 
         Log.Information($"Begining database migration from '{legacyDbPath}' to '{Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!)}'");
 
