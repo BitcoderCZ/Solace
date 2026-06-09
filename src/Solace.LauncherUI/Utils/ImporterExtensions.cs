@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Serilog;
 using Solace.Buildplate.Model;
 using Solace.BuildplateImporter;
 using Solace.BuildplateRenderer;
@@ -21,7 +20,7 @@ public static class ImporterExtensions
 {
     extension(Importer)
     {
-        public static async Task<Importer> CreateFromSettings(Settings settings, EarthDbContext earthDb, Serilog.ILogger logger, bool createEventBus = true, bool ownsEarthDb = false)
+        public static async Task<Importer> CreateFromSettings(Settings settings, EarthDbContext earthDb, ILogger logger, bool createEventBus = true, bool ownsEarthDb = false)
         {
             var eventBus = createEventBus ? await EventBusClient.ConnectAsync($"localhost:{settings.EventBusPort}") : null;
             var objectStore = await ObjectStoreClient.ConnectAsync($"localhost:{settings.ObjectStorePort}");
@@ -62,7 +61,7 @@ public static class ImporterExtensions
 
             if (template is null)
             {
-                importer.Logger.Warning($"Template {templateId} does not exist");
+                importer.LogTemplateNotFound(templateId);
                 return null;
             }
 
@@ -70,7 +69,7 @@ public static class ImporterExtensions
 
             if (worldDataRaw is null)
             {
-                importer.Logger.Error($"Could not get world data for template '{templateId}'");
+                importer.LogTemplateServerDataLoadError(templateId);
                 return null;
             }
 
@@ -135,7 +134,7 @@ public static class ImporterExtensions
 
             if (buildplate is null)
             {
-                importer.Logger.Warning($"Player buildplate {buildplateId} does not exist");
+                importer.LogBuildplateNotFound(accountId, buildplateId);
                 return null;
             }
 
@@ -143,7 +142,7 @@ public static class ImporterExtensions
 
             if (worldDataRaw is null)
             {
-                importer.Logger.Error($"Could not get world data for buildplate '{buildplate}'");
+                importer.LogBuildplateServerDataLoadError(accountId, buildplateId);
                 return null;
             }
 

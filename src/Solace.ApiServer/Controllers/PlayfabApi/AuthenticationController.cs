@@ -11,7 +11,8 @@ namespace Solace.ApiServer.Controllers.PlayfabApi;
 [Route("20CA2.playfabapi.com/Authentication")]
 internal sealed class AuthenticationController : LoginServerControllerBase
 {
-    public AuthenticationController(CryptoSecrets cryptoSecrets) : base(cryptoSecrets)
+    public AuthenticationController(CryptoSecrets cryptoSecrets, ILogger<AuthenticationController> logger)
+        : base(cryptoSecrets, logger)
     {
     }
 

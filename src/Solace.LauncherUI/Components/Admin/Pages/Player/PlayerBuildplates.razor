@@ -17,6 +17,7 @@
 @inject NavigationManager NavManager
 @inject ServerManager ServerManager
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject ILogger<PlayerBuildplates> Logger
 
 <PageTitle>Player Buildplates - Solace</PageTitle>
 
@@ -533,7 +534,7 @@ BuildplateLauncher.ExeName))
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, ownsEarthDb: true);
+            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, ownsEarthDb: true);
 
             var buildplateIdNullable = await importer.AddBuidplateToPlayer(template.Id, AccountId, default);
             if (buildplateIdNullable is null)
@@ -640,7 +641,7 @@ BuildplateLauncher.ExeName))
 
     private async Task<bool> RemoveBuildplate(Guid id)
     {
-        await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, createEventBus: false, ownsEarthDb: true);
+        await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, createEventBus: false, ownsEarthDb: true);
 
         return await importer.RemoveBuildplateFromPlayer(id, AccountId, default);
     }
@@ -725,7 +726,7 @@ BuildplateLauncher.ExeName))
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, ownsEarthDb: true);
+            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, ownsEarthDb: true);
 
             if (!await importer.RegeneratePlayerBuildplatePreviewAsync(AccountId, bp.Id, default))
             {

@@ -15,8 +15,8 @@ internal sealed partial class ProfileController : LoginServerControllerBase
 {
     private readonly EarthDbContext _dbContext;
 
-    public ProfileController(EarthDbContext context, CryptoSecrets cryptoSecrets)
-        : base(cryptoSecrets)
+    public ProfileController(EarthDbContext context, CryptoSecrets cryptoSecrets, ILogger<ProfileController> logger)
+        : base(cryptoSecrets, logger)
     {
         _dbContext = context;
     }

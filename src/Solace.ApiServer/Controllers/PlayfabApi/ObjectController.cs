@@ -24,7 +24,8 @@ internal sealed class ObjectController : LoginServerControllerBase
     private static readonly string[] DataArray1 = ["#ff2f1f0f", "#0", "#0", "#0"];
     private static readonly string[] DataArray2 = ["#0", "#0", "#ff774235", "#0"];
 
-    public ObjectController(CryptoSecrets cryptoSecrets) : base(cryptoSecrets)
+    public ObjectController(CryptoSecrets cryptoSecrets, ILogger<ObjectController> logger)
+        : base(cryptoSecrets, logger)
     {
     }
 

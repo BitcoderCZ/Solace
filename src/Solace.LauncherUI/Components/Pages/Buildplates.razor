@@ -30,6 +30,7 @@
 @inject ServerManager ServerManager
 @inject IJSRuntime JSRuntime
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject ILogger<Buildplates> Logger
 
 <PageTitle>Buildplates - Solace</PageTitle>
 
@@ -446,7 +447,7 @@
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, ownsEarthDb: true);
+            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, ownsEarthDb: true);
 
             if (await importer.RegenerateTemplatePreviewAsync(bp.Id, default) is null)
             {
@@ -548,7 +549,7 @@
                 _isDeleting = true;
                 StateHasChanged();
 
-                await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, createEventBus: false, ownsEarthDb: true);
+                await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, createEventBus: false, ownsEarthDb: true);
 
                 if (!await importer.RemoveTemplateAsync(_bpToDelete.Id, _removeTemplateFromPlayers, default))
                 {
@@ -673,7 +674,7 @@
 
                     await using var eventBus = await EventBusClient.ConnectAsync($"localhost:{Settings.Instance.EventBusPort}");
 
-                    await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), eventBus, objectStore, Log.Logger)
+                    await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), eventBus, objectStore, Logger)
                     {
                         OwnsEarthDb = false,
                         OwnsEventBusClient = false,

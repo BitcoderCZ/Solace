@@ -12,10 +12,12 @@ internal sealed class UserController : SolaceControllerBase
     private static Config Config => Program.config;
 
     private readonly CryptoSecrets _cryptoSecrets;
+    private readonly ILogger<UserController> _logger;
 
-    public UserController(CryptoSecrets cryptoSecrets)
+    public UserController(CryptoSecrets cryptoSecrets, ILogger<UserController> logger)
     {
         _cryptoSecrets = cryptoSecrets;
+        _logger = logger;
     }
 
     public sealed record AuthenticateRequest(
@@ -41,7 +43,7 @@ internal sealed class UserController : SolaceControllerBase
     [HttpPost]
     public Results<ContentHttpResult, UnauthorizedHttpResult> Authenticate([FromBody] AuthenticateRequest request)
     {
-        var ticket = JwtUtils.Verify<Tokens.Shared.XboxTicketToken>(request.Properties.RpsTicket, _cryptoSecrets.LoginXboxTokenSecret)?.Data;
+        var ticket = JwtUtils.Verify<Tokens.Shared.XboxTicketToken>(request.Properties.RpsTicket, _cryptoSecrets.LoginXboxTokenSecret, _logger)?.Data;
 
         if (ticket is null)
         {

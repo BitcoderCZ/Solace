@@ -22,6 +22,7 @@
 @inject ServerManager ServerManager
 @inject IDbContextFactory<ApplicationDbContext> ApplicationDbFactory
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject ILogger<BuildplatePreview> Logger
 @implements IAsyncDisposable
 
 <div @ref="_previewContainer" class="bg-dark text-secondary d-flex align-items-center justify-content-center position-relative preview-container" style="height: 220px; overflow: hidden;">
@@ -210,7 +211,7 @@
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Log.Logger, createEventBus: false, ownsEarthDb: true);
+            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, createEventBus: false, ownsEarthDb: true);
 
             await using var dbContext = await ApplicationDbFactory.CreateDbContextAsync();
             var previewData = IsTemplate

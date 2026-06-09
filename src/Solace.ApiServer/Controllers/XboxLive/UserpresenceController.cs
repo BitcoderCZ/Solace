@@ -8,7 +8,8 @@ namespace Solace.ApiServer.Controllers.XboxLive;
 [Route("userpresence.xboxlive.com/users")]
 internal sealed partial class UserpresenceController : LoginServerControllerBase
 {
-    public UserpresenceController(CryptoSecrets cryptoSecrets) : base(cryptoSecrets)
+    public UserpresenceController(CryptoSecrets cryptoSecrets, ILogger<UserpresenceController> logger)
+        : base(cryptoSecrets, logger)
     {
     }
 

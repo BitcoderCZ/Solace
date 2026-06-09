@@ -13,10 +13,12 @@ internal sealed class XstsController : SolaceControllerBase
     private static Config Config => Program.config;
 
     private readonly CryptoSecrets _cryptoSecrets;
+    private readonly ILogger<XstsController> _logger;
 
-    public XstsController(CryptoSecrets cryptoSecrets)
+    public XstsController(CryptoSecrets cryptoSecrets, ILogger<XstsController> logger)
     {
         _cryptoSecrets = cryptoSecrets;
+        _logger = logger;
     }
 
     internal sealed record AuthenticateRequest(
@@ -48,9 +50,9 @@ internal sealed class XstsController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        var deviceTokenAuth = JwtUtils.Verify<Tokens.Xbox.AuthToken>(request.Properties.DeviceToken, _cryptoSecrets.LiveAuthTokenSecret)?.Data;
-        var titleTokenAuth = JwtUtils.Verify<Tokens.Xbox.AuthToken>(request.Properties.TitleToken, _cryptoSecrets.LiveAuthTokenSecret)?.Data;
-        var userTokenAuth = JwtUtils.Verify<Tokens.Xbox.AuthToken>(request.Properties.UserTokens[0], _cryptoSecrets.LiveAuthTokenSecret)?.Data;
+        var deviceTokenAuth = JwtUtils.Verify<Tokens.Xbox.AuthToken>(request.Properties.DeviceToken, _cryptoSecrets.LiveAuthTokenSecret, _logger)?.Data;
+        var titleTokenAuth = JwtUtils.Verify<Tokens.Xbox.AuthToken>(request.Properties.TitleToken, _cryptoSecrets.LiveAuthTokenSecret, _logger)?.Data;
+        var userTokenAuth = JwtUtils.Verify<Tokens.Xbox.AuthToken>(request.Properties.UserTokens[0], _cryptoSecrets.LiveAuthTokenSecret, _logger)?.Data;
 
         if (deviceTokenAuth is not Tokens.Xbox.DeviceToken || titleTokenAuth is not Tokens.Xbox.TitleToken || userTokenAuth is not Tokens.Xbox.UserToken userToken)
         {

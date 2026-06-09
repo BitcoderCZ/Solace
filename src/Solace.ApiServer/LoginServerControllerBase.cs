@@ -8,12 +8,15 @@ namespace Solace.ApiServer;
 [ApiController]
 internal abstract class LoginServerControllerBase : SolaceControllerBase
 {
-    protected LoginServerControllerBase(CryptoSecrets cryptoSecrets)
+    protected LoginServerControllerBase(CryptoSecrets cryptoSecrets, ILogger logger)
     {
         CryptoSecrets = cryptoSecrets;
+        Logger = logger;
     }
 
     protected CryptoSecrets CryptoSecrets { get; }
+
+    protected ILogger Logger { get; }
 
     protected Union<Tokens.Xbox.XapiToken, Results<UnauthorizedHttpResult, BadRequest>> XboxLiveAuth()
     {
@@ -24,7 +27,7 @@ internal abstract class LoginServerControllerBase : SolaceControllerBase
             return (Results<UnauthorizedHttpResult, BadRequest>)TypedResults.BadRequest();
         }
 
-        var token = JwtUtils.Verify<Tokens.Xbox.XapiToken>(authValue.TokenString, CryptoSecrets.LiveXapiTokenSecret)?.Data;
+        var token = JwtUtils.Verify<Tokens.Xbox.XapiToken>(authValue.TokenString, CryptoSecrets.LiveXapiTokenSecret, Logger)?.Data;
 
         if (token is null || token.UserId != authValue.UserId)
         {
@@ -41,7 +44,7 @@ internal abstract class LoginServerControllerBase : SolaceControllerBase
             return (Results<ForbidHttpResult, BadRequest>)TypedResults.BadRequest();
         }
 
-        var token = JwtUtils.Verify<Tokens.Playfab.EntityToken>(tokenString[0] ?? "", CryptoSecrets.PlayfabEntityTokenSecret)?.Data;
+        var token = JwtUtils.Verify<Tokens.Playfab.EntityToken>(tokenString[0] ?? "", CryptoSecrets.PlayfabEntityTokenSecret, Logger)?.Data;
         if (token is null)
         {
             return (Results<ForbidHttpResult, BadRequest>)TypedResults.Forbid();

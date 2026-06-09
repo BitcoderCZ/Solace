@@ -61,7 +61,7 @@ internal sealed partial class SigninController : SolaceControllerBase
 
         if (Guid.TryParse(userIdString, out var userId))
         {
-            var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(jwt.ToString(), _cryptoSecrets.PlayfabSessionTicketSecret);
+            var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(jwt.ToString(), _cryptoSecrets.PlayfabSessionTicketSecret, _logger);
 
             if (token is null)
             {

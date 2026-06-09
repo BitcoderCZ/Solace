@@ -11,8 +11,8 @@ internal sealed class AccountsController : LoginServerControllerBase
 {
     private readonly EarthDbContext _dbContext;
 
-    public AccountsController(EarthDbContext context, CryptoSecrets cryptoSecrets)
-        : base(cryptoSecrets)
+    public AccountsController(EarthDbContext context, CryptoSecrets cryptoSecrets, ILogger<AccountsController> logger)
+        : base(cryptoSecrets, logger)
     {
         _dbContext = context;
     }

@@ -18,11 +18,13 @@ internal sealed partial class LoginController : SolaceControllerBase
 
     private readonly EarthDbContext _dbContext;
     private readonly CryptoSecrets _cryptoSecrets;
+    private readonly ILogger<LoginController> _logger;
 
-    public LoginController(EarthDbContext context, CryptoSecrets cryptoSecrets)
+    public LoginController(EarthDbContext context, CryptoSecrets cryptoSecrets, ILogger<LoginController> logger)
     {
         _dbContext = context;
         _cryptoSecrets = cryptoSecrets;
+        _logger = logger;
     }
 
     private sealed record LoginWithCustomIDRequest(
@@ -82,7 +84,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        var xboxToken = JwtUtils.Verify<Tokens.Shared.PlayfabXboxToken>(authValue.TokenString, _cryptoSecrets.LivePlayfabTokenSecret);
+        var xboxToken = JwtUtils.Verify<Tokens.Shared.PlayfabXboxToken>(authValue.TokenString, _cryptoSecrets.LivePlayfabTokenSecret, _logger);
 
         if (xboxToken is null || xboxToken.Data.UserId != authValue.UserId)
         {

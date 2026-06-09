@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Serilog;
 using Solace.Common.Utils;
 using Solace.LauncherUI.Programs;
 using Solace.LauncherUI.Utils;
@@ -10,13 +9,13 @@ public sealed class ServerComponent
 {
     public string Name { get; }
     public string ExeName { get; }
-    public Func<Settings, Serilog.ILogger, Process?> StartAction { get; }
+    public Func<Settings, ILogger, Process?> StartAction { get; }
     public int StartupDelayMs { get; }
     public Func<Settings, bool> IsEnabled { get; }
 
     public ServerStatus Status { get; set; } = ServerStatus.Offline;
 
-    public ServerComponent(string name, string exeName, Func<Settings, Serilog.ILogger, Process?> startAction, int startupDelayMs = 0, Func<Settings, bool>? isEnabled = null)
+    public ServerComponent(string name, string exeName, Func<Settings, ILogger, Process?> startAction, int startupDelayMs = 0, Func<Settings, bool>? isEnabled = null)
     {
         Name = name;
         ExeName = exeName;
@@ -26,7 +25,7 @@ public sealed class ServerComponent
     }
 }
 
-public sealed class ServerManager : IDisposable
+public sealed partial class ServerManager : IDisposable
 {
     public event Action? OnStatusChanged;
 
@@ -59,8 +58,12 @@ public sealed class ServerManager : IDisposable
 
     private CancellationTokenSource? _operationTokenSource;
 
-    public ServerManager()
+    private readonly ILogger<ServerManager> _logger;
+
+    public ServerManager(ILogger<ServerManager> logger)
     {
+        _logger = logger;
+
         Components =
         [
             new("Event Bus", EventBusServer.ExeName, EventBusServer.Run),
@@ -188,7 +191,7 @@ public sealed class ServerManager : IDisposable
         {
             if (StartLocked)
             {
-                Log.Logger.Warning("EnsureComponentsOnline blocked because server start is locked.");
+                LogEnsureComponentsOnlineBlockedStartLocked();
                 return false;
             }
 
@@ -225,7 +228,6 @@ public sealed class ServerManager : IDisposable
             }
         }
 
-        var logger = Log.Logger;
         var settings = Settings.Instance;
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)); // Safety timeout
 
@@ -241,14 +243,14 @@ public sealed class ServerManager : IDisposable
                 bool shouldStart = reservedToStart.Contains(comp);
                 if (shouldStart)
                 {
-                    logger.Debug($"Page-level initialization: Starting {comp.Name}");
+                    LogSelectiveStartupStartingComponent(comp.Name);
                 }
                 else
                 {
-                    logger.Debug($"Page-level initialization: Waiting for {comp.Name} to become online");
+                    LogSelectiveStartupWaitingForComponent(comp.Name);
                 }
 
-                var process = shouldStart ? comp.StartAction(settings, logger) : null;
+                var process = shouldStart ? comp.StartAction(settings, _logger) : null;
                 if (comp.StartupDelayMs > 0)
                 {
                     await Task.Delay(comp.StartupDelayMs, cts.Token);
@@ -263,11 +265,11 @@ public sealed class ServerManager : IDisposable
                     comp.Status = ServerStatus.Offline;
                     if (process is not null && process.HasExited)
                     {
-                        logger.Error($"{comp.Name} process exited immediately during selective startup.");
+                        LogProcessExited(comp.Name);
                     }
                     else
                     {
-                        logger.Error($"{comp.Name} failed to start during page-level initialization.");
+                        LogProcessFailedToStart(comp.Name);
                     }
                 }
 
@@ -276,12 +278,12 @@ public sealed class ServerManager : IDisposable
         }
         catch (OperationCanceledException)
         {
-            logger.Warning("Selective component startup cancelled.");
+            // logger.Warning("Selective component startup cancelled.");
             return false;
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            logger.Error(ex, "Error during selective component startup");
+            LogSelectiveStartupFail(exception);
             return false;
         }
         finally
@@ -307,7 +309,7 @@ public sealed class ServerManager : IDisposable
 
         try
         {
-            await StartInternal(Log.Logger, cancellationToken);
+            await StartInternal(cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -340,7 +342,7 @@ public sealed class ServerManager : IDisposable
             comp.Status = ServerStatus.Stopping;
             OnStatusChanged?.Invoke();
 
-            await StopProgram(comp.ExeName, Log.Logger, cancellationToken);
+            await StopProgram(comp.ExeName, _logger, cancellationToken);
 
             comp.Status = ServerStatus.Offline;
             OnStatusChanged?.Invoke();
@@ -367,7 +369,7 @@ public sealed class ServerManager : IDisposable
         {
             if (StartLocked)
             {
-                Log.Logger.Warning("Restart aborted because server start is locked after stop.");
+                // Log.Logger.Warning("Restart aborted because server start is locked after stop.");
                 return;
             }
         }
@@ -390,7 +392,7 @@ public sealed class ServerManager : IDisposable
             comp.Status = ServerStatus.Stopping;
             OnStatusChanged?.Invoke();
 
-            await StopProgram(comp.ExeName, Log.Logger, cancellationToken);
+            await StopProgram(comp.ExeName, _logger, cancellationToken);
 
             comp.Status = ServerStatus.Offline;
             OnStatusChanged?.Invoke();
@@ -404,7 +406,7 @@ public sealed class ServerManager : IDisposable
     public void Dispose()
         => _operationTokenSource?.Dispose();
 
-    private async Task StartInternal(Serilog.ILogger logger, CancellationToken cancellationToken)
+    private async Task StartInternal(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var settings = Settings.Instance;
@@ -413,15 +415,15 @@ public sealed class ServerManager : IDisposable
         {
             if (StartLocked)
             {
-                logger.Warning("Start prevented because server start is locked.");
+                // logger.Warning("Start prevented because server start is locked.");
                 Status = ServerStatus.Offline;
                 return;
             }
         }
 
-        if (!await FileChecker.CheckAsync(settings, logger, cancellationToken))
+        if (!await FileChecker.CheckAsync(settings, _logger, cancellationToken))
         {
-            logger.Error("File validation failed");
+            LogFileValidationFailed();
             Status = ServerStatus.Offline;
             return;
         }
@@ -440,14 +442,14 @@ public sealed class ServerManager : IDisposable
 
             if (comp.Status is ServerStatus.Online)
             {
-                logger.Debug($"{comp.Name} is already running.");
+                LogComponentIsAlreadyRunning(comp.Name);
                 continue;
             }
 
             comp.Status = ServerStatus.Starting;
             OnStatusChanged?.Invoke();
 
-            var process = comp.StartAction(settings, logger);
+            var process = comp.StartAction(settings, _logger);
             if (comp.StartupDelayMs > 0)
             {
                 await Task.Delay(comp.StartupDelayMs, cancellationToken);
@@ -463,18 +465,18 @@ public sealed class ServerManager : IDisposable
                 comp.Status = ServerStatus.Offline;
                 if (process is not null && process.HasExited)
                 {
-                    logger.Error($"{comp.Name} process exited immediately after launch.");
+                    LogProcessExited(comp.Name);
                 }
                 else
                 {
-                    logger.Error($"{comp.Name} failed to start.");
+                    LogProcessFailedToStart(comp.Name);
                 }
             }
 
             OnStatusChanged?.Invoke();
         }
 
-        logger.Information("Waiting for programs to stabilize");
+        LogWaitingForProgramsToStabilize();
         await Task.Delay(7500, cancellationToken);
 
         bool error = false;
@@ -487,7 +489,7 @@ public sealed class ServerManager : IDisposable
 
             if (!ProcessUtils.GetProgramProcesses(comp.ExeName).Any())
             {
-                logger.Error($"It was detected that {comp.Name} crashed/exited, make sure all options are set correctly, look into logs/{comp.Name}/logxxx for more info");
+                LogProgramCrashed(comp.Name);
                 comp.Status = ServerStatus.Offline;
                 error = true;
             }
@@ -501,27 +503,33 @@ public sealed class ServerManager : IDisposable
 
         if (!error)
         {
-            logger.Information("All required programs have (most likely) running successfully");
+            LogAllProgramsStarted();
         }
     }
 
-    private static async Task StopProgram(string name, Serilog.ILogger logger, CancellationToken cancellationToken)
+    private static async Task StopProgram(string name, ILogger logger, CancellationToken cancellationToken)
     {
-        logger.Information($"Stopping {name}");
+        LogStoppingProgram(logger, name);
 
         int stoppedCount = 0;
         foreach (var process in ProcessUtils.GetProgramProcesses(name))
         {
-            await process.StopGracefullyOrKillAndWaitAsync(3000, cancellationToken);
+            await process.StopGracefullyOrKillAndWaitAsync(3000, logger, cancellationToken);
             stoppedCount++;
         }
 
-        logger.Information(stoppedCount switch
+        switch (stoppedCount)
         {
-            0 => $"No {name} processes found",
-            1 => $"Stopped 1 {name} process",
-            _ => $"Stopped {stoppedCount} {name} processes",
-        });
+            case 0:
+                LogNoProcessesFound(logger, name);
+                break;
+            case 1:
+                LogStoppedOneProcess(logger, name);
+                break;
+            default:
+                LogStoppedXProcesses(logger, name, stoppedCount);
+                break;
+        }
     }
 
     private CancellationToken InitOperation(CancellationToken cancellationToken)
@@ -563,6 +571,51 @@ public sealed class ServerManager : IDisposable
             }
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "EnsureComponentsOnline blocked because server start is locked")]
+    private partial void LogEnsureComponentsOnlineBlockedStartLocked();
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Selective startup: Starting {ComponentName}")]
+    private partial void LogSelectiveStartupStartingComponent(string ComponentName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Selective startup: Waiting for {ComponentName} to become online")]
+    private partial void LogSelectiveStartupWaitingForComponent(string ComponentName);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "{ComponentName} process exited immediately after launch")]
+    private partial void LogProcessExited(string ComponentName);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "{ComponentName} failed to start")]
+    private partial void LogProcessFailedToStart(string ComponentName);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error during selective component startup")]
+    private partial void LogSelectiveStartupFail(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "File validation failed")]
+    private partial void LogFileValidationFailed();
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{ComponentName} is already running")]
+    private partial void LogComponentIsAlreadyRunning(string ComponentName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Waiting for programs to stabilize")]
+    private partial void LogWaitingForProgramsToStabilize();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "It was detected that {ComponentName} crashed/exited, make sure all options are set correctly, look into logs/{ComponentName}/logxxx for more info")]
+    private partial void LogProgramCrashed(string ComponentName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "All required programs have (most likely) running successfully")]
+    private partial void LogAllProgramsStarted();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Stopping {ComponentName}")]
+    private static partial void LogStoppingProgram(ILogger logger, string ComponentName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "No {ComponentName} processes found")]
+    private static partial void LogNoProcessesFound(ILogger logger, string ComponentName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Stopped 1 {ComponentName} process")]
+    private static partial void LogStoppedOneProcess(ILogger logger, string ComponentName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Stopped {StoppedCount} {ComponentName} processes")]
+    private static partial void LogStoppedXProcesses(ILogger logger, string ComponentName, int StoppedCount);
 }
 
 public enum ServerStatus

@@ -16,10 +16,12 @@ internal sealed partial class ClientController : SolaceControllerBase
     private static Config Config => Program.config;
 
     private readonly CryptoSecrets _cryptoSecrets;
+    private readonly ILogger<ClientController> _logger;
 
-    public ClientController(CryptoSecrets cryptoSecrets)
+    public ClientController(CryptoSecrets cryptoSecrets, ILogger<ClientController> logger)
     {
         _cryptoSecrets = cryptoSecrets;
+        _logger = logger;
     }
 
     private sealed record GetUserPublisherDataRequest(
@@ -59,7 +61,7 @@ internal sealed partial class ClientController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(tokenString, _cryptoSecrets.PlayfabSessionTicketSecret);
+        var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(tokenString, _cryptoSecrets.PlayfabSessionTicketSecret, _logger);
         if (token is null)
         {
             return TypedResults.Forbid();
@@ -128,7 +130,7 @@ internal sealed partial class ClientController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(tokenString, _cryptoSecrets.PlayfabSessionTicketSecret);
+        var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(tokenString, _cryptoSecrets.PlayfabSessionTicketSecret, _logger);
         if (token is null)
         {
             return TypedResults.Forbid();

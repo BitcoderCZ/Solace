@@ -16,18 +16,20 @@ internal sealed class CdnTileController : SolaceControllerBase
     private readonly EarthDbContext _earthDb;
     private readonly EventBusClient _eventBus;
     private readonly ObjectStoreClient _objectStore;
+    private readonly ILogger<CdnTileController> _logger;
 
-    public CdnTileController(EarthDbContext earthDb, EventBusClient eventBus, ObjectStoreClient objectStore)
+    public CdnTileController(EarthDbContext earthDb, EventBusClient eventBus, ObjectStoreClient objectStore, ILogger<CdnTileController> logger)
     {
         _earthDb = earthDb;
         _eventBus = eventBus;
         _objectStore = objectStore;
+        _logger = logger;
     }
 
     [HttpGet]
     public async Task<Results<EmptyHttpResult, NotFound>> GetTile(int _, int tilePos1, int tilePos2, CancellationToken cancellationToken) // _ used because we dont care :|
     {
-        if (!await TileUtils.TryWriteTile(tilePos1, tilePos2, Response.Body, _earthDb, _eventBus, _objectStore, cancellationToken))
+        if (!await TileUtils.TryWriteTile(tilePos1, tilePos2, Response.Body, _earthDb, _eventBus, _objectStore, _logger, cancellationToken))
         {
             return TypedResults.NotFound();
         }

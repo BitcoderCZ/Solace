@@ -898,7 +898,7 @@ public sealed partial class Instance
                 bool useShellExecute = true;
                 bool redirect = false;
 
-                _serverProcess = new ConsoleProcess(_javaCmd, useShellExecute: useShellExecute, redirect: redirect, openInNewWindow: true);
+                _serverProcess = new ConsoleProcess(_javaCmd, _logger, useShellExecute: useShellExecute, redirect: redirect, openInNewWindow: true);
 
                 if (redirect && !useShellExecute)
                 {
@@ -952,7 +952,7 @@ public sealed partial class Instance
                 bool useShellExecute = true;
                 bool redirect = false;
 
-                _bridgeProcess = new ConsoleProcess(_javaCmd, useShellExecute: useShellExecute, redirect: redirect, openInNewWindow: true);
+                _bridgeProcess = new ConsoleProcess(_javaCmd, _logger, useShellExecute: useShellExecute, redirect: redirect, openInNewWindow: true);
                 if (redirect && !useShellExecute)
                 {
                     _bridgeProcess.StandartTextReceived += (sender, e) =>
