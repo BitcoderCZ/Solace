@@ -16,6 +16,7 @@ using Solace.DB.Models;
 using Solace.DB;
 using System.Runtime.InteropServices;
 using static Solace.Common.Constants.AccountConstants;
+using Solace.DB.Utils;
 
 namespace Solace.ApiServer.Controllers.Live;
 
@@ -117,29 +118,29 @@ internal sealed partial class LoginController : SolaceControllerBase
 
         Log.Debug($"Register attempt: Username: {username}, First name: {firstName}, Last name: {lastName}");
 
-        if (string.IsNullOrWhiteSpace(username) || username.Length < MinUsernameLength || username.Length > MaxUsernameLength)
+        if (string.IsNullOrWhiteSpace(username) || username.Length < UsernameLengthMin || username.Length > UsernameLengthMax)
         {
-            return TypedResults.BadRequest($"Username must be {MinUsernameLength}-{MaxUsernameLength} characters long");
+            return TypedResults.BadRequest($"Username must be {UsernameLengthMin}-{UsernameLengthMax} characters long");
         }
 
-        if (string.IsNullOrWhiteSpace(password) || password.Length < MinPasswordLength || password.Length > MaxPasswordLength)
+        if (string.IsNullOrWhiteSpace(password) || password.Length < PasswordLengthMin || password.Length > PasswordLengthMax)
         {
-            return TypedResults.BadRequest($"Password must be {MinPasswordLength}-{MaxPasswordLength} characters long");
+            return TypedResults.BadRequest($"Password must be {PasswordLengthMin}-{PasswordLengthMax} characters long");
         }
 
-        if (!string.IsNullOrWhiteSpace(firstName) && (firstName.Length < MinNameLength || firstName.Length > MaxNameLength))
+        if (!string.IsNullOrWhiteSpace(firstName) && (firstName.Length < NameLengthMin || firstName.Length > NameLengthMax))
         {
-            return TypedResults.BadRequest($"First name must be {MinNameLength}-{MaxNameLength} characters long");
+            return TypedResults.BadRequest($"First name must be {NameLengthMin}-{NameLengthMax} characters long");
         }
 
-        if (!string.IsNullOrWhiteSpace(lastName) && (lastName.Length < MinNameLength || lastName.Length > MaxNameLength))
+        if (!string.IsNullOrWhiteSpace(lastName) && (lastName.Length < NameLengthMin || lastName.Length > NameLengthMax))
         {
-            return TypedResults.BadRequest($"Last name must be {MinNameLength}-{MaxNameLength} characters long");
+            return TypedResults.BadRequest($"Last name must be {NameLengthMin}-{NameLengthMax} characters long");
         }
 
         if (!GetUsernameRegex().IsMatch(username))
         {
-            return TypedResults.BadRequest("Username must contain only: lowercase letters, numbers, underscore and colon"); // keep in sync with GetUsernameRegex
+            return TypedResults.BadRequest($"Username must contain only: {UsernameAllowedCharacters}"); // keep in sync with GetUsernameRegex
         }
 
         if (await _earthDb.Accounts
@@ -165,8 +166,16 @@ internal sealed partial class LoginController : SolaceControllerBase
         account.LastName = lastName;
         account.PasswordSalt = passwordSalt;
         account.PasswordHash = paswordHash;
-
-        await _earthDb.SaveChangesAsync(cancellationToken);
+        
+        try
+        {
+            await _earthDb.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.IsUniqueConstraintViolation)
+        {
+            Log.Debug("Concurrency conflict hit for username '{Username}'", username);
+            return TypedResults.BadRequest("Account with the specified username already exists");
+        }
 
         Log.Information($"Account created: {username} ({userId})");
 
@@ -837,15 +846,6 @@ internal sealed partial class LoginController : SolaceControllerBase
         return new Guid(usernameHash[..16], false);
     }
 
-    private static byte[] HashPassword(string password, byte[] salt)
-    {
-        Debug.Assert(password.Length <= 32);
-
-        byte[] passwordUTF8 = Encoding.UTF8.GetBytes(password);
-
-        return Org.BouncyCastle.Crypto.Generators.SCrypt.Generate(passwordUTF8, salt, 16384, 8, 1, 64);
-    }
-
     private static string DoAESEncryption(byte[] sessionKey, string nonceBase64, string plainText)
     {
         byte[] nonce = Convert.FromBase64String(nonceBase64);
@@ -891,10 +891,6 @@ internal sealed partial class LoginController : SolaceControllerBase
 
         return Convert.ToBase64String(cipherText);
     }
-
-    // keep in sync with Register
-    [GeneratedRegex("^[a-z0-9_:]+$", RegexOptions.CultureInvariant)]
-    private partial Regex GetUsernameRegex();
 
     [GeneratedRegex("&da=([^&]*)")]
     private partial Regex GetDeviceDATokenStringRegex();
