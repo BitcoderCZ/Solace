@@ -2,9 +2,12 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
+@using System.Linq
 @using Solace.DB
 @using Solace.DB.Utils
+@using Solace.BuildplateRenderer
 @using Solace.LauncherUI.Data
+@using Solace.LauncherUI.Utils
 @using System.ComponentModel.DataAnnotations
 @using System.Diagnostics
 @using System.Security.Cryptography
@@ -38,7 +41,7 @@
         {
             @foreach (var account in LinkedAccountsList)
             {
-                <button class="btn btn-sm @(SelectedAccount?.Id == account.Id ? "btn-primary font-weight-bold" : "btn-outline-secondary")" @onclick="() => SelectAccount(account.Id)">
+                <button class="btn btn-sm @(SelectedAccount?.Id == account.Id ? "btn-primary font-weight-bold" : "btn-outline-secondary")" @onclick="async () => await SelectAccount(account.Id)">
                     @account.Username
                 </button>
             }
@@ -116,6 +119,7 @@
                 </div>
             </div>
         </div>
+        
 
         <div class="col-md-7">
             <div class="card shadow-sm border-left-primary h-100">
@@ -166,6 +170,69 @@
                 </div>
             </div>
         </div>
+        <div class="col-12 mt-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Buildplates</h6>
+                    <div class="d-flex gap-2 align-items-center">
+                        <div class="input-group input-group-sm" style="width: 220px;">
+                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            <input class="form-control form-control-sm" placeholder="Search by name..." value="@_buildplateSearchTerm" @oninput="HandleSearchInput" />
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-2">
+                    @if (PlayerBuildplates is null)
+                    {
+                        <div class="text-muted small">Loading buildplates...</div>
+                    }
+                    else if (!PlayerBuildplates.Any())
+                    {
+                        <div class="text-muted small">No buildplates for this account.</div>
+                    }
+                    else if (!PaginatedBuildplates.Any())
+                    {
+                        <div class="text-muted small">No buildplates match your search.</div>
+                    }
+                    else
+                    {
+                        <div class="row g-3">
+                            @foreach (var bp in PaginatedBuildplates)
+                            {
+                                <div class="col-12 col-md-6 col-lg-4" @key="bp.Id">
+                                    <div class="card h-100 shadow-sm">
+                                        <BuildplatePreview BuildplateId="@bp.Id" IsTemplate="false" PlayerId="@SelectedAccount.Id" Size="@bp.Size" BlocksPerMeter="@bp.BlocksPerMeter" ResourcePackManager="@_resourcePackManager" />
+                                        <div class="card-body p-2">
+                                            <div class="fw-bold text-truncate">@bp.Name</div>
+                                            <div class="small text-muted">Size: @bp.Size x @bp.Size</div>
+                                            <div class="small text-muted">BPM: @bp.BlocksPerMeter</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        @if (TotalPages > 1)
+                        {
+                            <nav aria-label="Buildplates pagination" class="mt-3 d-flex justify-content-center">
+                                <ul class="pagination pagination-sm mb-0">
+                                    <li class="page-item @(_buildplateCurrentPage <= 1 ? "disabled" : "")">
+                                        <button class="page-link" @onclick="() => ChangePage(_buildplateCurrentPage - 1)">&laquo; Prev</button>
+                                    </li>
+                                    <li class="page-item disabled">
+                                        <span class="page-link text-dark fw-semibold bg-light">Page @_buildplateCurrentPage of @TotalPages</span>
+                                    </li>
+                                    <li class="page-item @(_buildplateCurrentPage >= TotalPages ? "disabled" : "")">
+                                        <button class="page-link" @onclick="() => ChangePage(_buildplateCurrentPage + 1)">Next &raquo;</button>
+                                    </li>
+                                </ul>
+                            </nav>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
     </div>
 }
 else if (!LinkedAccountsList.Any())
@@ -285,6 +352,14 @@ else if (!LinkedAccountsList.Any())
     private List<InGameAccount> LinkedAccountsList { get; set; } = new();
     private InGameAccount? SelectedAccount { get; set; }
 
+    private List<PlayerBuildplate>? PlayerBuildplates { get; set; }
+
+    private ResourcePackManager _resourcePackManager = null!;
+
+    private string _buildplateSearchTerm = "";
+    private int _buildplateCurrentPage = 1;
+    private int _buildplatePageSize = 6;
+
     private ChangeUsernameForm UsernameModel { get; set; } = new();
     private ChangePasswordForm PasswordModel { get; set; } = new();
     private LinkAccountForm LinkFormModel { get; set; } = new();
@@ -303,6 +378,7 @@ else if (!LinkedAccountsList.Any())
 
     protected override async Task OnInitializedAsync()
     {
+        _resourcePackManager = await ResourcePackManagerSingleton.GetResourcePackManagerAsync();
         await using var appDb = await AppDbFactory.CreateDbContextAsync();
         await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
 
@@ -349,11 +425,11 @@ else if (!LinkedAccountsList.Any())
 
         if (LinkedAccountsList is [var firstAccount, ..])
         {
-            SelectAccount(firstAccount.Id);
+            await SelectAccount(firstAccount.Id);
         }
     }
 
-    private void SelectAccount(Guid accountId)
+    private async Task SelectAccount(Guid accountId)
     {
         UpdateErrorMessage = null;
         UpdateSuccessMessage = null;
@@ -366,6 +442,12 @@ else if (!LinkedAccountsList.Any())
         {
             UsernameModel = new ChangeUsernameForm { Username = SelectedAccount.Username };
             PasswordModel = new ChangePasswordForm();
+
+            await LoadPlayerBuildplates(SelectedAccount.Id);
+        }
+        else
+        {
+            PlayerBuildplates = null;
         }
     }
 
@@ -502,7 +584,7 @@ else if (!LinkedAccountsList.Any())
 
         if (SelectedAccount is not null)
         {
-            SelectAccount(SelectedAccount.Id);
+            await SelectAccount(SelectedAccount.Id);
         }
     }
 
@@ -576,7 +658,7 @@ else if (!LinkedAccountsList.Any())
         var newAccount = InGameAccount.FromDb(dbAccount);
 
         LinkedAccountsList.Add(newAccount);
-        SelectAccount(newAccount.Id);
+        await SelectAccount(newAccount.Id);
         CloseLinkModal();
     }
 
@@ -594,5 +676,62 @@ else if (!LinkedAccountsList.Any())
 
         double requiredXp = GetRequiredExperienceForNextLevel();
         return double.Min((SelectedAccount.Experience / requiredXp) * 100, 100);
+    }
+
+    private async Task LoadPlayerBuildplates(Guid accountId)
+    {
+        PlayerBuildplates = null;
+        await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+
+        var dbList = await earthDb.PlayerBuildplates
+            .AsNoTracking()
+            .Where(bp => bp.AccountId == accountId)
+            .ToListAsync();
+
+        PlayerBuildplates = dbList.Select(db => new PlayerBuildplate
+        {
+            Id = db.Id,
+            Name = db.Name,
+            Size = db.Size,
+            BlocksPerMeter = db.Scale,
+            ServerDataObjectId = db.ServerDataObjectId,
+            PreviewObjectId = db.PreviewObjectId,
+        }).ToList();
+
+        StateHasChanged();
+    }
+
+    private IEnumerable<PlayerBuildplate> FilteredBuildplates
+        => PlayerBuildplates?.Where(bp => string.IsNullOrWhiteSpace(_buildplateSearchTerm) || bp.Name.Contains(_buildplateSearchTerm, StringComparison.OrdinalIgnoreCase))
+        ?? Enumerable.Empty<PlayerBuildplate>();
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling((double)FilteredBuildplates.Count() / _buildplatePageSize));
+
+    private IEnumerable<PlayerBuildplate> PaginatedBuildplates
+        => FilteredBuildplates.Skip((_buildplateCurrentPage - 1) * _buildplatePageSize).Take(_buildplatePageSize);
+
+    private void HandleSearchInput(ChangeEventArgs e)
+    {
+        _buildplateSearchTerm = e.Value?.ToString() ?? "";
+        _buildplateCurrentPage = 1;
+    }
+
+    private void ChangePage(int newPage)
+    {
+        if (newPage >= 1 && newPage <= TotalPages)
+        {
+            _buildplateCurrentPage = newPage;
+        }
+    }
+
+    public sealed class PlayerBuildplate
+    {
+        public required Guid Id { get; set; }
+        public required string Name { get; set; }
+        public int Size { get; set; }
+        public int BlocksPerMeter { get; set; }
+
+        public required string ServerDataObjectId { get; set; }
+        public required string PreviewObjectId { get; set; }
     }
 }

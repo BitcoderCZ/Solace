@@ -567,10 +567,10 @@ BuildplateLauncher.ExeName))
             template.SuccessMessage = "Added successfully!";
 
             _ = Task.Delay(3000).ContinueWith(_ =>
-                        {
-                            template.SuccessMessage = null;
-                            InvokeAsync(StateHasChanged);
-                        });
+            {
+                template.SuccessMessage = null;
+                InvokeAsync(StateHasChanged);
+            });
         }
         catch (Exception ex)
         {
