@@ -15,6 +15,7 @@ using Solace.Common.Utils;
 using Solace.DB.Models;
 using Solace.DB;
 using System.Runtime.InteropServices;
+using static Solace.Common.Constants.AccountConstants;
 
 namespace Solace.ApiServer.Controllers.Live;
 
@@ -22,13 +23,6 @@ namespace Solace.ApiServer.Controllers.Live;
 [Route("login.live.com")]
 internal sealed partial class LoginController : SolaceControllerBase
 {
-    private const int MinUsernameLength = 3;
-    private const int MaxUsernameLength = 16; // keep in sync with GenerateUserId
-    private const int MinPasswordLength = 4;
-    private const int MaxPasswordLength = 32;
-    private const int MinNameLength = 2;
-    private const int MaxNameLength = 100;
-
     private static readonly RandomNumberGenerator _rng = RandomNumberGenerator.Create();
 
     private static Config Config => Program.config;

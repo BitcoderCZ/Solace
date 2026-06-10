@@ -1,0 +1,392 @@
+@page "/LinkedAccounts"
+@using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<div class="container mt-4" style="max-width: 900px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+
+    <h2 class="mb-4 text-dark font-weight-bold">Linked In-Game Accounts</h2>
+
+    <div class="d-flex justify-content-between align-items-center p-3 mb-4 bg-light rounded shadow-sm">
+        <div class="d-flex gap-2 align-items-center">
+            @if (!LinkedAccountsList.Any())
+            {
+                <span class="text-muted">No accounts linked yet.</span>
+            }
+            else
+            {
+                @foreach (var account in LinkedAccountsList)
+                {
+                    <button class="btn @(SelectedAccount?.Id == account.Id ? "btn-primary font-weight-bold" : "btn-outline-secondary") px-4" @onclick="() => SelectAccount(account.Id)">
+                        @account.Username
+                    </button>
+                }
+            }
+        </div>
+
+        @if (LinkedAccountsList.Count < 3)
+        {
+            <button class="btn btn-success" @onclick="ShowLinkModal">
+                <i class="oi oi-plus"></i> Link New Account (@LinkedAccountsList.Count/3)
+            </button>
+        }
+        else
+        {
+            <button class="btn btn-secondary" disabled>Max Accounts Linked</button>
+        }
+    </div>
+
+    @if (SelectedAccount != null)
+    {
+        <div class="row g-4">
+            <div class="col-md-5">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Account Settings</h5>
+                        <button class="btn btn-danger btn-sm" @onclick="UnlinkCurrentAccount">Unlink</button>
+                    </div>
+                    <div class="card-body">
+                        @if (!string.IsNullOrEmpty(UpdateErrorMessage))
+                        {
+                            <div class="alert alert-danger py-2 px-3 mb-3 small d-flex align-items-center gap-2" role="alert">
+                                <strong>Error:</strong> @UpdateErrorMessage
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(UpdateSuccessMessage))
+                        {
+                            <div class="alert alert-success py-2 px-3 mb-3 small d-flex align-items-center gap-2" role="alert">
+                                @UpdateSuccessMessage
+                            </div>
+                        }
+
+                        <EditForm Model="@CredentialModel" OnValidSubmit="UpdateCredentials">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label class="form-label font-weight-bold">Username</label>
+                                <InputText class="form-control" @bind-Value="CredentialModel.Username" />
+                                <ValidationMessage For="@(() => CredentialModel.Username)" class="text-danger small" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label font-weight-bold">Password</label>
+                                <InputText type="password" class="form-control" @bind-Value="CredentialModel.Password" />
+                                <ValidationMessage For="@(() => CredentialModel.Password)" class="text-danger small" />
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100">Save Changes</button>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-7">
+                <div class="card h-100 shadow-sm border-left-primary">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">Character Statistics</h5>
+                    </div>
+                    <div class="card-body d-flex flex-column justify-content-between">
+
+                        <div class="d-flex align-items-center justify-content-around mb-4">
+                            <div class="position-relative d-inline-flex align-items-center justify-content-center" style="width: 120px; height: 120px;">
+                                <svg width="120" height="120" viewBox="0 0 120 120" style="transform: rotate(-90deg); position: absolute; top: 0; left: 0;">
+                                    <circle cx="60" cy="60" r="50" stroke="#e6e6e6" stroke-width="10" fill="transparent" />
+                                    <circle cx="60" cy="60" r="50" stroke="#28a745" stroke-width="10" fill="transparent" stroke-dasharray="314.16" stroke-dashoffset="@(314.16 - (314.16 * GetLevelProgressPercentage() / 100))" stroke-linecap="round" style="transition: stroke-dashoffset 0.3s ease;" />
+                                </svg>
+
+                                <div class="text-center d-flex flex-column align-items-center justify-content-center" style="z-index: 2; pointer-events: none;">
+                                    <span class="text-muted text-uppercase font-weight-bold" style="font-size: 0.65rem; letter-spacing: 0.5px; line-height: 1;">Level</span>
+                                    <h3 class="m-0 font-weight-bold text-dark" style="line-height: 1.2; font-size: 1.8rem;">@SelectedAccount.Level</h3>
+                                </div>
+                            </div>
+                            <div>
+                                <h6 class="text-muted mb-1">Experience Progression</h6>
+                                <p class="mb-0 font-weight-bold">@SelectedAccount.Experience / @GetRequiredExperienceForNextLevel() XP</p>
+                                <small class="text-success">@GetLevelProgressPercentage().ToString("F1")% toward next level</small>
+                            </div>
+                        </div>
+
+                        <hr />
+
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="font-weight-bold text-danger"><i class="oi oi-heart"></i> Health</span>
+                                <span class="font-weight-bold">@SelectedAccount.Health / @SelectedAccount.MaxHealth</span>
+                            </div>
+                            <div class="progress" style="height: 15px;">
+                                <div class="progress-bar bg-danger" role="progressbar" style="width: @(((double)SelectedAccount.Health / SelectedAccount.MaxHealth) * 100)%;"></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-light p-3 rounded">
+                            <h6 class="text-muted mb-3"><i class="oi oi-gem text-warning"></i> Rubies Vault</h6>
+                            <div class="row text-center">
+                                <div class="col-6 border-end">
+                                    <span class="d-block small text-muted">Purchased</span>
+                                    <h4 class="text-primary font-weight-bold mb-0">@SelectedAccount.PurchasedRubies</h4>
+                                </div>
+                                <div class="col-6">
+                                    <span class="d-block small text-muted">Earned</span>
+                                    <h4 class="text-success font-weight-bold mb-0">@SelectedAccount.EarnedRubies</h4>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (!LinkedAccountsList.Any())
+    {
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted">You have no game accounts connected. Link your first account to get started!</p>
+            <button class="btn btn-primary" @onclick="ShowLinkModal">Link Account Now</button>
+        </div>
+    }
+
+    @if (IsLinkModalVisible)
+    {
+        <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content shadow-lg">
+                    <div class="modal-header">
+                        <h5 class="modal-title font-weight-bold">Link In-Game Account</h5>
+                        <button type="button" class="btn-close" @onclick="CloseLinkModal"></button>
+                    </div>
+                    <div class="modal-body">
+
+                        @if (!string.IsNullOrEmpty(LinkErrorMessage))
+                        {
+                            <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mb-3 small" role="alert">
+                                <strong>Error:</strong> @LinkErrorMessage
+                            </div>
+                        }
+
+                        <EditForm Model="@LinkFormModel" OnValidSubmit="HandleLinkAccount">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label class="form-label font-weight-bold small">Account Username</label>
+                                <InputText class="form-control" @bind-Value="LinkFormModel.Username" placeholder="Enter game username" />
+                                <ValidationMessage For="@(() => LinkFormModel.Username)" class="text-danger small" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label font-weight-bold small">Account Password</label>
+                                <InputText type="password" class="form-control" @bind-Value="LinkFormModel.Password" placeholder="Enter game password" />
+                                <ValidationMessage For="@(() => LinkFormModel.Password)" class="text-danger small" />
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn btn-secondary" @onclick="CloseLinkModal">Cancel</button>
+                                <button type="submit" class="btn btn-success px-4">Link Account</button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // --- MOCK STRUCTURES ---
+    public class InGameAccount
+    {
+        public int Id { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public int Level { get; set; }
+        public int Experience { get; set; }
+        public int Health { get; set; }
+        public int MaxHealth { get; set; }
+        public int PurchasedRubies { get; set; }
+        public int EarnedRubies { get; set; }
+    }
+
+    // Input Form Form Models
+    public class AccountCredentialsForm
+    {
+        [Required(ErrorMessage = "Username cannot be empty.")]
+        [StringLength(Common.Constants.AccountConstants.MaxUsernameLength, MinimumLength = Common.Constants.AccountConstants.MinUsernameLength, ErrorMessage = $"Username must be between {Common.Constants.AccountConstants.MinUsernameLengthStr} and {Common.Constants.AccountConstants.MaxUsernameLengthStr} characters.")]
+        public string Username { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password cannot be empty.")]
+        [StringLength(Common.Constants.AccountConstants.MaxPasswordLength, MinimumLength = Common.Constants.AccountConstants.MinPasswordLength, ErrorMessage = $"Password must be between {Common.Constants.AccountConstants.MinPasswordLengthStr} and {Common.Constants.AccountConstants.MaxPasswordLengthStr} characters.")]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    private List<InGameAccount> LinkedAccountsList { get; set; } = new();
+    private InGameAccount? SelectedAccount { get; set; }
+    private AccountCredentialsForm CredentialModel { get; set; } = new();
+    private AccountCredentialsForm LinkFormModel { get; set; } = new();
+
+    private bool IsLinkModalVisible { get; set; } = false;
+    private Solace.StaticData.StaticData staticData = new StaticData.StaticData(Program.StaticDataDir);
+
+    // Error Feedback Channels
+    private string? LinkErrorMessage { get; set; }
+    private string? UpdateErrorMessage { get; set; }
+    private string? UpdateSuccessMessage { get; set; }
+
+    protected override void OnInitialized()
+    {
+        LinkedAccountsList.Add(new InGameAccount
+        {
+            Id = 1,
+            Username = "ShadowSlayer",
+            Password = "password123",
+            Level = 3,
+            Experience = 320,
+            Health = 85,
+            MaxHealth = 100,
+            PurchasedRubies = 250,
+            EarnedRubies = 45
+        });
+
+        SelectAccount(LinkedAccountsList.First().Id);
+    }
+
+    private void SelectAccount(int accountId)
+    {
+        // Reset warnings upon moving between profiles
+        UpdateErrorMessage = null;
+        UpdateSuccessMessage = null;
+
+        SelectedAccount = LinkedAccountsList.FirstOrDefault(a => a.Id == accountId);
+        if (SelectedAccount != null)
+        {
+            CredentialModel = new AccountCredentialsForm
+            {
+                Username = SelectedAccount.Username,
+                Password = SelectedAccount.Password
+            };
+        }
+    }
+
+    // --- CREDENTIAL MUTATION & ERROR HANDLING ---
+    private void UpdateCredentials()
+    {
+        UpdateErrorMessage = null;
+        UpdateSuccessMessage = null;
+
+        if (SelectedAccount == null) return;
+
+        // Simulated validation checks (e.g., matching banned names or checking network limits)
+        if (CredentialModel.Username.ToLower().Contains("admin") || CredentialModel.Username.Contains(" "))
+        {
+            UpdateErrorMessage = "Invalid username changes. Names cannot contain spaces or reserved keywords.";
+            return;
+        }
+
+        if (CredentialModel.Password == "123456" || CredentialModel.Password == "password")
+        {
+            UpdateErrorMessage = "Password configuration is too weak. Update rejected by game server.";
+            return;
+        }
+
+        // Successfully updated properties
+        SelectedAccount.Username = CredentialModel.Username;
+        SelectedAccount.Password = CredentialModel.Password;
+        UpdateSuccessMessage = "Account credentials successfully synchronized!";
+    }
+
+    private void UnlinkCurrentAccount()
+    {
+        if (SelectedAccount != null)
+        {
+            LinkedAccountsList.Remove(SelectedAccount);
+            SelectedAccount = LinkedAccountsList.FirstOrDefault();
+            if (SelectedAccount != null)
+            {
+                SelectAccount(SelectedAccount.Id);
+            }
+        }
+    }
+
+    // --- MODAL LINK OPERATION & ERROR HANDLING ---
+    private void ShowLinkModal()
+    {
+        LinkErrorMessage = null; // Flush stale errors
+        LinkFormModel = new AccountCredentialsForm();
+        IsLinkModalVisible = true;
+    }
+
+    private void CloseLinkModal()
+    {
+        IsLinkModalVisible = false;
+    }
+
+    private void HandleLinkAccount()
+    {
+        LinkErrorMessage = null;
+
+        if (LinkedAccountsList.Count >= 3)
+        {
+            LinkErrorMessage = "Maximum account linkage threshold reached (Max 3).";
+            return;
+        }
+
+        // --- SIMULATED REAL WORLD SERVER ERROR RESPONSES ---
+        if (LinkFormModel.Username.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+        {
+            LinkErrorMessage = "The specified username does not exist in our database.";
+            return;
+        }
+
+        if (LinkFormModel.Password.Equals("wrong", StringComparison.OrdinalIgnoreCase))
+        {
+            LinkErrorMessage = "Invalid password provided for this account identifier.";
+            return;
+        }
+
+        // Check if username is already linked locally
+        if (LinkedAccountsList.Any(a => a.Username.Equals(LinkFormModel.Username, StringComparison.OrdinalIgnoreCase)))
+        {
+            LinkErrorMessage = "This specific account is already linked to your profile dashboard.";
+            return;
+        }
+
+        // Everything checked out, insert mock game values
+        var newAccount = new InGameAccount
+        {
+            Id = LinkedAccountsList.Any() ? LinkedAccountsList.Max(a => a.Id) + 1 : 1,
+            Username = LinkFormModel.Username,
+            Password = LinkFormModel.Password,
+            Level = 2,
+            Experience = 110,
+            Health = 70,
+            MaxHealth = 80,
+            PurchasedRubies = 75,
+            EarnedRubies = 20
+        };
+
+        // Run your exact verification routine logic loop
+        while (newAccount.Level - 1 < staticData.Levels.Levels.Length &&
+               newAccount.Experience >= staticData.Levels.Levels[newAccount.Level - 1].ExperienceRequired)
+        {
+            newAccount.Level++;
+        }
+
+        LinkedAccountsList.Add(newAccount);
+        SelectAccount(newAccount.Id);
+        CloseLinkModal();
+    }
+
+    // --- MATH UTILITIES ---
+    private int GetRequiredExperienceForNextLevel()
+    {
+        if (SelectedAccount == null) return 100;
+        int levelIndex = SelectedAccount.Level - 1;
+        return levelIndex < staticData.Levels.Levels.Length ? staticData.Levels.Levels[levelIndex].ExperienceRequired : 9999;
+    }
+
+    private double GetLevelProgressPercentage()
+    {
+        if (SelectedAccount == null) return 0;
+        double requiredXp = GetRequiredExperienceForNextLevel();
+        return Math.Min((SelectedAccount.Experience / requiredXp) * 100, 100);
+    }
+}
