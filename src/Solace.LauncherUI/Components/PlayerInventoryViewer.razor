@@ -1,0 +1,379 @@
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using System.Linq
+@using Solace.DB
+@using Solace.DB.Utils
+@using Solace.BuildplateRenderer
+@using Solace.LauncherUI.Data
+@using Solace.LauncherUI.Utils
+@using System.ComponentModel.DataAnnotations
+@using System.Diagnostics
+@using System.Security.Cryptography
+@using Item = Solace.StaticData.Catalog.ItemsCatalogR.Item;
+@inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject ILogger<PlayerInventoryViewer> Logger
+
+<div class="inventory-container">
+    @if (IsLoading)
+    {
+        <div class="loading-screen">
+            <div class="spinner"></div>
+            <p>Loading Textures...</p>
+        </div>
+    }
+    else
+    {
+        <div class="filters">
+            <input type="text" placeholder="Search items..." @bind="SearchTerm" @bind:event="oninput" class="search-input" />
+
+            <div class="select-group">
+                <select @bind="SelectedType">
+                    <option value="">All Types</option>
+                    @foreach (var type in Enum.GetValues<Item.TypeE>())
+                    {
+                        <option value="@type">@type</option>
+                    }
+                </select>
+
+                <select @bind="SelectedCategory">
+                    <option value="">All Categories</option>
+                    @foreach (var cat in Enum.GetValues<Item.CategoryE>())
+                    {
+                        <option value="@cat">@cat</option>
+                    }
+                </select>
+
+                <select @bind="SelectedRarity">
+                    <option value="">All Rarities</option>
+                    @foreach (var rarity in Enum.GetValues<Item.RarityE>())
+                    {
+                        <option value="@rarity">@rarity</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="grid">
+            @foreach (var slot in PaginatedInventory)
+            {
+                <div class="item-card" @onclick="() => OpenItemDetails(slot)">
+                    <div class="slot" title="@slot.BaseItem.Name">
+                        <img src="/api/genoa-textures/ui/items/@(slot.TextureName).png" alt="@slot.BaseItem.Name" onerror="this.onerror=null; this.src='/mock_textures/missing_texture.png';" />
+
+                        @if (slot.BaseItem.Stackable)
+                        {
+                            <span class="count-badge">@slot.Count</span>
+                        }
+                        else if (slot.BaseItem.ToolInfo != null)
+                        {
+                            <div class="durability-bar">
+                                <div class="durability-fill" style="width: @(slot.HealthPercentage)%; background-color: @(GetHealthColor(slot.HealthPercentage));">
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <div class="item-label">@slot.BaseItem.Name</div>
+                </div>
+            }
+        </div>
+
+        <div class="pagination">
+            <button @onclick="PrevPage" disabled="@(!CanGoPrev)" class="pag-btn">Previous</button>
+            <span class="pag-info">Page @CurrentPage of @TotalPages <span class="total-count">(Total: @FilteredInventory.Count)</span></span>
+            <button @onclick="NextPage" disabled="@(!CanGoNext)" class="pag-btn">Next</button>
+        </div>
+    }
+</div>
+
+@if (SelectedItemSlot != null)
+{
+    <div class="modal-backdrop" @onclick="CloseItemDetails">
+        <div class="modal-content" @onclick:stopPropagation>
+            <button class="modal-close" @onclick="CloseItemDetails">&times;</button>
+
+            <h3 class="modal-title">@SelectedItemSlot.BaseItem.Name</h3>
+            <span class="modal-id">ID: @SelectedItemSlot.BaseItem.Id</span>
+
+            <hr class="modal-divider" />
+
+            <table class="modal-table">
+                <tr>
+                    <td>Type</td>
+                    <td>@SelectedItemSlot.BaseItem.Type</td>
+                </tr>
+                <tr>
+                    <td>Category</td>
+                    <td>@SelectedItemSlot.BaseItem.Category</td>
+                </tr>
+                <tr>
+                    <td>Rarity</td>
+                    <td><span style="font-weight: bold; color: @GetRarityColor(SelectedItemSlot.BaseItem.Rarity)">@SelectedItemSlot.BaseItem.Rarity</span></td>
+                </tr>
+                <tr>
+                    <td>Stackable</td>
+                    <td>@(SelectedItemSlot.BaseItem.Stackable ? "Yes" : "No")</td>
+                </tr>
+                @if (SelectedItemSlot.BaseItem.Stackable)
+                {
+                    <tr>
+                        <td>Current Count</td>
+                        <td><strong>@SelectedItemSlot.Count</strong></td>
+                    </tr>
+                }
+                <tr>
+                    <td>Primary Use</td>
+                    <td>@SelectedItemSlot.BaseItem.UseType</td>
+                </tr>
+            </table>
+
+            @if (SelectedItemSlot.BaseItem.ToolInfo != null)
+            {
+                <div class="info-group" style="border-left-color: #e74c3c;">
+                    <h4>Tool Specs</h4>
+                    <p><strong>Block Damage:</strong> @SelectedItemSlot.BaseItem.ToolInfo.BlockDamage</p>
+                    <p><strong>Mob Damage:</strong> @SelectedItemSlot.BaseItem.ToolInfo.MobDamage</p>
+                    <p><strong>Durability:</strong> @(SelectedItemSlot.BaseItem.ToolInfo.MaxWear - SelectedItemSlot.CurrentWear) / @SelectedItemSlot.BaseItem.ToolInfo.MaxWear (@((int)SelectedItemSlot.HealthPercentage)%)</p>
+                    @if (!string.IsNullOrEmpty(SelectedItemSlot.BaseItem.ToolInfo.EfficiencyCategory))
+                    {
+                        <p><strong>Efficiency Type:</strong> @SelectedItemSlot.BaseItem.ToolInfo.EfficiencyCategory</p>
+                    }
+                </div>
+            }
+
+            @if (SelectedItemSlot.BaseItem.BlockInfo != null)
+            {
+                <div class="info-group" style="border-left-color: #9b59b6;">
+                    <h4>Block Specs</h4>
+                    <p><strong>Breaking Health:</strong> @SelectedItemSlot.BaseItem.BlockInfo.BreakingHealth</p>
+                    @if (!string.IsNullOrEmpty(SelectedItemSlot.BaseItem.BlockInfo.EfficiencyCategory))
+                    {
+                        <p><strong>Optimal Tool Class:</strong> @SelectedItemSlot.BaseItem.BlockInfo.EfficiencyCategory</p>
+                    }
+                </div>
+            }
+
+            @if (SelectedItemSlot.BaseItem.ConsumeInfo != null)
+            {
+                <div class="info-group" style="border-left-color: #2ecc71;">
+                    <h4>Consumable Info</h4>
+                    <p><strong>Heal Capacity:</strong> +@SelectedItemSlot.BaseItem.ConsumeInfo.Heal HP</p>
+                    @if (!string.IsNullOrEmpty(SelectedItemSlot.BaseItem.ConsumeInfo.ReturnItemId))
+                    {
+                        <p><strong>Recycled Trash Item:</strong> @SelectedItemSlot.BaseItem.ConsumeInfo.ReturnItemId</p>
+                    }
+                </div>
+            }
+
+            @if (SelectedItemSlot.BaseItem.FuelInfo != null)
+            {
+                <div class="info-group" style="border-left-color: #e67e22;">
+                    <h4>Burn/Fuel Values</h4>
+                    <p><strong>Total Burn Time:</strong> @SelectedItemSlot.BaseItem.FuelInfo.BurnTime seconds</p>
+                    <p><strong>Heat generation/s:</strong> @SelectedItemSlot.BaseItem.FuelInfo.HeatPerSecond</p>
+                </div>
+            }
+
+            @if (SelectedItemSlot.BaseItem.BoostInfo != null)
+            {
+                <div class="info-group" style="border-left-color: #1abc9c;">
+                    <h4>Active Buff Effects</h4>
+                    <p><strong>Buff Name:</strong> @SelectedItemSlot.BaseItem.BoostInfo.Name</p>
+                    <p><strong>Buff Category:</strong> @SelectedItemSlot.BaseItem.BoostInfo.Type</p>
+                    <p><strong>Duration:</strong> @(SelectedItemSlot.BaseItem.BoostInfo.Duration)s</p>
+                </div>
+            }
+
+            <div class="info-group info-group-xp">
+                <h4>Yield Profiles (XP)</h4>
+                <p class="xp-metrics">
+                    Tappable: <b>@SelectedItemSlot.BaseItem.Experience.Tappable</b> |
+                    Encounter: <b>@SelectedItemSlot.BaseItem.Experience.Encounter</b> |
+                    Crafting: <b>@SelectedItemSlot.BaseItem.Experience.Crafting</b>
+                </p>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public required Guid AccountId { get; set; }
+
+    [Parameter]
+    public int PageSize { get; set; } = 28;
+
+    private bool IsLoading = true;
+    private InventorySlot? SelectedItemSlot;
+    private Solace.StaticData.StaticData staticData = new StaticData.StaticData(Program.StaticDataDir);
+
+    private string _searchTerm = "";
+    private string SearchTerm
+    {
+        get => _searchTerm;
+        set { _searchTerm = value; CurrentPage = 1; }
+    }
+
+    private Item.TypeE? _selectedType;
+    private Item.TypeE? SelectedType
+    {
+        get => _selectedType;
+        set { _selectedType = value; CurrentPage = 1; }
+    }
+
+    private Item.CategoryE? _selectedCategory;
+    private Item.CategoryE? SelectedCategory
+    {
+        get => _selectedCategory;
+        set { _selectedCategory = value; CurrentPage = 1; }
+    }
+
+    private Item.RarityE? _selectedRarity;
+    private Item.RarityE? SelectedRarity
+    {
+        get => _selectedRarity;
+        set { _selectedRarity = value; CurrentPage = 1; }
+    }
+
+    private int CurrentPage = 1;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredInventory.Count / (double)PageSize));
+    private bool CanGoPrev => CurrentPage > 1;
+    private bool CanGoNext => CurrentPage < TotalPages;
+
+    private List<InventorySlot> FullInventory = new();
+
+    private List<InventorySlot> FilteredInventory => FullInventory
+        .Where(s => string.IsNullOrWhiteSpace(SearchTerm) || s.BaseItem.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+        .Where(s => SelectedType == null || s.BaseItem.Type == SelectedType)
+        .Where(s => SelectedCategory == null || s.BaseItem.Category == SelectedCategory)
+        .Where(s => SelectedRarity == null || s.BaseItem.Rarity == SelectedRarity)
+        .ToList();
+
+    private IEnumerable<InventorySlot> PaginatedInventory => FilteredInventory
+        .Skip((CurrentPage - 1) * PageSize)
+        .Take(PageSize);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        IsLoading = true;
+        FullInventory.Clear();
+        await LoadMockData();
+        IsLoading = false;
+    }
+
+    private async Task LoadMockData()
+    {
+        try
+        {
+            await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+            var inventory = await earthDb.Inventories
+                .AsNoTracking()
+                .FirstOrDefaultAsync();
+
+            if (inventory is null)
+            {
+                return;
+            }
+
+            var catalog = staticData.Catalog.ItemsCatalog;
+
+            foreach (var (itemId, itemCount) in inventory.StackableItemsData)
+            {
+                var item = catalog.GetItem(itemId);
+                if (item is null)
+                {
+                    continue;
+                }
+
+                FullInventory.Add(new InventorySlot() { BaseItem = item, Count = itemCount });
+            }
+
+            foreach (var (itemId, instances) in inventory.NonStackableItemsData)
+            {
+                var item = catalog.GetItem(itemId);
+                if (item is null)
+                {
+                    continue;
+                }
+
+                foreach (var (instanceId, instance) in instances)
+                {
+                    FullInventory.Add(new InventorySlot() { BaseItem = item, CurrentWear = instance.Wear });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load inventory data for AccountId {AccountId}", AccountId);
+        }
+    }
+
+    private void PrevPage()
+    {
+        if (CanGoPrev)
+        {
+            CurrentPage--;
+        }
+    }
+
+    private void NextPage()
+    {
+        if (CanGoNext)
+        {
+            CurrentPage++;
+        }
+    }
+
+    private void OpenItemDetails(InventorySlot slot)
+        => SelectedItemSlot = slot;
+
+    private void CloseItemDetails()
+        => SelectedItemSlot = null;
+
+    private string GetHealthColor(double percentage)
+        => percentage switch{
+            > 50 => "#00ff00",
+            > 20 => "#ffff00",
+            _ => "#ff0000"
+        };
+
+    private string GetRarityColor(Item.RarityE rarity)
+    {
+        return rarity switch
+        {
+            Item.RarityE.COMMON => "#7f8c8d",
+            Item.RarityE.UNCOMMON => "#2ecc71",
+            Item.RarityE.RARE => "#3498db",
+            Item.RarityE.EPIC => "#9b59b6",
+            Item.RarityE.LEGENDARY => "#e67e22",
+            Item.RarityE.OOBE => "#d35400",
+            _ => "#7f8c8d"
+        };
+    }
+
+    public class InventorySlot
+    {
+        public required Item BaseItem { get; set; }
+        public int Count { get; set; } = 1;
+        public int CurrentWear { get; set; } = 0;
+
+        public double HealthPercentage
+        {
+            get
+            {
+                if (BaseItem.ToolInfo == null || BaseItem.ToolInfo.MaxWear == 0) return 100;
+                var health = 100.0 * (BaseItem.ToolInfo.MaxWear - CurrentWear) / BaseItem.ToolInfo.MaxWear;
+                return Math.Clamp(health, 0, 100);
+            }
+        }
+
+        public string TextureName
+        {
+            get
+            {
+                if (BaseItem.Type is Item.TypeE.BOOST) return BaseItem.Id.ToString();
+                return BaseItem.Name + "_" + BaseItem.Aux;
+            }
+        }
+    }
+}
