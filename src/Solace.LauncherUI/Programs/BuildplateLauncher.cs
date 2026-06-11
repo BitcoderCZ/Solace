@@ -52,6 +52,7 @@ internal static class BuildplateLauncher
         [
             $"--eventbus=localhost:{settings.EventBusPort}",
             $"--publicAddress={settings.IPv4}",
+            $"--basePublicPort={settings.BuildplateBasePort}",
             $"--bridgeJar={fountainBridgePath}",
             $"--serverTemplateDir={Path.GetFullPath(Path.Combine(Program.StaticDataDir, "server_template_dir"))}",
             $"--fabricJarName={ServerJarName}",

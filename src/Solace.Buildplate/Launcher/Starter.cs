@@ -13,6 +13,7 @@ public sealed class Starter
     private readonly EventBusClient _eventBusClient;
 
 	private readonly string _publicAddress;
+	private readonly ushort _basePort;
 	private readonly string _javaCmd;
 	private readonly DirectoryInfo _tmpDir;
 	private readonly string _eventBusConnectionString;
@@ -22,16 +23,16 @@ public sealed class Starter
 	private readonly String _fabricJarName;
 	private readonly FileInfo _connectorPluginJar;
 
-	private const ushort BASE_PORT = 19132;
 	private const ushort SERVER_INTERNAL_BASE_PORT = 25565;
 	private readonly HashSet<int> _portsInUse = [];
 	private readonly HashSet<int> _serverInternalPortsInUse = [];
 
-    public Starter(EventBusClient eventBusClient, string eventBusConnectionString, string publicAddress, string javaCmd, string bridgeJar, string serverTemplateDir, string fabricJarName, string connectorPluginJar)
+    public Starter(EventBusClient eventBusClient, string eventBusConnectionString, string publicAddress, ushort basePort, string javaCmd, string bridgeJar, string serverTemplateDir, string fabricJarName, string connectorPluginJar)
 	{
 		_eventBusClient = eventBusClient;
 
 		_publicAddress = publicAddress;
+		_basePort = basePort;
 		_javaCmd = javaCmd;
 		_tmpDir = new DirectoryInfo(Path.GetTempPath());
 		_eventBusConnectionString = eventBusConnectionString;
@@ -50,7 +51,7 @@ public sealed class Starter
 			return null;
 		}
 
-		int port = FindPort(_portsInUse, BASE_PORT);
+		int port = FindPort(_portsInUse, _basePort);
 		int serverInternalPort = FindPort(_serverInternalPortsInUse, SERVER_INTERNAL_BASE_PORT);
 		var instance = Instance.Run(_eventBusClient, playerId, buildplateId, buildplateSource, instanceId, survival, night, saveEnabled, inventoryType, shutdownTime, _publicAddress, port, serverInternalPort, _javaCmd, _fountainBridgeJar, _serverTemplateDir, _fabricJarName, _connectorPluginJar, baseDir, _eventBusConnectionString);
 
