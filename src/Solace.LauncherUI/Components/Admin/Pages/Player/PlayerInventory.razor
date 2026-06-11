@@ -1,0 +1,349 @@
+@page "/Admin/Players/{AccountId:guid}/Inventory"
+@attribute [Authorize(Policy = Permissions.ManagePlayers)]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using System.Linq
+@using Solace.DB
+@using Solace.DB.Utils
+@using Solace.BuildplateRenderer
+@using Solace.LauncherUI.Data
+@using Solace.LauncherUI.Utils
+@using System.ComponentModel.DataAnnotations
+@using System.Diagnostics
+@using System.Security.Cryptography
+@using Item = Solace.StaticData.Catalog.ItemsCatalogR.Item;
+@inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject ILogger<PlayerInventory> Logger
+
+<PageTitle>Player Inventory</PageTitle>
+
+<style>
+    .inventory-container {
+        font-family: sans-serif;
+        max-width: 1000px;
+        margin: auto;
+    }
+
+    .filters {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .filters input,
+    .filters select {
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 15px;
+    }
+
+    .slot {
+        border: 2px solid #555;
+        background: #8b8b8b;
+        border-radius: 6px;
+        position: relative;
+        width: 120px;
+        height: 120px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        box-shadow: inset 4px 4px 0px #a8a8a8, inset -4px -4px 0px #4a4a4a;
+    }
+
+    .slot img {
+        max-width: 80px;
+        max-height: 80px;
+        image-rendering: pixelated;
+    }
+
+    .count-badge {
+        position: absolute;
+        bottom: 5px;
+        right: 8px;
+        color: white;
+        font-weight: bold;
+        font-size: 1.2rem;
+        text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+    }
+
+    .durability-bar {
+        position: absolute;
+        bottom: 4px;
+        left: 10%;
+        right: 10%;
+        height: 6px;
+        background: black;
+        border: 1px solid #222;
+    }
+
+    .durability-fill {
+        height: 100%;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 20px;
+        align-items: center;
+    }
+
+    .pagination button {
+        padding: 8px 16px;
+        cursor: pointer;
+    }
+
+    .pagination button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .loading-screen {
+        text-align: center;
+        padding: 50px;
+        font-size: 1.5rem;
+        color: #555;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 15px auto;
+    }
+
+    @@keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+</style>
+
+<div class="inventory-container">
+    <h2>Player Inventory</h2>
+
+    @if (IsLoading)
+    {
+        <div class="loading-screen">
+            <div class="spinner"></div>
+            <p>Loading Textures...</p>
+        </div>
+    }
+    else
+    {
+        <div class="filters">
+            <input type="text" placeholder="Search items..." @bind="SearchTerm" @bind:event="oninput" />
+
+            <select @bind="SelectedType">
+                <option value="">All Types</option>
+                @foreach (var type in Enum.GetValues<Item.TypeE>())
+                {
+                    <option value="@type">@type</option>
+                }
+            </select>
+
+            <select @bind="SelectedCategory">
+                <option value="">All Categories</option>
+                @foreach (var cat in Enum.GetValues<Item.CategoryE>())
+                {
+                    <option value="@cat">@cat</option>
+                }
+            </select>
+
+            <select @bind="SelectedRarity">
+                <option value="">All Rarities</option>
+                @foreach (var rarity in Enum.GetValues<Item.RarityE>())
+                {
+                    <option value="@rarity">@rarity</option>
+                }
+            </select>
+        </div>
+
+        <div class="grid">
+            @foreach (var slot in PaginatedInventory)
+            {
+                <div class="slot" title="@slot.BaseItem.Name">
+                    <img src="/api/genoa-textures/@(slot.TextureCategory)/@(slot.BaseItem.Name).png" alt="@slot.BaseItem.Name" onerror="this.onerror=null; this.src='/mock_textures/missing_texture.png';" />
+
+                    @if (slot.BaseItem.Stackable)
+                    {
+                        <span class="count-badge">@slot.Count</span>
+                    }
+                    else if (slot.BaseItem.ToolInfo != null)
+                    {
+                        <div class="durability-bar">
+                            <div class="durability-fill" style="width: @(slot.HealthPercentage)%; background-color: @(GetHealthColor(slot.HealthPercentage));">
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="pagination">
+            <button @onclick="PrevPage" disabled="@(!CanGoPrev)">Previous</button>
+            <span>Page @CurrentPage of @TotalPages (Total Items: @FilteredInventory.Count)</span>
+            <button @onclick="NextPage" disabled="@(!CanGoNext)">Next</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public required Guid AccountId { get; set; }
+
+    private bool IsLoading = true;
+
+    private Solace.StaticData.StaticData staticData = new StaticData.StaticData(Program.StaticDataDir);
+
+    // Filter properties
+    private string _searchTerm = "";
+    private string SearchTerm
+    {
+        get => _searchTerm;
+        set { _searchTerm = value; CurrentPage = 1; }
+    }
+
+    private Item.TypeE? _selectedType;
+    private Item.TypeE? SelectedType
+    {
+        get => _selectedType;
+        set { _selectedType = value; CurrentPage = 1; }
+    }
+
+    private Item.CategoryE? _selectedCategory;
+    private Item.CategoryE? SelectedCategory
+    {
+        get => _selectedCategory;
+        set { _selectedCategory = value; CurrentPage = 1; }
+    }
+
+    private Item.RarityE? _selectedRarity;
+    private Item.RarityE? SelectedRarity
+    {
+        get => _selectedRarity;
+        set { _selectedRarity = value; CurrentPage = 1; }
+    }
+
+    // Pagination properties
+    private int CurrentPage = 1;
+    private int PageSize = 14;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredInventory.Count / (double)PageSize));
+    private bool CanGoPrev => CurrentPage > 1;
+    private bool CanGoNext => CurrentPage < TotalPages;
+
+    // Data
+    private List<InventorySlot> FullInventory = new();
+
+    private List<InventorySlot> FilteredInventory => FullInventory
+        .Where(s => string.IsNullOrWhiteSpace(SearchTerm) || s.BaseItem.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+        .Where(s => SelectedType == null || s.BaseItem.Type == SelectedType)
+        .Where(s => SelectedCategory == null || s.BaseItem.Category == SelectedCategory)
+        .Where(s => SelectedRarity == null || s.BaseItem.Rarity == SelectedRarity)
+        .ToList();
+
+    private IEnumerable<InventorySlot> PaginatedInventory => FilteredInventory
+        .Skip((CurrentPage - 1) * PageSize)
+        .Take(PageSize);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadMockData();
+            IsLoading = false;
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMockData()
+    {
+        await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
+        var inventory = await earthDb.Inventories
+            .AsNoTracking()
+            .FirstOrDefaultAsync();
+
+        if (inventory is null)
+        {
+            return;
+        }
+
+        var catalog = staticData.Catalog.ItemsCatalog;
+
+        foreach (var (itemId, itemCount) in inventory.StackableItemsData)
+        {
+            var item = catalog.GetItem(itemId);
+
+            FullInventory.Add(new InventorySlot()
+            {
+                BaseItem = item,
+                Count = itemCount,
+            });
+        }
+
+        foreach (var (itemId, instances) in inventory.NonStackableItemsData)
+        {
+            var item = catalog.GetItem(itemId);
+
+            foreach (var (instanceId, instance) in instances)
+            {
+                FullInventory.Add(new InventorySlot()
+                {
+                    BaseItem = item,
+                    CurrentWear = instance.Wear,
+                });
+            }
+        }
+    }
+
+    private void PrevPage() { if (CanGoPrev) CurrentPage--; }
+    private void NextPage() { if (CanGoNext) CurrentPage++; }
+
+    private string GetHealthColor(double percentage)
+    {
+        if (percentage > 50) return "#00ff00"; // Green
+        if (percentage > 20) return "#ffff00"; // Yellow
+        return "#ff0000"; // Red
+    }
+
+    // Wrapper class to separate base Item definition from instance state (Count vs Durability)
+    public class InventorySlot
+    {
+        public required Item BaseItem { get; set; }
+        public int Count { get; set; } = 1; // For Stackables
+        public int CurrentWear { get; set; } = 0; // For Instances
+
+        public double HealthPercentage
+        {
+            get
+            {
+                if (BaseItem.ToolInfo == null || BaseItem.ToolInfo.MaxWear == 0) return 100;
+                var health = 100.0 * (BaseItem.ToolInfo.MaxWear - CurrentWear) / BaseItem.ToolInfo.MaxWear;
+                return Math.Clamp(health, 0, 100);
+            }
+        }
+
+        public string TextureCategory => BaseItem.Category switch
+        {
+            Item.CategoryE.ITEMS => "items",
+            _ => "blocks"
+        };
+    }
+}
