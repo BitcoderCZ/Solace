@@ -9,9 +9,9 @@ namespace Solace.LauncherUI.Controllers;
 [Route("api/genoa-textures")]
 internal sealed class GenoaTexturesController : ControllerBase
 {
-    [HttpGet("{category}/{name}.png")]
-    [HttpHead("{category}/{name}.png")]
-    public async Task<Results<PhysicalFileHttpResult, NotFound>> GeTexture(string category, string name)
+    [HttpGet("ui/items/{name}.png")]
+    [HttpHead("ui/items/{name}.png")]
+    public async Task<Results<PhysicalFileHttpResult, NotFound>> GetUiTexture(string name)
     {
         var cachePath = await GenoaResourcepackCache.GetCachePath();
 
@@ -20,7 +20,7 @@ internal sealed class GenoaTexturesController : ControllerBase
             return TypedResults.NotFound();
         }
 
-        var path = Path.Combine(cachePath, "textures", category, name + ".png");
+        var path = Path.Combine(cachePath, "textures", "ui", "items", name + ".png");
 
         if (!System.IO.File.Exists(path))
         {

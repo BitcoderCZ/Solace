@@ -179,7 +179,7 @@
             @foreach (var slot in PaginatedInventory)
             {
                 <div class="slot" title="@slot.BaseItem.Name">
-                    <img src="/api/genoa-textures/@(slot.TextureCategory)/@(slot.BaseItem.Name).png" alt="@slot.BaseItem.Name" onerror="this.onerror=null; this.src='/mock_textures/missing_texture.png';" />
+                    <img src="/api/genoa-textures/ui/items/@(slot.TextureName).png" alt="@slot.BaseItem.Name" onerror="this.onerror=null; this.src='/mock_textures/missing_texture.png';" />
 
                     @if (slot.BaseItem.Stackable)
                     {
@@ -340,10 +340,17 @@
             }
         }
 
-        public string TextureCategory => BaseItem.Category switch
+        public string TextureName
         {
-            Item.CategoryE.ITEMS => "items",
-            _ => "blocks"
-        };
+            get
+            {
+                if (BaseItem.Type is Item.TypeE.BOOST)
+                {
+                    return BaseItem.Id.ToString();
+                }
+
+                return BaseItem.Name + "_" + BaseItem.Aux;
+            }
+        }
     }
 }
