@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+using Solace.Common.Utils;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace Solace.LauncherUI.Programs;
@@ -9,6 +10,9 @@ internal static class BuildplateLauncher
     public const string DisplayName = "Buildplate launcher";
 
     public const string ServerJarName = "fabric-server-mc.1.20.4-loader.0.15.10-launcher.1.0.1.jar";
+
+    public static readonly Version MinimumFountainBridgeVersion = new Version(0, 0, 2);
+    public static readonly Version MinimumBuildplateConnectorPluginVersion = new Version(0, 0, 1);
 
 #pragma warning disable IDE0060 // Remove unused parameter
     public static bool Check(Settings settings, ILogger logger)
@@ -27,14 +31,30 @@ internal static class BuildplateLauncher
     public static Process? Run(Settings settings, ILogger logger)
     {
         ProgramsLogs.LogRunning(logger, DisplayName);
+
+        var serverJarsDir = Path.GetFullPath(Path.Combine(Program.StaticDataDir, "server_jars"));
+
+        if (!File.TryFindCompatibleFile(serverJarsDir, MinimumBuildplateConnectorPluginVersion, "buildplate-connector-plugin-{{version}}-SNAPSHOT-jar-with-dependencies.jar", out var connectorPluginPath))
+        {
+            ProgramsLogs.LogCouldNotFindVersionedFile(logger, "buildplate connector plugin jar", Path.Combine(serverJarsDir, "buildplate-connector-plugin-{{version}}-SNAPSHOT-jar-with-dependencies.jar"), MinimumBuildplateConnectorPluginVersion);
+            return null;
+        }
+
+        if (!File.TryFindCompatibleFile(serverJarsDir, MinimumFountainBridgeVersion, "fountain-{{version}}-SNAPSHOT-jar-with-dependencies.jar", out var fountainBridgePath))
+        {
+            ProgramsLogs.LogCouldNotFindVersionedFile(logger, "fountain bridge jar", Path.Combine(serverJarsDir, "fountain-{{version}}-SNAPSHOT-jar-with-dependencies.jar"), MinimumFountainBridgeVersion);
+            return null;
+        }
+        
         return Process.Start(new ProcessStartInfo(Path.GetFullPath(Path.Combine(Program.ProgramsDir, ExeName)),
         [
             $"--eventbus=localhost:{settings.EventBusPort}",
             $"--publicAddress={settings.IPv4}",
-            $"--bridgeJar={Path.GetFullPath(Path.Combine(Program.StaticDataDir, "server_jars", "fountain-0.0.1-SNAPSHOT-jar-with-dependencies.jar"))}",
+            $"--basePublicPort={settings.BuildplateBasePort}",
+            $"--bridgeJar={fountainBridgePath}",
             $"--serverTemplateDir={Path.GetFullPath(Path.Combine(Program.StaticDataDir, "server_template_dir"))}",
             $"--fabricJarName={ServerJarName}",
-            $"--connectorPluginJar={Path.GetFullPath(Path.Combine(Program.StaticDataDir, "server_jars", "buildplate-connector-plugin-0.0.1-SNAPSHOT-jar-with-dependencies.jar"))}",
+            $"--connectorPluginJar={connectorPluginPath}",
             $"--dir={Program.StaticDataDir}",
             $"--logger-url={Program.LoggerAddress}",
         ])

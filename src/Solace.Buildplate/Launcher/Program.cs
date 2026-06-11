@@ -20,6 +20,8 @@ internal static class Program
         public string EventBusConnectionString { get; set; }
         [Option("publicAddress", Required = true, HelpText = "Public server address to report in instance info")]
         public string PublicAddress { get; set; }
+        [Option("basePublicPort", Required = true, HelpText = "Base public port for buildplate instances")]
+        public int BasePublicPort { get; set; }
         [Option("bridgeJar", Required = true, HelpText = "Fountain bridge JAR file")]
         public string BridgeJar { get; set; }
         [Option("serverTemplateDir", Required = true, HelpText = "Minecraft/Fabric server template directory, containing the Fabric JAR, mods, and libraries")]
@@ -114,7 +116,7 @@ internal static class Program
 
         string javaCmd = JavaLocator.Locate(GlobalLoggerFactory.CreateLogger(nameof(JavaLocator)));
         var starterLogger = GlobalLoggerFactory.CreateLogger<Starter>();
-        var starter = new Starter(eventBusClient, options.EventBusConnectionString, options.PublicAddress, javaCmd, options.BridgeJar, options.ServerTemplateDir, options.FabricJarName, options.ConnectorPluginJar, starterLogger);
+        var starter = new Starter(eventBusClient, options.EventBusConnectionString, options.PublicAddress, checked((ushort)options.BasePublicPort), javaCmd, options.BridgeJar, options.ServerTemplateDir, options.FabricJarName, options.ConnectorPluginJar, starterLogger);
         var instanceManagerLogger = GlobalLoggerFactory.CreateLogger<InstanceManager>();
         var instanceManager = await InstanceManager.CreateAsync(eventBusClient, starter, instanceManagerLogger);
 
@@ -129,6 +131,8 @@ internal static class Program
         {
             instanceManager.ShutdownAsync().Forget();
         };
+
+        Log.Information("Started, public address: {Address}, base port: {BasePort}", options.PublicAddress, options.BasePublicPort);
 
         while (true)
         {

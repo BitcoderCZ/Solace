@@ -75,7 +75,7 @@ public partial class Program
 
         var globalLoggerFactory = new SerilogLoggerFactory(log);
         GlobalLoggerFactory.Initialize(globalLoggerFactory);
-
+        
         bool isLegacyDb = await IsLegacyEarthDbAsync(Settings.Instance.EarthDatabaseConnectionString!);
         string legacyDbPath = "";
         string liveDbPath = "";
@@ -246,7 +246,8 @@ public partial class Program
                 await earthDbContext.Database.MigrateAsync();
 
                 var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
-                await EnsureBuiltInRolesAsync(roleManager);
+                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+                await EnsureBuiltInRolesAsync(roleManager, userManager);
 
                 if (isLegacyDb)
                 {
@@ -337,8 +338,25 @@ public partial class Program
         return 0;
     }
 
-    private static async Task EnsureBuiltInRolesAsync(RoleManager<ApplicationRole> roleManager)
+    private static async Task EnsureBuiltInRolesAsync(RoleManager<ApplicationRole> roleManager, UserManager<ApplicationUser> userManager)
     {
+        var everyoneRole = await roleManager.FindByNameAsync(ApplicationRole.Default);
+
+        if (everyoneRole == null)
+        {
+            everyoneRole = new ApplicationRole
+            {
+                Name = ApplicationRole.Default,
+                Position = int.MaxValue - 10,
+                Color = "#99AAB5",
+                IsBuiltIn = true
+            };
+            await roleManager.CreateAsync(everyoneRole);
+            await roleManager.AddClaimAsync(everyoneRole, new Claim("Permission", Permissions.LinkPlayers));
+        }
+
+        await AssignRoleToAllUsersAsync(userManager, ApplicationRole.Default);
+
         var ownerRole = await roleManager.FindByNameAsync(ApplicationRole.Owner);
 
         if (ownerRole == null)
@@ -375,6 +393,17 @@ public partial class Program
             if (!Permissions.All.Contains(claim.Value))
             {
                 await roleManager.RemoveClaimAsync(ownerRole, claim);
+            }
+        }
+    }
+
+    private static async Task AssignRoleToAllUsersAsync(UserManager<ApplicationUser> userManager, string roleName)
+    {
+        foreach (var user in userManager.Users)
+        {
+            if (!await userManager.IsInRoleAsync(user, roleName))
+            {
+                await userManager.AddToRoleAsync(user, roleName);
             }
         }
     }

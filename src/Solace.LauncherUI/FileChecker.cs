@@ -10,19 +10,24 @@ internal static partial class FileChecker
 {
     private static readonly HttpClient httpClient = new();
 
-    private static readonly string[] expectedStaticFiles = [
+    private static readonly string[] expectedStaticFiles =
+    [
         "catalog/itemEfficiencyCategories.json",
         "catalog/itemJournalGroups.json",
         "catalog/items.json",
         "catalog/nfc.json",
         "catalog/recipes.json",
         "catalog/recipes.json",
-        "server_jars/buildplate-connector-plugin-0.0.1-SNAPSHOT-jar-with-dependencies.jar",
-        "server_jars/fountain-0.0.1-SNAPSHOT-jar-with-dependencies.jar",
-        "server_template_dir/mods/fountain-0.0.1.jar",
-        "server_template_dir/mods/vienna-0.0.1.jar",
         "tile_renderer/tagMap1.json",
         "tile_renderer/tagMap2.json",
+    ];
+
+    private static readonly (string Template, Version MinimumVersion)[] expectedVersionedStaticFiles =
+    [
+        ("server_jars/buildplate-connector-plugin-{{version}}-SNAPSHOT-jar-with-dependencies.jar", BuildplateLauncher.MinimumBuildplateConnectorPluginVersion),
+        ("server_jars/fountain-{{version}}-SNAPSHOT-jar-with-dependencies.jar", BuildplateLauncher.MinimumFountainBridgeVersion),
+        ("server_template_dir/mods/fountain-{{version}}.jar", new Version(0, 0, 2)),
+        ("server_template_dir/mods/vienna-{{version}}.jar", new Version(0, 0, 1)),
     ];
 
     private static readonly string[] expectedStaticDirectories = [
@@ -68,9 +73,9 @@ internal static partial class FileChecker
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        foreach (string dir in expectedStaticDirectories)
+        foreach (var dir in expectedStaticDirectories)
         {
-            string fullDir = Path.GetFullPath(Path.Combine(Program.StaticDataDir, dir));
+            var fullDir = Path.GetFullPath(Path.Combine(Program.StaticDataDir, dir));
 
             if (!Directory.Exists(fullDir))
             {
@@ -79,14 +84,30 @@ internal static partial class FileChecker
             }
         }
 
-        foreach (string file in expectedStaticFiles)
+        foreach (var file in expectedStaticFiles)
         {
-            string fullFile = Path.GetFullPath(Path.Combine(Program.StaticDataDir, file));
+            var fullFile = Path.GetFullPath(Path.Combine(Program.StaticDataDir, file));
 
             if (!File.Exists(fullFile))
             {
                 LogStaticDataNotFoundError(logger, fullFile);
                 error = true;
+            }
+        }
+
+        foreach (var (template, minimumVersion) in expectedVersionedStaticFiles)
+        {
+            var fileName = Path.GetFileName(template);
+            var directory = Path.GetFullPath(Path.Combine(Program.StaticDataDir, Path.GetDirectoryName(template)!));
+
+            if (!File.TryFindCompatibleFile(directory, minimumVersion, fileName, out var path))
+            {
+                LogVersionedStaticDataNotFoundError(logger, Path.GetFullPath(Path.Combine(Program.StaticDataDir, template)), minimumVersion);
+                error = true;
+            }
+            else
+            {
+                LogVersionedStaticFileFound(logger, path);
             }
         }
 
@@ -249,6 +270,12 @@ internal static partial class FileChecker
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Static data file '{Path}' does not exist")]
     private static partial void LogStaticDataNotFoundError(ILogger logger, string Path);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Static data file '{Path}' does not exist, is outdated, or unsupported. Minimum version is {MinimumVersion}")]
+    private static partial void LogVersionedStaticDataNotFoundError(ILogger logger, string Path, Version MinimumVersion);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Versioned static file found '{Path}'")]
+    private static partial void LogVersionedStaticFileFound(ILogger logger, string Path);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "All static files exist")]
     private static partial void LogStaticFilesOk(ILogger logger);

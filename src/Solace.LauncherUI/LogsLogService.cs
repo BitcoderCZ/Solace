@@ -58,6 +58,7 @@ public sealed class LogsLogService : ILogEventSink
                 Timestamp = logEvent.Timestamp.UtcDateTime,
                 Level = logEvent.Level.ToString(),
                 RenderedMessage = logEvent.RenderMessage(CultureInfo.InvariantCulture),
+                
                 Exception = logEvent.Exception?.ToString(),
                 Properties = new LogEventProperties
                 {

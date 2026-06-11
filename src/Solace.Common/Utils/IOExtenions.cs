@@ -1,4 +1,6 @@
-﻿using System.IO.Compression;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.IO.Compression;
+using System.Text.RegularExpressions;
 
 namespace Solace.Common.Utils;
 
@@ -15,6 +17,65 @@ public static class IOExtenions
     {
         public static FileStream OpenWriteNew(string path)
             => File.Open(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+
+        /// <summary>
+        /// Finds the newest file matching the template that satisfies the version constraints:
+        /// Must have the exact same Major version, and a Minor/Patch version greater than or equal to the minVersion.
+        /// </summary>
+        /// <param name="directory">The directory to search inside.</param>
+        /// <param name="minVersion">The minimum allowed version.</param>
+        /// <param name="template">The filename template containing "{{version}}".</param>
+        /// <param name="path">The full path to the newest compatible file, or null if none are found.</param>
+        public static bool TryFindCompatibleFile(string directory, Version minVersion, string template, [MaybeNullWhen(false)] out string path)
+        {
+            if (!Directory.Exists(directory))
+            {
+                path = null;
+                return false;
+            }
+
+            const string VersionPlaceholder = "___VERSION_PLACEHOLDER___";
+            string templateWithToken = template.Replace("{{version}}", VersionPlaceholder);
+            string escapedTemplate = Regex.Escape(templateWithToken);
+
+            string pattern = "^" + escapedTemplate.Replace(VersionPlaceholder, @"(?<version>\d+(?:\.\d+)+)") + "$";
+
+            var regex = new Regex(pattern, RegexOptions.CultureInvariant);
+
+            var bestMatch = Directory.EnumerateFiles(directory)
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .Select(name => new { Name = name, Match = regex.Match(name) })
+                .Where(x => x.Match.Success)
+                .Select(x =>
+                {
+                    if (Version.TryParse(x.Match.Groups["version"].Value, out var parsedVersion))
+                    {
+                        if (minVersion.Revision != -1 && parsedVersion.Revision == -1)
+                        {
+                            parsedVersion = new Version(parsedVersion.Major, parsedVersion.Minor, parsedVersion.Build, 0);
+                        }
+
+                        return (x.Name, Version: parsedVersion);
+                    }
+
+                    return ((string Name, Version Version)?)null;
+                })
+                .Where(x => x is { } tupple &&
+                    tupple.Version.Major == minVersion.Major &&
+                    tupple.Version >= minVersion)
+                .OrderByDescending(x => x!.Value.Version)
+                .FirstOrDefault();
+
+            if (bestMatch is null)
+            {
+                path = null;
+                return false;
+            }
+
+            path = Path.Combine(directory, bestMatch.Value.Name);
+            return true;
+        }
     }
 
     extension(Path)

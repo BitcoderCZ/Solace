@@ -28,6 +28,7 @@ public sealed partial class Settings
         StaticDataPath = "../staticdata",
         LauncherBuildplatePreview = false,
         OnlyAllowLocalLogin = false,
+        BuildplateBasePort = 19132,
     };
 
     public static Settings Instance { get; set; } = Default;
@@ -55,6 +56,8 @@ public sealed partial class Settings
     public bool? LauncherBuildplatePreview { get; set; }
 
     public bool? OnlyAllowLocalLogin { get; set; }
+
+    public int? BuildplateBasePort { get; set; }
 
     public enum TileDataSourceE
     {
@@ -192,6 +195,12 @@ public sealed partial class Settings
         {
             LogInvalidOption(logger, "OnlyAllowLocalLogin", Default.OnlyAllowLocalLogin);
             settings.OnlyAllowLocalLogin = Default.OnlyAllowLocalLogin;
+        }
+
+        if (settings.BuildplateBasePort is null)
+        {
+            LogInvalidOption(logger, "Buildplate base port", Default.BuildplateBasePort);
+            settings.BuildplateBasePort = Default.BuildplateBasePort;
         }
 
         LogLoadedSettings(logger);

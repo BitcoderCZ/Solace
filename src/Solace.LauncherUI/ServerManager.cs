@@ -54,6 +54,8 @@ public sealed partial class ServerManager : IDisposable
 
     public IReadOnlyList<ServerComponent> Components { get; }
 
+    public IReadOnlyList<int> ComponentShutdownOrder { get; }
+
     private readonly Lock _statusLock = new Lock();
 
     private CancellationTokenSource? _operationTokenSource;
@@ -66,12 +68,22 @@ public sealed partial class ServerManager : IDisposable
 
         Components =
         [
-            new("Event Bus", EventBusServer.ExeName, EventBusServer.Run),
-            new("Object Store", ObjectStoreServer.ExeName, ObjectStoreServer.Run, 1000),
-            new("Buildplate Launcher", BuildplateLauncher.ExeName, BuildplateLauncher.Run, 1500),
-            new("API Server", ApiServer.ExeName, ApiServer.Run),
-            new("Tappables Generator", TappablesGenerator.ExeName, TappablesGenerator.Run),
-            new("Tile Renderer", TileRenderer.ExeName, TileRenderer.Run, 0, s => s.EnableTileRenderingLabel ?? true)
+            new("Event Bus", EventBusServer.ExeName, EventBusServer.Run), // 0
+            new("Object Store", ObjectStoreServer.ExeName, ObjectStoreServer.Run, 1000), // 1
+            new("Buildplate Launcher", BuildplateLauncher.ExeName, BuildplateLauncher.Run, 1500), // 2
+            new("API Server", ApiServer.ExeName, ApiServer.Run), // 3
+            new("Tappables Generator", TappablesGenerator.ExeName, TappablesGenerator.Run), // 4
+            new("Tile Renderer", TileRenderer.ExeName, TileRenderer.Run, 0, s => s.EnableTileRenderingLabel ?? true), // 5
+        ];
+
+        ComponentShutdownOrder =
+        [
+            5,
+            4,
+            2,
+            3,
+            1,
+            0,
         ];
 
         RefreshComponentStatuses();
@@ -330,9 +342,11 @@ public sealed partial class ServerManager : IDisposable
             Status = ServerStatus.Stopping;
         }
 
-        foreach (var comp in Components)
+        foreach (var compIndex in ComponentShutdownOrder)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            var comp = Components[compIndex];
 
             if (comp.Status is ServerStatus.Offline)
             {
@@ -385,9 +399,11 @@ public sealed partial class ServerManager : IDisposable
             Status = ServerStatus.Stopping;
         }
 
-        foreach (var comp in Components)
+        foreach (var compIndex in ComponentShutdownOrder)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            var comp = Components[compIndex];
 
             comp.Status = ServerStatus.Stopping;
             OnStatusChanged?.Invoke();

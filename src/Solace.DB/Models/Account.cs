@@ -16,7 +16,7 @@ public sealed class Account : IEntityWithId<Guid>, IVersionedEntity, IMergeable<
 
     public required long CreatedDate { get; set; }
 
-    public required string Username { get; set; }
+    public required string? Username { get; set; }
 
     public required string? ProfilePictureUrl { get; set; }
 

@@ -27,6 +27,8 @@ internal static class Permissions
     [PermissionInfo("Users", "Edit user account info")]
     public const string EditAcountInfo = "user.edit";
 
+    [PermissionInfo("Players", "Link in-game accounts to their account, requires knowing the username and password of the account")]
+    public const string LinkPlayers = "player.link";
     [PermissionInfo("Players", "View all player accounts")]
     public const string ViewPlayers = "player.view";
     [PermissionInfo("Players", "Manage player accounts - edit, delete")]

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿//#define KEEP_WINDOW_OPEN
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -153,9 +154,29 @@ public sealed partial class ConsoleProcess : IDisposable
             Process.StartInfo.WorkingDirectory = workingDir;
         }
 
-        if (OpenInNewWindow && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (OpenInNewWindow)
         {
-            ApplyTerminalWrapper(args);
+#if KEEP_WINDOW_OPEN
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Process.StartInfo.UseShellExecute = true;
+                Process.StartInfo.FileName = "cmd.exe";
+                Process.StartInfo.Arguments = $"/k \"\"{_filePath}\" {FormatStandardArguments(args)}\"";
+            }
+            else
+            {
+                ApplyTerminalWrapper(args);
+            }
+#else
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                ApplyTerminalWrapper(args);
+            }
+            else
+            {
+                Process.StartInfo.Arguments = FormatStandardArguments(args);
+            }
+#endif
         }
         else
         {
@@ -255,14 +276,23 @@ public sealed partial class ConsoleProcess : IDisposable
 
             _pidFilePath = Path.GetTempFileName();
 
+#if KEEP_WINDOW_OPEN
+            Process.StartInfo.Arguments = $"{_cachedLinuxTerminalExecArg} bash -c \"{innerCommand} & app_pid=$!; echo $app_pid > '{_pidFilePath}'; wait $app_pid; echo; echo '[Process completed - Press Enter to close]'; read\"";
+#else
             Process.StartInfo.Arguments = $"{_cachedLinuxTerminalExecArg} bash -c \"echo $$ > '{_pidFilePath}'; exec {innerCommand}\"";
+#endif
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
             // todo: currently not tested
             string arguments = FormatStandardArguments(args);
             string command = $"'{_filePath}' {arguments}";
+
+#if KEEP_WINDOW_OPEN
+            string appleScript = $"tell application \"Terminal\" to do script \"{command.Replace("\"", "\\\"")}\"";
+#else
             string appleScript = $"tell application \"Terminal\" to do script \"{command.Replace("\"", "\\\"")}; exit\"";
+#endif
 
             Process.StartInfo.FileName = "osascript";
             Process.StartInfo.Arguments = $"-e \"{appleScript}\"";

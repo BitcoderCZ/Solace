@@ -50,7 +50,7 @@ public sealed class EarthDbContext : DbContext
     public DbSet<TemplateBuildplateEF> TemplateBuildplates { get; set; }
 
     public DbSet<Tile> Tiles { get; set; }
-    
+
     public DbSet<Secret> Secrets { get; set; }
 
     public static EarthDbContext CreateFromPath(string path)
@@ -85,6 +85,10 @@ public sealed class EarthDbContext : DbContext
         }
 
         // account
+        modelBuilder.Entity<Account>()
+            .HasIndex(a => a.Username)
+            .IsUnique();
+
         modelBuilder.Entity<Account>()
             .HasOne(a => a.Profile)
             .WithOne(p => p.Account)
@@ -321,7 +325,7 @@ public sealed class EarthDbContext : DbContext
         {
             Id = id,
             CreatedDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            Username = "[null]",
+            Username = null,
             ProfilePictureUrl = null,
             FirstName = null,
             LastName = null,
