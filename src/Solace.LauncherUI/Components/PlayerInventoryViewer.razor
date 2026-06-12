@@ -1,6 +1,7 @@
 @rendermode InteractiveServer
 @using Microsoft.EntityFrameworkCore
 @using System.Linq
+@using Solace.Common.Utils
 @using Solace.DB
 @using Solace.DB.Models.Common
 @using Item = Solace.StaticData.Catalog.ItemsCatalogR.Item;
@@ -360,7 +361,19 @@
         IsLoading = true;
         FullInventory.Clear();
         await LoadDbData();
-        IsLoading = false;
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                await GenoaResourcepackCache.GetCachePath();
+            }
+            finally
+            {
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }).Forget();
     }
 
     private async Task LoadDbData()
