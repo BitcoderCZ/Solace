@@ -4,7 +4,6 @@
 - Make sure only 1 instance of the launcher can run at a time (with migrations and stuff it could screw up the db) - lock a file, if fail, log and exit
 - Launcher buildplate preview - liquid rendering
 - Shop management
-- Player items management
 - Encounter generation and AR
 - Use tiles when spawning tappables - don't spawn on water/forbidden areas, spawn more trees in forest?
 - Allow setting maximum cache size for tiles
@@ -19,7 +18,6 @@
 - NFC mini figures
 - Some kind of auth for the logs, maybe pass a random secret to the cli args and verify it in the controller?
 - A lot of things are quite slower on windows, investigate and/or add spinners
-- Associate a player profile with a user, permissions that only allow editing the associated player.
 - find out the tokens for the first time tutorial, daily login and possibly more
 - per instance logs server/bridge
 

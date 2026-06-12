@@ -13,8 +13,10 @@ public sealed class InventoryEF : IEntityWithId<Guid>, IVersionedEntity, IMergea
 
     public Account Account { get; set; } = null!;
 
+    // id to count
     public Dictionary<Guid, int> StackableItemsData { get; set; } = [];
 
+    // id to (instanceId to instance)
     public Dictionary<Guid, Dictionary<Guid, NonStackableItemInstance>> NonStackableItemsData { get; set; } = [];
 
     [JsonIgnore, NotMapped]

@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Solace.LauncherUI;
 
+namespace Solace.LauncherUI.Controllers;
+
 [ApiController]
 [Authorize(Policy = Permissions.ExportData)]
 [Route("api/data/export")]

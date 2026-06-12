@@ -1,5 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
 using Solace.Common;
@@ -75,7 +76,10 @@ public sealed class Catalog
         public Item? GetItem(Guid id)
             => itemsById.GetValueOrDefault(id);
 
-        public record Item(
+        public bool TryGetItem(Guid id, [MaybeNullWhen(false)] out Item item)
+            => itemsById.TryGetValue(id, out item);
+
+        public sealed record Item(
             Guid Id,
             string Name,
             int Aux,
