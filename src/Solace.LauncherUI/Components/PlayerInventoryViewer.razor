@@ -176,7 +176,7 @@
                 <div class="info-group" style="border-left-color: #2ecc71;">
                     <h4>Consumable Info</h4>
                     <p><strong>Heal Capacity:</strong> +@SelectedItemSlot.BaseItem.ConsumeInfo.Heal HP</p>
-                    @if (!string.IsNullOrEmpty(SelectedItemSlot.BaseItem.ConsumeInfo.ReturnItemId))
+                    @if (SelectedItemSlot.BaseItem.ConsumeInfo.ReturnItemId is not null)
                     {
                         <p><strong>Recycled Trash Item:</strong> @SelectedItemSlot.BaseItem.ConsumeInfo.ReturnItemId</p>
                     }
@@ -340,7 +340,7 @@
     }
 
     private List<Item> FullCatalogFiltered => staticData.Catalog.ItemsCatalog.Items
-        .Where(i => string.IsNullOrWhiteSpace(AddSearchTerm) || i.Name.Contains(AddSearchTerm, StringComparison.OrdinalIgnoreCase) || i.Id.Contains(AddSearchTerm, StringComparison.OrdinalIgnoreCase))
+        .Where(i => string.IsNullOrWhiteSpace(AddSearchTerm) || i.Name.Contains(AddSearchTerm, StringComparison.OrdinalIgnoreCase) || i.Id.ToString().Contains(AddSearchTerm, StringComparison.OrdinalIgnoreCase))
         .ToList();
 
     private int AddTotalPages => int.Max(1, (int)double.Ceiling(FullCatalogFiltered.Count / (double)AddPageSize));
@@ -508,7 +508,7 @@
 
                 for (int i = 0; i < AddItemCount; i++)
                 {
-                    var newInstanceId = Guid.NewGuid().ToString();
+                    var newInstanceId = Guid.NewGuid();
                     inv.NonStackableItemsData[itemId][newInstanceId] = new NonStackableItemInstance(newInstanceId, 0);
                 }
             }
@@ -567,7 +567,7 @@
             {
                 if (inv.NonStackableItemsData.TryGetValue(itemId, out var instances))
                 {
-                    instances.Remove(slot.InstanceId);
+                    instances.Remove(slot.InstanceId.Value);
                     if (instances.Count == 0)
                     {
                         inv.NonStackableItemsData.Remove(itemId);
@@ -613,7 +613,7 @@
         public required Item BaseItem { get; set; }
         public int Count { get; set; } = 1;
         public int CurrentWear { get; set; } = 0;
-        public string? InstanceId { get; set; }
+        public Guid? InstanceId { get; set; }
 
         public double HealthPercentage
         {
