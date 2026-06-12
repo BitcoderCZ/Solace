@@ -1,11 +1,11 @@
 @page "/Admin/Players/{AccountId:guid}/Inventory"
-@using Serilog
 @using Solace.DB
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
 @attribute [Authorize(Policy = Permissions.ManagePlayers)]
 @rendermode InteractiveServer
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject ILogger<PlayerInventory> Logger
 
 <PageTitle>Player Inventory</PageTitle>
 
@@ -38,9 +38,9 @@
                 .AsNoTracking()
                 .FirstOrDefaultAsync(account => account.Id == AccountId))?.Username;
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            Log.Error(ex, "Failed to get username for player '{AccountId}'", AccountId);
+            Logger.LogError(exception, "Failed to get username for player '{AccountId}'", AccountId);
         }
     }
 }
