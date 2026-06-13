@@ -6,12 +6,12 @@ using Solace.EventBus.Client;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed partial class TappablesManager
+public sealed partial class TappablesManager : IAsyncDisposable
 {
     private static readonly long GRACE_PERIOD = 30000;
 
-    private Subscriber _subscriber = null!;
-    private RequestSender _requestSender = null!;
+    private Subscriber? _subscriber;
+    private RequestSender? _requestSender;
 
     private readonly ILogger _logger;
 
@@ -19,26 +19,22 @@ public sealed partial class TappablesManager
     private readonly Dictionary<string, Dictionary<Guid, Encounter>> _encounters = [];
     private int _pruneCounter;
 
-    private TappablesManager(ILogger logger)
+    public TappablesManager(ILogger<TappablesManager> logger)
     {
         _logger = logger;
     }
 
-    public static async Task<TappablesManager> CreateAsync(EventBusClient eventBusClient, ILogger logger)
+    internal async Task InitializeAsync(EventBusClient eventBusClient)
     {
-        var tappablesManager = new TappablesManager(logger);
-
-        tappablesManager._subscriber = await eventBusClient.AddSubscriberAsync("tappables", new SubscriberListener(
-            tappablesManager.HandleEvent,
+        _subscriber = await eventBusClient.AddSubscriberAsync("tappables", new SubscriberListener(
+            HandleEvent,
             async () =>
             {
-                LogTappablesEventBusSubscriberError(logger);
+                LogTappablesEventBusSubscriberError();
                 Serilog.Log.CloseAndFlush();
                 Environment.Exit(1);
             }));
-        tappablesManager._requestSender = await eventBusClient.AddRequestSenderAsync();
-
-        return tappablesManager;
+        _requestSender = await eventBusClient.AddRequestSenderAsync();
     }
 
     public Tappable[] GetTappablesAround(double lat, double lon, double radius)
@@ -153,12 +149,27 @@ public sealed partial class TappablesManager
 
     public async Task NotifyTileActiveAsync(Guid accountId, double lat, double lon)
     {
+        Debug.Assert(_requestSender is not null);
+
         int tileX = XToTile(LonToX(lon));
         int tileY = YToTile(LatToY(lat));
         string? response = await _requestSender.RequestAsync("tappables", "activeTile", Json.Serialize(new ActiveTileNotification(tileX, tileY, accountId.ToString())));
         if (response is null)
         {
             LogActiveTileNotificationEventWasRejectedIgnored();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_subscriber is not null)
+        {
+            await _subscriber.CloseAsync();
+        }
+
+        if (_requestSender is not null)
+        {
+            await _requestSender.DisposeAsync();
         }
     }
 
@@ -338,7 +349,7 @@ public sealed partial class TappablesManager
     }
 
     [LoggerMessage(Level = LogLevel.Critical, Message = "Tappables event bus subscriber error")]
-    private static partial void LogTappablesEventBusSubscriberError(ILogger logger);
+    private partial void LogTappablesEventBusSubscriberError();
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Active tile notification event was rejected/ignored")]
     private partial void LogActiveTileNotificationEventWasRejectedIgnored();

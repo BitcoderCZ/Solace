@@ -33,9 +33,6 @@ public static class Program
     private sealed class Options
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     {
-        [Option("port", Default = 80, Required = false, HelpText = "Port to listen on")]
-        public int HttpPort { get; set; }
-
         [Option("earth-db", Default = "./earth.db", Required = false, HelpText = "Earth database connection string")]
         public string EarthDatabaseConnectionString { get; set; }
 
@@ -61,80 +58,25 @@ public static class Program
 
     public static async Task<int> Main(string[] args)
     {
-        TypeDescriptor.AddAttributes(typeof(Uuid), new TypeConverterAttribute(typeof(StringToUuidConv)));
-
         Environment.CurrentDirectory = AppDomain.CurrentDomain.BaseDirectory;
-
-        /*var log = new LoggerConfiguration()
-            .WriteTo.Console()
-            .WriteTo.File("logs/api_server/log.txt", rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true, fileSizeLimitBytes: 8338607, outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-            .MinimumLevel.Override("Solace.ApiServer.Authentication", LogEventLevel.Warning)
-            .CreateLogger();*/
 
         if (!Debugger.IsAttached)
         {
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
-                Directory.CreateDirectory("logs/api_server");
-                File.WriteAllText("logs/api_server/_crash.txt", e.ExceptionObject.ToString());
+                try
+                {
+                    var logger = GlobalLoggerFactory.CreateLogger(nameof(Program));
+                    LogUnhandledException(logger, e.ExceptionObject as Exception);
+                }
+                catch
+                {
+                    Console.Error.WriteLine($"Unhandled exception before logger initialization: {e.ExceptionObject}");
+                }
 
-                Log.Fatal(e.ExceptionObject as Exception, "Unhandled exception");
-                Log.CloseAndFlush();
                 Environment.Exit(1);
             };
         }
-
-        ParserResult<Options> res = Parser.Default.ParseArguments<Options>(args);
-
-        Options options;
-        if (res is Parsed<Options> parsed)
-        {
-            options = parsed.Value;
-        }
-        else if (res is NotParsed<Options> notParsed)
-        {
-            if (res.Errors.Any(error => error is HelpRequestedError))
-            {
-                return 0;
-            }
-            else if (res.Errors.Any(error => error is VersionRequestedError))
-            {
-                return 0;
-            }
-            else
-            {
-                return 1;
-            }
-        }
-        else
-        {
-            return 1;
-        }
-
-        var loggerConfig = new LoggerConfiguration()
-            .WriteTo.Console()
-            .WriteTo.File("logs/api_server/log.txt", rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true, fileSizeLimitBytes: 8338607, outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .Enrich.WithProperty("ComponentName", "ApiServer");
-
-        if (!string.IsNullOrWhiteSpace(options.LoggerUrl))
-        {
-            loggerConfig.WriteTo.Http(options.LoggerUrl, 10 * 1024 * 1024);
-        }
-
-        loggerConfig
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Information)
-            .MinimumLevel.Override("Solace.ApiServer.Authentication", LogEventLevel.Information);
-        var log = loggerConfig.CreateLogger();
-
-        Log.Logger = log;
-
-        var globalLoggerFactory = new SerilogLoggerFactory(log);
-        GlobalLoggerFactory.Initialize(globalLoggerFactory);
 
         if (options.LocalLoginOnly)
         {
@@ -169,35 +111,6 @@ public static class Program
 
         Log.Information("Loaded configuration");
 
-        Log.Information("Connecting to event bus");
-        EventBusClient eventBus;
-        try
-        {
-            eventBus = await EventBusClient.ConnectAsync(options.EventBusConnectionString);
-        }
-        catch (EventBusClientException ex)
-        {
-            Log.Fatal($"Could not connect to event bus: {ex}");
-            Log.CloseAndFlush();
-            return 1;
-        }
-
-        Log.Information("Connected to event bus");
-        Log.Information("Connecting to object storage");
-        ObjectStoreClient objectStore;
-        try
-        {
-            objectStore = await ObjectStoreClient.ConnectAsync(options.ObjectStoreConnectionString);
-        }
-        catch (ObjectStoreClientException ex)
-        {
-            Log.Fatal($"Could not connect to object storage: {ex}");
-            Log.CloseAndFlush();
-            return 1;
-        }
-
-        Log.Information("Connected to object storage");
-
         Log.Information("Loading static data");
         SData staticData;
         try
@@ -215,16 +128,12 @@ public static class Program
 
         Log.Information("Importing shop buildplates");
 
-        string earthDbConnectionString = "Data Source=" + options.EarthDatabaseConnectionString!;
-
         await using (var earthDbContext = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!))
         {
             var currentShopBuildplates = await earthDbContext.TemplateBuildplates
                 .AsNoTracking()
                 .ToListAsync();
 
-            using var loggerFactory = new SerilogLoggerFactory(log);
-            var importerLogger = loggerFactory.CreateLogger<Importer>();
             await using var importer = new Importer(earthDbContext, eventBus, objectStore, importerLogger)
             {
                 OwnsEarthDb = false,
@@ -267,30 +176,63 @@ public static class Program
 
         Log.Information("Imported shop buidplates");
 
-        var tappablesManagerLogger = GlobalLoggerFactory.CreateLogger<TappablesManager>();
-        var tappablesManager = await TappablesManager.CreateAsync(eventBus, tappablesManagerLogger);
-        var buildplateInstancesManagerLogger = GlobalLoggerFactory.CreateLogger<BuildplateInstancesManager>();
-        var buildplateInstancesManager = await BuildplateInstancesManager.CreateAsync(eventBus, buildplateInstancesManagerLogger);
-
-        using var birhEarthDb = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!);
-        var birhLogger = GlobalLoggerFactory.CreateLogger<BuildplateInstanceRequestHandler>();
-        BuildplateInstanceRequestHandler.Start(birhEarthDb, eventBus, objectStore, staticData.Catalog, buildplateInstancesManager, birhLogger);
-
         var builder = WebApplication.CreateBuilder(args);
 
-        builder.Configuration["Authentication:LocalLoginOnly"] = options.LocalLoginOnly.ToString();
+        var earthDbConnectionString = builder.Configuration.GetConnectionString("EarthDb");
+        var earthDbProvider = builder.Configuration["DatabaseProvider"];
+        Debug.Assert(earthDbConnectionString is not null);
+        Debug.Assert(earthDbProvider is not null);
+
+        var eventBusConnectionString = builder.Configuration.GetConnectionString("event-bus");
+        Debug.Assert(eventBusConnectionString is not null);
+        var eventBusUri = new Uri(eventBusConnectionString);
+
+        Log.Information("Connecting to event bus");
+        EventBusClient eventBus;
+        try
+        {
+            eventBus = await EventBusClient.ConnectAsync($"{eventBusUri.Host}:{eventBusUri.Port}");
+        }
+        catch (EventBusClientException ex)
+        {
+            Log.Fatal($"Could not connect to event bus: {ex}");
+            Log.CloseAndFlush();
+            return 1;
+        }
+
+        Log.Information("Connected to event bus");
+
+        var objectStoreConnectionString = builder.Configuration.GetConnectionString("object-store");
+        Debug.Assert(objectStoreConnectionString is not null);
+        var objectStoreUri = new Uri(objectStoreConnectionString);
+
+        Log.Information("Connecting to object storage");
+        ObjectStoreClient objectStore;
+        try
+        {
+            objectStore = await ObjectStoreClient.ConnectAsync($"{objectStoreUri.Host}:{objectStoreUri.Port}");
+        }
+        catch (ObjectStoreClientException ex)
+        {
+            Log.Fatal($"Could not connect to object storage: {ex}");
+            Log.CloseAndFlush();
+            return 1;
+        }
+
+        Log.Information("Connected to object storage");
 
         // builder.Host.UseSerilog();
 
-        builder.WebHost.UseUrls($"http://*:{options.HttpPort}/");
+        // builder.WebHost.UseUrls($"http://*:8080/");
 
-        builder.Services.AddSerilog(logger: log);
+        builder.AddServiceDefaults();
 
         builder.Services.AddSingleton(eventBus);
         builder.Services.AddSingleton(objectStore);
         builder.Services.AddSingleton(staticData);
-        builder.Services.AddSingleton(tappablesManager);
-        builder.Services.AddSingleton(buildplateInstancesManager);
+        builder.Services.AddSingleton<TappablesManager>();
+        builder.Services.AddSingleton<BuildplateInstancesManager>();
+        builder.Services.AddSingleton<BuildplateInstanceRequestHandler>();
 
         builder.Services.AddMemoryCache();
 
@@ -319,9 +261,9 @@ public static class Program
         builder.Services.AddAuthentication("GenoaAuth")
             .AddScheme<AuthenticationSchemeOptions, GenoaAuthenticationHandler>("GenoaAuth", null);
 
-        builder.Services.AddDbContext<EarthDbContext>(options => EarthDbContext.ConfigureBuilder(options, earthDbConnectionString));
+        builder.Services.AddDbContext<EarthDbContext>(options => EarthDbContext.ConfigureBuilder(options, earthDbConnectionString, earthDbProvider));
 
-        await using (var earthDbContext = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!))
+        await using (var earthDbContext = EarthDbContext.CreateFromConnection(earthDbConnectionString, earthDbProvider))
         {
             var secrets = await earthDbContext.GetOrInitializeSecretsAsync();
 
@@ -346,24 +288,6 @@ public static class Program
             await next();
         });
 
-        app.UseSerilogRequestLogging(options =>
-        {
-            // Customize the message template
-            options.MessageTemplate = "{RemoteIpAddress} {RequestMethod} {RequestScheme}://{RequestHost}{RequestPath}{RequestQuery} responded {StatusCode} in {Elapsed:0.0000} ms";
-
-            // Emit debug-level events instead of the defaults
-            options.GetLevel = (httpContext, elapsed, ex) => LogEventLevel.Verbose;
-
-            // Attach additional properties to the request completion event
-            options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
-            {
-                diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
-                diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
-                diagnosticContext.Set("RemoteIpAddress", httpContext.Connection.RemoteIpAddress);
-                diagnosticContext.Set("RequestQuery", httpContext.Request.QueryString);
-            };
-        });
-
         app.UseStaticFiles();
 
         app.UseRouting();
@@ -377,6 +301,11 @@ public static class Program
         app.UseResponseCompression();
 
         app.MapControllers();
+
+        // init stuff that needs async initialization
+        await app.Services.GetRequiredService<TappablesManager>().InitializeAsync(eventBus);
+        await app.Services.GetRequiredService<BuildplateInstancesManager>().InitializeAsync(eventBus);
+        await app.Services.GetRequiredService<BuildplateInstanceRequestHandler>().InitializeAsync(eventBus);
 
         await app.RunAsync();
 

@@ -53,20 +53,34 @@ public sealed class EarthDbContext : DbContext
 
     public DbSet<Secret> Secrets { get; set; }
 
-    public static EarthDbContext CreateFromPath(string path)
-        => CreateFromConnection("Data Source=" + Path.GetFullPath(path));
-
-    public static EarthDbContext CreateFromConnection(string connectionString)
+    public static EarthDbContext CreateFromConnection(string connectionString, string provider)
     {
         var optionsBuilder = new DbContextOptionsBuilder<EarthDbContext>();
-        ConfigureBuilder(optionsBuilder, connectionString);
+        ConfigureBuilder(optionsBuilder, connectionString, provider);
 
         return new EarthDbContext(optionsBuilder.Options);
     }
 
-    public static void ConfigureBuilder(DbContextOptionsBuilder optionsBuilder, string connectionString)
+    public static void ConfigureBuilder(DbContextOptionsBuilder optionsBuilder, string connectionString, string provider)
     {
-        optionsBuilder.UseSqlite(connectionString);
+        switch (provider)
+        {
+            case "Postgres":
+                optionsBuilder.UseNpgsql(connectionString, x =>
+                {
+                    x.MigrationsAssembly("Solace.DB.PostgresMigrations");
+                });
+                break;
+            case "Sqlite":
+                optionsBuilder.UseSqlite(connectionString, x =>
+                {
+                    x.MigrationsAssembly("Solace.DB.SqliteMigrations");
+                });
+                break;
+            default:
+                throw new ArgumentException($"Unknown db provider '{provider}'.", nameof(provider));
+        }
+
         optionsBuilder.AddInterceptors(new VersioningInterceptor());
     }
 

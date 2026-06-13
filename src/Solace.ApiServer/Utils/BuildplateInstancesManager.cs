@@ -1,45 +1,40 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Diagnostics;
+using System.Text.Json.Serialization;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.EventBus.Client;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed partial class BuildplateInstancesManager
+public sealed partial class BuildplateInstancesManager : IAsyncDisposable
 {
-    private readonly EventBusClient _eventBusClient;
-    private Subscriber _subscriber = null!;
-    private RequestSender _requestSender = null!;
+    private Subscriber? _subscriber;
+    private RequestSender? _requestSender;
 
-    private readonly ILogger _logger;
+    private readonly ILogger<BuildplateInstancesManager> _logger;
 
     private readonly Dictionary<Guid, TaskCompletionSource<bool>?> _pendingInstances = [];
     private readonly Dictionary<Guid, InstanceInfo> _instances = [];
     private readonly Dictionary<Guid, HashSet<Guid>> _instancesByBuildplateId = [];
 
-    private BuildplateInstancesManager(EventBusClient eventBusClient, ILogger logger)
+    public BuildplateInstancesManager(ILogger<BuildplateInstancesManager> logger)
     {
-        _eventBusClient = eventBusClient;
         _logger = logger;
     }
 
-    public static async Task<BuildplateInstancesManager> CreateAsync(EventBusClient eventBusClient, ILogger logger)
+    internal async Task InitializeAsync(EventBusClient eventBusClient)
     {
-        var buildplateInstancesManager = new BuildplateInstancesManager(eventBusClient, logger);
-
-        buildplateInstancesManager._subscriber = await eventBusClient.AddSubscriberAsync("buildplates", new SubscriberListener(
-           buildplateInstancesManager.HandleEvent,
+        _subscriber = await eventBusClient.AddSubscriberAsync("buildplates", new SubscriberListener(
+           HandleEvent,
            async () =>
            {
-               LogBuildplatesEventBusSubscriberError(logger);
+               LogBuildplatesEventBusSubscriberError();
                Serilog.Log.CloseAndFlush();
                Environment.Exit(1);
            }
        ));
 
-        buildplateInstancesManager._requestSender = await eventBusClient.AddRequestSenderAsync();
-
-        return buildplateInstancesManager;
+        _requestSender = await eventBusClient.AddRequestSenderAsync();
     }
 
     public async Task<Guid?> RequestBuildplateInstance(Guid? playerId, Guid? encounterId, Guid buildplateId, InstanceType type, long shutdownTime, bool night)
@@ -96,6 +91,8 @@ public sealed partial class BuildplateInstancesManager
 
         LogStartingNewInstance();
 
+        Debug.Assert(_requestSender is not null);
+
         string? instanceIdString = await _requestSender.RequestAsync("buildplates", "start", Json.Serialize(new StartRequest(playerId, encounterId, buildplateId, night, type, shutdownTime)));
         if (!Guid.TryParse(instanceIdString, out var instanceId))
         {
@@ -140,6 +137,8 @@ public sealed partial class BuildplateInstancesManager
     {
         LogRequestingBuildplatePreview();
 
+        Debug.Assert(_requestSender is not null);
+
         string? preview = await _requestSender.RequestAsync("buildplates", "preview", Json.Serialize(new PreviewRequest(Convert.ToBase64String(serverData), night)));
         if (preview is null)
         {
@@ -147,6 +146,19 @@ public sealed partial class BuildplateInstancesManager
         }
 
         return preview;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_subscriber is not null)
+        {
+            await _subscriber.CloseAsync();
+        }
+
+        if (_requestSender is not null)
+        {
+            await _requestSender.DisposeAsync();
+        }
     }
 
     private Task HandleEvent(SubscriberEvent @event)
@@ -339,7 +351,7 @@ public sealed partial class BuildplateInstancesManager
     );
 
     [LoggerMessage(Level = LogLevel.Critical, Message = "Buildplates event bus subscriber error")]
-    private static partial void LogBuildplatesEventBusSubscriberError(ILogger logger);
+    private partial void LogBuildplatesEventBusSubscriberError();
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Finding buildplate instance for buildplate {BuildplateId} type {Type} encounter {EncounterId} player {AccountId}")]
     private partial void LogFindingBuildplateInstanceForBuildplateEncounterPlayer(Guid BuildplateId, InstanceType Type, Guid EncounterId, Guid AccountId);
