@@ -14,9 +14,9 @@ public sealed partial class NetworkServer : IDisposable
     private readonly TcpListener _serverSocket;
     private readonly CancellationTokenSource _cts = new();
 
-    private readonly ILogger _logger;
+    private readonly ILogger<NetworkServer> _logger;
 
-    public NetworkServer(Server server, int port, ILogger logger)
+    public NetworkServer(Server server, int port, ILogger<NetworkServer> logger)
     {
         _server = server;
         _serverSocket = new TcpListener(IPAddress.Loopback, port);

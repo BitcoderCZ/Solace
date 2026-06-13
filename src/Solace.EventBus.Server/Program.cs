@@ -1,96 +1,72 @@
-﻿using CommandLine;
-using Serilog;
-using Serilog.Extensions.Logging;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Solace.Common;
 using System.Diagnostics;
-using System.Globalization;
 
 namespace Solace.EventBus.Server;
 
-internal static class Program
+internal static partial class Program
 {
-    private sealed class Options
-    {
-        [Option("port", Default = 5532, Required = false, HelpText = "Port to listen on")]
-        public int Port { get; set; }
-
-        [Option("logger-url", Default = null, Required = false, HelpText = "Url to send logs to")]
-        public string? LoggerUrl { get; set; }
-    }
-
     private static async Task<int> Main(string[] args)
     {
         if (!Debugger.IsAttached)
         {
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
-                Log.Fatal(e.ExceptionObject as Exception, "Unhandled exception");
-                Log.CloseAndFlush();
+                try
+                {
+                    var logger = GlobalLoggerFactory.CreateLogger(nameof(Program));
+                    LogUnhandledException(logger, e.ExceptionObject as Exception);
+                }
+                catch
+                {
+                    Console.Error.WriteLine($"Unhandled exception before logger initialization: {e.ExceptionObject}");
+                }
+
                 Environment.Exit(1);
             };
         }
 
-        ParserResult<Options> res = Parser.Default.ParseArguments<Options>(args);
+        var builder = Host.CreateApplicationBuilder(args);
 
-        Options options;
-        if (res is Parsed<Options> parsed)
+        builder.AddServiceDefaults();
+
+        builder.Services.AddSingleton<Server>();
+        builder.Services.AddSingleton<NetworkServer>(sp =>
         {
-            options = parsed.Value;
-        }
-        else if (res is NotParsed<Options> notParsed)
-        {
-            if (res.Errors.Any(error => error is HelpRequestedError))
-            {
-                return 0;
-            }
-            else if (res.Errors.Any(error => error is VersionRequestedError))
-            {
-                return 0;
-            }
-            else
-            {
-                return 1;
-            }
-        }
-        else
-        {
-            return 1;
-        }
+            var port = builder.Configuration.GetValue<int>("TCP_PORT", 5532);
 
-        var loggerConfig = new LoggerConfiguration()
-            .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
-            .WriteTo.File("logs/event_bus_server/log.txt", rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true, fileSizeLimitBytes: 8338607, outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}", formatProvider: CultureInfo.InvariantCulture)
-            .Enrich.WithProperty("ComponentName", "EventBus");
+            var server = sp.GetRequiredService<Server>();
+            var networkServerLogger = sp.GetRequiredService<ILogger<NetworkServer>>();
 
-        if (!string.IsNullOrWhiteSpace(options.LoggerUrl))
-        {
-            loggerConfig.WriteTo.Http(options.LoggerUrl, 10 * 1024 * 1024);
-        }
+            return new NetworkServer(server, port, networkServerLogger);
+        });
 
-        loggerConfig.MinimumLevel.Debug();
-        var log = loggerConfig.CreateLogger();
+        using var host = builder.Build();
 
-        Log.Logger = log;
+        var loggerFactory = host.Services.GetRequiredService<ILoggerFactory>();
+        GlobalLoggerFactory.Initialize(loggerFactory);
 
-        var globalLoggerFactory = new SerilogLoggerFactory(log);
-        GlobalLoggerFactory.Initialize(globalLoggerFactory);
-
-        NetworkServer server;
         try
         {
-            var networkServerLogger = GlobalLoggerFactory.CreateLogger<NetworkServer>();
-            var serverLogger = GlobalLoggerFactory.CreateLogger<Server>();
-            server = new NetworkServer(new Server(serverLogger), options.Port, networkServerLogger);
+            var server = host.Services.GetRequiredService<NetworkServer>();
+            await server.RunAsync();
         }
-        catch (IOException ex)
+        catch (IOException exception)
         {
-            Log.Fatal(ex.ToString());
-            Log.CloseAndFlush();
+            var logger = loggerFactory.CreateLogger(nameof(Program));
+            LogFatalErrorDuringServerStartup(logger, exception);
             return 1;
         }
-
-        await server.RunAsync();
 
         return 0;
     }
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Unhandled exception")]
+    private static partial void LogUnhandledException(ILogger logger, Exception? exception);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Fatal error during server startup")]
+    private static partial void LogFatalErrorDuringServerStartup(ILogger logger, Exception exception);
 }

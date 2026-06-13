@@ -1,6 +1,6 @@
 ﻿namespace Solace.ObjectStore.Server;
 
-public class DataStore
+public sealed class DataStore
 {
     private readonly DirectoryInfo _rootDirectory;
 

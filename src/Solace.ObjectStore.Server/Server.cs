@@ -6,9 +6,9 @@ public sealed partial class Server
 {
     private readonly DataStore _dataStore;
 
-    private readonly ILogger _logger;
+    private readonly ILogger<Server> _logger;
 
-    public Server(DataStore dataStore, ILogger logger)
+    public Server(DataStore dataStore, ILogger<Server> logger)
     {
         _dataStore = dataStore;
         _logger = logger;

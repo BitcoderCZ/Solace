@@ -1,4 +1,4 @@
-using Projects;
+using Microsoft.Extensions.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -14,13 +14,18 @@ else
     db = builder.AddPostgres("postgres").AddDatabase("EarthDb");
 }
 
-var eventBus = builder.AddProject<Solace_EventBus_Server>("event-bus");
+var eventBus = builder.AddProject<Projects.Solace_EventBus_Server>("event-bus")
+    .WithEndpoint(scheme: "tcp", name: "raw-tcp", env: "TCP_PORT");
 
-var objectStore = builder.AddProject<Solace_ObjectStore_Server>("object-store");
+var objectStoreDataDirectory = builder.Configuration.GetValue<string>("ObjectStore:DataDirectory", "data");
 
-var adminPanel = builder.AddProject<Solace_AdminPanel>("admin-panel")
-    .WithReference(db)
-    .WithReference(eventBus)
-    .WithReference(objectStore);
+var objectStore = builder.AddProject<Projects.Solace_ObjectStore_Server>("object-store")
+    .WithEndpoint(scheme: "tcp", name: "raw-tcp", env: "TCP_PORT")
+    .WithEnvironment("ObjectStore__DataDirectory", objectStoreDataDirectory);
+
+// var adminPanel = builder.AddProject<Projects.Solace_AdminPanel>("admin-panel")
+//     .WithReference(db)
+//     .WithReference(eventBus);
+    // .WithReference(objectStore);
 
 builder.Build().Run();

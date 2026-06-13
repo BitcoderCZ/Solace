@@ -13,9 +13,9 @@ public sealed partial class Server : IDisposable
     private readonly ReaderWriterLockSlim _requestHandlersLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
     private readonly Dictionary<string, HashSet<RequestHandler>> _requestHandlers = [];
 
-    private readonly ILogger _logger;
+    private readonly ILogger<Server> _logger;
 
-    public Server(ILogger logger)
+    public Server(ILogger<Server> logger)
     {
         _logger = logger;
     }
