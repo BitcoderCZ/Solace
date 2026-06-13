@@ -3,9 +3,9 @@
     <File Path=".editorconfig" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Solace.AdminPanel/Solace.AdminPanel.csproj" />
     <Project Path="src/Solace.BuildplateRenderer/Solace.BuildplateRenderer.csproj" />
     <Project Path="src/Solace.KillHelper/Solace.KillHelper.csproj" />
-    <Project Path="src/Solace.LauncherUI/Solace.LauncherUI.csproj" />
   </Folder>
   <Project Path="src/Solace.ApiServer/Solace.ApiServer.csproj">
   </Project>

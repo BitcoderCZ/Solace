@@ -46,7 +46,7 @@ foreach ($buildProfile in $profiles) {
     }
 
     Invoke-ProjectPublish `
-        -ProjectPath "./src/Solace.LauncherUI/Solace.LauncherUI.csproj" `
+        -ProjectPath "./src/Solace.AdminPanel/Solace.AdminPanel.csproj" `
         -OutDir "$publishDir/launcher" `
         -Configuration $configuration `
         -BuildProfile $buildProfile
