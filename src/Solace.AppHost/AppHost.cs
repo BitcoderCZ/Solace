@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Solace.AppHost;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -36,14 +37,7 @@ var apiServer = builder.AddProject<Projects.Solace_ApiServer>("api-server")
     .WaitFor(eventBus)
     .WithReference(objectStore)
     .WaitFor(objectStore)
-    .WithEnvironment("Authentication__LocalLoginOnly", builder.Configuration.GetValue<bool>("ApiServer:Authentication:LocalLoginOnly", false).ToString())
-    .WithEnvironment("Authentication__Login__SoapHeaderValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:SoapHeaderValidityMinutes"])
-    .WithEnvironment("Authentication__Login__UserTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:UserTokenValidityMinutes"])
-    .WithEnvironment("Authentication__Login__DeviceTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:DeviceTokenValidityMinutes"])
-    .WithEnvironment("Authentication__Login__XboxTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:XboxTokenValidityMinutes"])
-    .WithEnvironment("Authentication__XboxLive__TokenValidityMinutes", builder.Configuration["ApiServer:Authentication:XboxLive:TokenValidityMinutes"])
-    .WithEnvironment("Authentication__PlayfabApi__EntityTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:PlayfabApi:EntityTokenValidityMinutes"])
-    .WithEnvironment("Authentication__PlayfabApi__SessionTicketValidityMinutes", builder.Configuration["ApiServer:Authentication:PlayfabApi:SessionTicketValidityMinutes"])
+    .WithEnvironmentFromSection(builder.Configuration, "ApiServer:Authentication", "ApiServer:")
     .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"]);
 
 if (useSqlite)
