@@ -22,13 +22,13 @@ public sealed partial class Starter
 	private readonly DirectoryInfo _serverTemplateDir;
 	private readonly string _fabricJarName;
 	private readonly FileInfo _connectorPluginJar;
-	private readonly ILogger _logger;
+	private readonly ILogger<Starter> _logger;
 
 	private const ushort SERVER_INTERNAL_BASE_PORT = 25565;
 	private readonly HashSet<int> _portsInUse = [];
 	private readonly HashSet<int> _serverInternalPortsInUse = [];
 
-	public Starter(EventBusClient eventBusClient, string eventBusConnectionString, string publicAddress, ushort basePort, string javaCmd, string bridgeJar, string serverTemplateDir, string fabricJarName, string connectorPluginJar, ILogger logger)
+	public Starter(EventBusClient eventBusClient, string eventBusConnectionString, string publicAddress, ushort basePort, string javaCmd, string bridgeJar, string serverTemplateDir, string fabricJarName, string connectorPluginJar, ILogger<Starter> logger)
 	{
 		_eventBusClient = eventBusClient;
 

@@ -1,27 +1,22 @@
-﻿using CommandLine;
-using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.EventBus.Client;
 using System.Globalization;
-using Serilog.Extensions.Logging;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 
 namespace Solace.Buildplate.Launcher;
 
-internal static class Program
+internal static partial class Program
 {
     internal static string StaticDataPath = "./staticdata";
 
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     private sealed class Options
     {
-        [Option("eventbus", Default = "localhost:5532", Required = false, HelpText = "Event bus address")]
-        public string EventBusConnectionString { get; set; }
-        [Option("publicAddress", Required = true, HelpText = "Public server address to report in instance info")]
-        public string PublicAddress { get; set; }
-        [Option("basePublicPort", Required = true, HelpText = "Base public port for buildplate instances")]
-        public int BasePublicPort { get; set; }
         [Option("bridgeJar", Required = true, HelpText = "Fountain bridge JAR file")]
         public string BridgeJar { get; set; }
         [Option("serverTemplateDir", Required = true, HelpText = "Minecraft/Fabric server template directory, containing the Fabric JAR, mods, and libraries")]
@@ -33,9 +28,6 @@ internal static class Program
 
         [Option("dir", Default = "./staticdata", Required = false, HelpText = "Static data path")]
         public string StaticDataPath { get; set; }
-
-        [Option("logger-url", Default = null, Required = false, HelpText = "Url to send logs to")]
-        public string? LoggerUrl { get; set; }
     }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
@@ -45,80 +37,74 @@ internal static class Program
         {
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
-                Log.Fatal(e.ExceptionObject as Exception, "Unhandled exception");
-                Log.CloseAndFlush();
-                Environment.Exit(1);
+                Console.Error.WriteLine($"Unhandled exception: {e.ExceptionObject}");
+
+                try
+                {
+                    var logger = GlobalLoggerFactory.CreateLogger(nameof(Program));
+                    LogUnhandledException(logger, e.ExceptionObject as Exception);
+                }
+                catch
+                {
+                    Console.Error.WriteLine($"Unhandled exception before logger initialization");
+                }
+
+                Console.Out.Flush();
+                Console.Error.Flush();
+
+                Environment.Exit(2);
             };
         }
 
-        ParserResult<Options> res = Parser.Default.ParseArguments<Options>(args);
+        var builder = Host.CreateApplicationBuilder(args);
 
-        Options options;
-        if (res is Parsed<Options> parsed)
-        {
-            options = parsed.Value;
-        }
-        else if (res is NotParsed<Options> notParsed)
-        {
-            if (res.Errors.Any(error => error is HelpRequestedError))
-            {
-                return 0;
-            }
-            else if (res.Errors.Any(error => error is VersionRequestedError))
-            {
-                return 0;
-            }
-            else
-            {
-                return 1;
-            }
-        }
-        else
-        {
-            return 1;
-        }
+        builder.AddServiceDefaults();
+
+        builder.Services.AddSingleton<StartupDependencies>();
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().EventBus);
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().Starter);
+        builder.Services.AddSingleton<InstanceManager>();
+
+        using var app = builder.Build();
+
+        var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+        GlobalLoggerFactory.Initialize(loggerFactory);
+
+        var programLogger = loggerFactory.CreateLogger(nameof(Program));
 
         StaticDataPath = options.StaticDataPath;
 
-        var loggerConfig = new LoggerConfiguration()
-            .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
-            .WriteTo.File("logs/buildplate_launcher/log.txt", rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true, fileSizeLimitBytes: 8338607, outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}", formatProvider: CultureInfo.InvariantCulture)
-            .Enrich.FromLogContext()
-            .Enrich.WithProperty("ComponentName", "BuildplateLauncher");
+        // init stuff that requires logger but needs to be injected
+        var startupDeps = app.Services.GetRequiredService<StartupDependencies>();
 
-        if (!string.IsNullOrWhiteSpace(options.LoggerUrl))
-        {
-            loggerConfig.WriteTo.Http(options.LoggerUrl, 10 * 1024 * 1024);
-        }
+        var eventBusConnectionString = builder.Configuration["services:event-bus:raw-tcp:0"];
+        Debug.Assert(eventBusConnectionString is not null);
+        var eventBusUri = new Uri(eventBusConnectionString);
 
-        loggerConfig.MinimumLevel.Debug();
-        var log = loggerConfig.CreateLogger();
-
-        Log.Logger = log;
-
-        var globalLoggerFactory = new SerilogLoggerFactory(log);
-        GlobalLoggerFactory.Initialize(globalLoggerFactory);
-
-        Log.Information("Connecting to event bus");
+        LogConnectingToEventBus(programLogger);
         EventBusClient eventBusClient;
         try
         {
-            eventBusClient = await EventBusClient.ConnectAsync(options.EventBusConnectionString);
+            eventBusClient = await EventBusClient.ConnectAsync($"{eventBusUri.Host}:{eventBusUri.Port}");
         }
-        catch (EventBusClientException ex)
+        catch (EventBusClientException exception)
         {
-            Log.Fatal($"Could not connect to event bus: {ex}");
-            Log.CloseAndFlush();
-            return 1;
+            LogConnectToEventBusError(programLogger, exception);
+            loggerFactory.Dispose();
+            return 3;
         }
 
-        Log.Information("Connected to event bus");
+        LogConnectedToEventBus(programLogger);
 
         string javaCmd = JavaLocator.Locate(GlobalLoggerFactory.CreateLogger(nameof(JavaLocator)));
-        var starterLogger = GlobalLoggerFactory.CreateLogger<Starter>();
-        var starter = new Starter(eventBusClient, options.EventBusConnectionString, options.PublicAddress, checked((ushort)options.BasePublicPort), javaCmd, options.BridgeJar, options.ServerTemplateDir, options.FabricJarName, options.ConnectorPluginJar, starterLogger);
-        var instanceManagerLogger = GlobalLoggerFactory.CreateLogger<InstanceManager>();
-        var instanceManager = await InstanceManager.CreateAsync(eventBusClient, starter, instanceManagerLogger);
+        var starter = new Starter(eventBusClient, options.EventBusConnectionString, builder.Configuration["PublicEndPoint"], checked((ushort)builder.Configuration.GetValue<int>("BaseInstancePublicPort")), javaCmd, options.BridgeJar, options.ServerTemplateDir, options.FabricJarName, options.ConnectorPluginJar, GlobalLoggerFactory.CreateLogger<Starter>());
+
+        startupDeps.EventBus = eventBusClient;
+        startupDeps.Starter = starter;
+
+        // init stuff that needs async initialization
+        await app.Services.GetRequiredService<InstanceManager>().InitializeAsync(eventBusClient);
+
 
         Console.CancelKeyPress += (sender, e) =>
         {
@@ -129,14 +115,39 @@ internal static class Program
 
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
         {
-            instanceManager.ShutdownAsync().Forget();
+            instanceManager.ShutdownAsync().Wait();
         };
 
         Log.Information("Started, public address: {Address}, base port: {BasePort}", options.PublicAddress, options.BasePublicPort);
+        LogStarted(programLogger);
 
         while (true)
         {
-            Thread.Sleep(1000);
+            await Task.Delay(1000);
         }
     }
+
+    internal sealed class StartupDependencies
+    {
+        public EventBusClient EventBus { get; set; } = null!;
+        public Starter Starter { get; set; } = null!;
+    }
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Unhandled exception")]
+    private static partial void LogUnhandledException(ILogger logger, Exception? exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connecting to event bus")]
+    private static partial void LogConnectingToEventBus(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Could not connect to event bus")]
+    private static partial void LogConnectToEventBusError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connected to event bus")]
+    private static partial void LogConnectedToEventBus(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Started, public address: {Address}, base port: {BasePort}")]
+    private static partial void LogStarted(ILogger logger, string Address, int BasePort);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Fatal error during server startup")]
+    private static partial void LogFatalErrorDuringServerStartup(ILogger logger, Exception exception);
 }

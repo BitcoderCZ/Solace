@@ -25,7 +25,9 @@ var objectStore = builder.AddProject<Projects.Solace_ObjectStore_Server>("object
     .WithEndpoint(scheme: "tcp", name: "raw-tcp", env: "TCP_PORT")
     .WithEnvironment("ObjectStore__DataDirectory", objectStoreDataDirectory);
 
-var locatorPort = builder.Configuration.GetValue<int>("Locator:Port", 8088);
+var buildplateLauncher = builder.AddProject<Projects.Solace_Buildplate>("buildplate-launcher")
+    .WithReference(eventBus)
+    .WaitFor(eventBus);
 
 var apiPort = builder.Configuration.GetValue<int>("ApiServer:Port", 8088);
 
@@ -48,6 +50,8 @@ else
 {
     apiServer.WithEnvironment("DatabaseProvider", "Postgres");
 }
+
+var locatorPort = builder.Configuration.GetValue<int>("Locator:Port", 8088);
 
 var locator = builder.AddProject<Projects.Solace_Locator>("locator")
     .WithHttpEndpoint(port: locatorPort, name: "http")
