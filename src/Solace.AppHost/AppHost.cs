@@ -24,8 +24,9 @@ var objectStore = builder.AddProject<Projects.Solace_ObjectStore_Server>("object
     .WithEndpoint(scheme: "tcp", name: "raw-tcp", env: "TCP_PORT")
     .WithEnvironment("ObjectStore__DataDirectory", objectStoreDataDirectory);
 
-var apiPort = builder.Configuration.GetValue<int>("ApiServer:Port", 8080);
-var apiLocalLoginOnly = builder.Configuration.GetValue<bool>("ApiServer:Authentication:LocalLoginOnly", false);
+var locatorPort = builder.Configuration.GetValue<int>("Locator:Port", 8088);
+
+var apiPort = builder.Configuration.GetValue<int>("ApiServer:Port", 8088);
 
 var apiServer = builder.AddProject<Projects.Solace_ApiServer>("api-server")
     .WithHttpEndpoint(port: apiPort, name: "http")
@@ -35,7 +36,7 @@ var apiServer = builder.AddProject<Projects.Solace_ApiServer>("api-server")
     .WaitFor(eventBus)
     .WithReference(objectStore)
     .WaitFor(objectStore)
-    .WithEnvironment("Authentication__LocalLoginOnly", apiLocalLoginOnly.ToString())
+    .WithEnvironment("Authentication__LocalLoginOnly", builder.Configuration.GetValue<bool>("ApiServer:Authentication:LocalLoginOnly", false).ToString())
     .WithEnvironment("Authentication__Login__SoapHeaderValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:SoapHeaderValidityMinutes"])
     .WithEnvironment("Authentication__Login__UserTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:UserTokenValidityMinutes"])
     .WithEnvironment("Authentication__Login__DeviceTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:DeviceTokenValidityMinutes"])
@@ -53,5 +54,10 @@ else
 {
     apiServer.WithEnvironment("DatabaseProvider", "Postgres");
 }
+
+var locator = builder.AddProject<Projects.Solace_Locator>("locator")
+    .WithHttpEndpoint(port: locatorPort, name: "http")
+    .WithReference(apiServer)
+    .WaitFor(apiServer);
 
 builder.Build().Run();

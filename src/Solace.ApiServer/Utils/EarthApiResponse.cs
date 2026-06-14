@@ -3,7 +3,7 @@ using Solace.DB;
 
 namespace Solace.ApiServer.Utils;
 
-public class EarthApiResponse
+public sealed class EarthApiResponse
 {
     public object? Result { get; }
     public Dictionary<string, int?>? Updates { get; } = [];

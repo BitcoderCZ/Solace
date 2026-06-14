@@ -695,7 +695,7 @@ public sealed partial class Importer : IAsyncDisposable
     [LoggerMessage(Level = LogLevel.Information, Message = "Generating preview")]
     private partial void LogGeneratingPreview();
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Could not get preview for buildplate (preview generator did not respond to event bus request)")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not get preview for buildplate (preview generator did not respond to event bus request)")]
     private partial void LogGeneratePreviewFailNoResponse();
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Preview was not generated because event bus is not connected")]
