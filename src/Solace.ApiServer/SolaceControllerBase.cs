@@ -9,8 +9,6 @@ namespace Solace.ApiServer;
 [ApiController]
 internal abstract class SolaceControllerBase : ControllerBase
 {
-    private static Config Config => Program.config;
-
     // todo: JsonHttpResult<EarthApiResponse>
     protected static ContentHttpResult EarthJson(object results)
         => JsonCamelCase(new EarthApiResponse(results));

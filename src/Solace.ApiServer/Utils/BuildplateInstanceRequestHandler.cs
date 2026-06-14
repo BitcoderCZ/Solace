@@ -17,7 +17,7 @@ namespace Solace.ApiServer.Utils;
 
 public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 {
-    private readonly EarthDbContext _earthDB;
+    private readonly IDbContextFactory<EarthDbContext> _earthDbFactory;
     private readonly ObjectStoreClient _objectStoreClient;
     private readonly Catalog _catalog;
     private readonly BuildplateInstancesManager _buildplateInstancesManager;
@@ -26,11 +26,11 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 
     private RequestHandler? _requestHandler;
 
-    public BuildplateInstanceRequestHandler(EarthDbContext earthDB, ObjectStoreClient objectStoreClient, Catalog catalog, BuildplateInstancesManager buildplateInstancesManager, ILogger<BuildplateInstanceRequestHandler> logger)
+    public BuildplateInstanceRequestHandler(IDbContextFactory<EarthDbContext> earthDbFactory, ObjectStoreClient objectStoreClient, StaticData.StaticData staticData, BuildplateInstancesManager buildplateInstancesManager, ILogger<BuildplateInstanceRequestHandler> logger)
     {
-        _earthDB = earthDB;
+        _earthDbFactory = earthDbFactory;
         _objectStoreClient = objectStoreClient;
-        _catalog = catalog;
+        _catalog = staticData.Catalog;
         _buildplateInstancesManager = buildplateInstancesManager;
         _logger = logger;
     }
@@ -219,7 +219,9 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 
     private async Task<BuildplateLoadResponse?> HandleLoad(Guid accountId, Guid buildplateId)
     {
-        var buildplate = await _earthDB.PlayerBuildplates
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+        var buildplate = await earthDb.PlayerBuildplates
             .AsNoTracking()
             .FirstOrDefaultAsync(buildplate => buildplate.Id == buildplateId && buildplate.AccountId == accountId);
 
@@ -242,7 +244,9 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 
     private async Task<BuildplateLoadResponse?> HandleLoadShared(Guid sharedBuildplateId)
     {
-        var sharedBuildplate = await _earthDB.SharedBuildplates
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+        var sharedBuildplate = await earthDb.SharedBuildplates
             .AsNoTracking()
             .FirstOrDefaultAsync(sharedBuildplate => sharedBuildplate.Id == sharedBuildplateId);
 
@@ -265,7 +269,9 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 
     private async Task<BuildplateLoadResponse?> HandleLoadEncounter(Guid encounterBuildplateId)
     {
-        var encounterBuildplate = await _earthDB.EncounterBuildplates
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+        var encounterBuildplate = await earthDb.EncounterBuildplates
             .AsNoTracking()
             .FirstOrDefaultAsync(encounterBuildplate => encounterBuildplate.Id == encounterBuildplateId);
 
@@ -314,7 +320,9 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
             return false;
         }
 
-        var buildplateUnsafeForPreviewGenerator = await _earthDB.PlayerBuildplates
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+        var buildplateUnsafeForPreviewGenerator = await earthDb.PlayerBuildplates
             .AsNoTracking()
             .FirstOrDefaultAsync(buildplate => buildplate.Id == buildplateId);
 
@@ -352,7 +360,7 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 
         try
         {
-            var buildplate = await _earthDB.PlayerBuildplates
+            var buildplate = await earthDb.PlayerBuildplates
                 .AsTracking()
                 .FirstOrDefaultAsync(buildplate => buildplate.Id == buildplateId && buildplate.AccountId == accountId);
 
@@ -383,7 +391,7 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
                 oldPreviewObjectId = "";
             }
 
-            await _earthDB.SaveChangesAsync();
+            await earthDb.SaveChangesAsync();
 
             await _objectStoreClient.DeleteAsync(oldServerDataObjectId);
 
@@ -421,6 +429,8 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
             return null;
         }
 
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
         InventoryResponse? initialInventoryContents;
         switch (instanceInfo.Type)
         {
@@ -432,11 +442,11 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
                 break;
             case BuildplateInstancesManager.InstanceType.PLAY:
                 {
-                    var inventory = await _earthDB.Inventories
+                    var inventory = await earthDb.Inventories
                         .AsNoTracking()
                         .FirstOrNewAsync(invenotry => invenotry.Id == playerConnectedRequest.Uuid, trackNew: false);
 
-                    var hotbar = await _earthDB.Hotbars
+                    var hotbar = await earthDb.Hotbars
                         .AsNoTracking()
                         .FirstOrNewAsync(hotbar => hotbar.Id == playerConnectedRequest.Uuid, trackNew: false);
 
@@ -455,7 +465,7 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
                 break;
             case BuildplateInstancesManager.InstanceType.SHARED_BUILD or BuildplateInstancesManager.InstanceType.SHARED_PLAY:
                 {
-                    var sharedBuildplate = await _earthDB.SharedBuildplates
+                    var sharedBuildplate = await earthDb.SharedBuildplates
                         .AsNoTracking()
                         .FirstOrDefaultAsync(sharedBuildplate => sharedBuildplate.Id == instanceInfo.BuildplateId);
 
@@ -485,11 +495,11 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
                 break;
             case BuildplateInstancesManager.InstanceType.ENCOUNTER:
                 {
-                    var inventory = await _earthDB.Inventories
+                    var inventory = await earthDb.Inventories
                         .AsTracking()
                         .FirstOrNewAsync(invenotry => invenotry.Id == playerConnectedRequest.Uuid);
 
-                    var hotbar = await _earthDB.Hotbars
+                    var hotbar = await earthDb.Hotbars
                         .AsTracking()
                         .FirstOrNewAsync(hotbar => hotbar.Id == playerConnectedRequest.Uuid);
 
@@ -526,7 +536,7 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
                         inventoryResponseHotbar
                     );
 
-                    await _earthDB.SaveChangesAsync();
+                    await earthDb.SaveChangesAsync();
                 }
 
                 break;
@@ -559,6 +569,8 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
         bool usesBackpack = instanceInfo.Type == BuildplateInstancesManager.InstanceType.ENCOUNTER;
         if (usesBackpack)
         {
+            await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
             InventoryResponse? backpackContents = playerDisconnectedRequest.BackpackContents;
             if (backpackContents is null)
             {
@@ -566,15 +578,15 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
                 return null;
             }
 
-            var inventory = await _earthDB.Inventories
+            var inventory = await earthDb.Inventories
                 .AsTracking()
                 .FirstOrNewAsync(invenotry => invenotry.Id == playerDisconnectedRequest.PlayerId);
 
-            var hotbar = await _earthDB.Hotbars
+            var hotbar = await earthDb.Hotbars
                 .AsTracking()
                 .FirstOrNewAsync(hotbar => hotbar.Id == playerDisconnectedRequest.PlayerId);
 
-            var journal = await _earthDB.Journals
+            var journal = await earthDb.Journals
                 .AsTracking()
                 .FirstOrNewAsync(journal => journal.Id == playerDisconnectedRequest.PlayerId);
 
@@ -625,11 +637,11 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 
             hotbar.LimitToInventory(inventory);
 
-            await _earthDB.SaveChangesAsync();
+            await earthDb.SaveChangesAsync();
 
             foreach (var itemId in unlockedJournalItems)
             {
-                await TokenUtils.AddTokenAsync(new EarthDbContext.Results(_earthDB), playerDisconnectedRequest.PlayerId, new TokensEF.JournalItemUnlockedToken(itemId));
+                await TokenUtils.AddTokenAsync(new EarthDbContext.Results(earthDb), playerDisconnectedRequest.PlayerId, new TokensEF.JournalItemUnlockedToken(itemId));
             }
         }
 
@@ -680,11 +692,13 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
                 throw new UnreachableException();
             }
 
-            var profile = await _earthDB.Profiles
+            await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+            var profile = await earthDb.Profiles
                 .AsNoTracking()
                 .FirstOrNewAsync(profile => profile.Id == accountId, trackNew: false);
 
-            var boosts = await _earthDB.Boosts
+            var boosts = await earthDb.Boosts
                 .AsNoTracking()
                 .FirstOrNewAsync(boosts => boosts.Id == accountId, trackNew: false);
 
@@ -719,11 +733,13 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
     private async Task<InventoryResponse?> HandleGetInventory(Guid instanceId, Guid requestedInventoryAccountId)
 #pragma warning restore IDE0060 // Remove unused parameter
     {
-        var inventory = await _earthDB.Inventories
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+        var inventory = await earthDb.Inventories
             .AsNoTracking()
             .FirstOrNewAsync(inventory => inventory.Id == requestedInventoryAccountId, trackNew: false);
 
-        var hotbar = await _earthDB.Hotbars
+        var hotbar = await earthDb.Hotbars
             .AsNoTracking()
             .FirstOrNewAsync(hotbar => hotbar.Id == requestedInventoryAccountId, trackNew: false);
 
@@ -754,11 +770,13 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
             return false;
         }
 
-        var inventory = await _earthDB.Inventories
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+        var inventory = await earthDb.Inventories
             .AsTracking()
             .FirstOrNewAsync(inventory => inventory.Id == inventoryAddItemMessage.PlayerId);
 
-        var journal = await _earthDB.Journals
+        var journal = await earthDb.Journals
             .AsTracking()
             .FirstOrNewAsync(journal => journal.Id == inventoryAddItemMessage.PlayerId);
 
@@ -780,11 +798,11 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
             }
         }
 
-        await _earthDB.SaveChangesAsync();
+        await earthDb.SaveChangesAsync();
 
         if (journalItemUnlocked)
         {
-            await TokenUtils.AddTokenAsync(new EarthDbContext.Results(_earthDB), inventoryAddItemMessage.PlayerId, new TokensEF.JournalItemUnlockedToken(inventoryAddItemMessage.ItemId));
+            await TokenUtils.AddTokenAsync(new EarthDbContext.Results(earthDb), inventoryAddItemMessage.PlayerId, new TokensEF.JournalItemUnlockedToken(inventoryAddItemMessage.ItemId));
         }
 
         return true;
@@ -792,11 +810,13 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 
     private async Task<object> HandleInventoryRemove(Guid instanceId, InventoryRemoveItemRequest inventoryRemoveItemRequest)
     {
-        var inventory = await _earthDB.Inventories
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+        var inventory = await earthDb.Inventories
             .AsTracking()
             .FirstOrNewAsync(inventory => inventory.Id == inventoryRemoveItemRequest.PlayerId);
 
-        var hotbar = await _earthDB.Hotbars
+        var hotbar = await earthDb.Hotbars
             .AsTracking()
             .FirstOrNewAsync(hotbar => hotbar.Id == inventoryRemoveItemRequest.PlayerId);
 
@@ -834,14 +854,16 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 
         hotbar.LimitToInventory(inventory);
 
-        await _earthDB.SaveChangesAsync();
+        await earthDb.SaveChangesAsync();
 
         return result;
     }
 
     private async Task<bool> HandleInventoryUpdateWear(Guid instanceId, InventoryUpdateItemWearMessage inventoryUpdateItemWearMessage)
     {
-        var inventory = await _earthDB.Inventories
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+        var inventory = await earthDb.Inventories
             .AsTracking()
             .FirstOrNewAsync(inventory => inventory.Id == inventoryUpdateItemWearMessage.PlayerId);
 
@@ -861,7 +883,7 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
             LogBuildplateInstanceAttemptedToUpdateItemWearForItemPlayerThatIsNotInInventory(instanceId, inventoryUpdateItemWearMessage.ItemId, inventoryUpdateItemWearMessage.InstanceId, inventoryUpdateItemWearMessage.PlayerId);
         }
 
-        await _earthDB.SaveChangesAsync();
+        await earthDb.SaveChangesAsync();
 
         return true;
     }
@@ -870,11 +892,13 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
     private async Task<bool> HandleInventorySetHotbar(Guid instanceId, InventorySetHotbarMessage inventorySetHotbarMessage)
 #pragma warning restore IDE0060 // Remove unused parameter
     {
-        var inventory = await _earthDB.Inventories
+        await using var earthDb = await _earthDbFactory.CreateDbContextAsync();
+
+        var inventory = await earthDb.Inventories
             .AsNoTracking()
             .FirstOrNewAsync(inventory => inventory.Id == inventorySetHotbarMessage.PlayerId, trackNew: false);
 
-        var hotbar = await _earthDB.Hotbars
+        var hotbar = await earthDb.Hotbars
             .AsTracking()
             .FirstOrNewAsync(hotbar => hotbar.Id == inventorySetHotbarMessage.PlayerId);
 
@@ -886,7 +910,7 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 
         hotbar.LimitToInventory(inventory);
 
-        await _earthDB.SaveChangesAsync();
+        await earthDb.SaveChangesAsync();
 
         return true;
     }

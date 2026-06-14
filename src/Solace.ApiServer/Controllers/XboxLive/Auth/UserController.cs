@@ -9,14 +9,18 @@ namespace Solace.ApiServer.Controllers.XboxLive.Auth;
 [Route("user.auth.xboxlive.com/user/authenticate")]
 internal sealed class UserController : SolaceControllerBase
 {
-    private static Config Config => Program.config;
-
     private readonly CryptoSecrets _cryptoSecrets;
+
+    private readonly int _xboxLiveTokenValidityMinutes;
+
     private readonly ILogger<UserController> _logger;
 
-    public UserController(CryptoSecrets cryptoSecrets, ILogger<UserController> logger)
+    public UserController(CryptoSecrets cryptoSecrets, IConfiguration configuration, ILogger<UserController> logger)
     {
         _cryptoSecrets = cryptoSecrets;
+        
+        _xboxLiveTokenValidityMinutes = configuration.GetValue<int>("Authentication:XboxLive:TokenValidityMinutes");
+
         _logger = logger;
     }
 
@@ -50,7 +54,7 @@ internal sealed class UserController : SolaceControllerBase
             return TypedResults.Unauthorized();
         }
 
-        var tokenValidity = ValidityDatePair.Create(Config.XboxLive.TokenValidityMinutes);
+        var tokenValidity = ValidityDatePair.Create(_xboxLiveTokenValidityMinutes);
         var token = new Tokens.Xbox.UserToken()
         {
             Xid = ticket.UserId,

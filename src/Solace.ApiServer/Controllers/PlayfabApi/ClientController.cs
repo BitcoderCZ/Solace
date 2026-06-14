@@ -12,8 +12,6 @@ namespace Solace.ApiServer.Controllers.PlayfabApi;
 [Route("20CA2.playfabapi.com/Client")]
 internal sealed partial class ClientController : SolaceControllerBase
 {
-    private static Config Config => Program.config;
-
     private readonly CryptoSecrets _cryptoSecrets;
     private readonly ILogger<ClientController> _logger;
 

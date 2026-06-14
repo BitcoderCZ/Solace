@@ -1,6 +1,4 @@
-﻿using Uma.Uuid;
-
-namespace Solace.Common.Utils;
+﻿namespace Solace.Common.Utils;
 
 public static class U
 {

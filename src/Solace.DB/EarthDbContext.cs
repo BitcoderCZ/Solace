@@ -53,6 +53,9 @@ public sealed class EarthDbContext : DbContext
 
     public DbSet<Secret> Secrets { get; set; }
 
+    public static EarthDbContext CreateSqliteFromPath(string path)
+        => CreateFromConnection("Data Source=" + Path.GetFullPath(path), "Sqlite");
+
     public static EarthDbContext CreateFromConnection(string connectionString, string provider)
     {
         var optionsBuilder = new DbContextOptionsBuilder<EarthDbContext>();
@@ -68,13 +71,13 @@ public sealed class EarthDbContext : DbContext
             case "Postgres":
                 optionsBuilder.UseNpgsql(connectionString, x =>
                 {
-                    x.MigrationsAssembly("Solace.DB.PostgresMigrations");
+                    x.MigrationsAssembly("Solace.DB.Postgres");
                 });
                 break;
             case "Sqlite":
                 optionsBuilder.UseSqlite(connectionString, x =>
                 {
-                    x.MigrationsAssembly("Solace.DB.SqliteMigrations");
+                    x.MigrationsAssembly("Solace.DB.Sqlite");
                 });
                 break;
             default:

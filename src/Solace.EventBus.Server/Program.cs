@@ -15,6 +15,8 @@ internal static partial class Program
         {
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
+                Console.Error.WriteLine($"Unhandled exception: {e.ExceptionObject}");
+
                 try
                 {
                     var logger = GlobalLoggerFactory.CreateLogger(nameof(Program));
@@ -22,10 +24,13 @@ internal static partial class Program
                 }
                 catch
                 {
-                    Console.Error.WriteLine($"Unhandled exception before logger initialization: {e.ExceptionObject}");
+                    Console.Error.WriteLine($"Unhandled exception before logger initialization");
                 }
 
-                Environment.Exit(1);
+                Console.Out.Flush();
+                Console.Error.Flush();
+
+                Environment.Exit(2);
             };
         }
 

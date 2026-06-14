@@ -25,10 +25,14 @@ internal sealed partial class LoginController : SolaceControllerBase
 {
     private static readonly RandomNumberGenerator _rng = RandomNumberGenerator.Create();
 
-    private static Config Config => Program.config;
-
     private readonly EarthDbContext _earthDb;
     private readonly CryptoSecrets _cryptoSecrets;
+
+    private readonly int _loginSoapHeaderValidityMinutes;
+    private readonly int _loginDeviceTokenValidityMinutes;
+    private readonly int _loginUserTokenValidityMinutes;
+    private readonly int _loginXboxTokenValidityMinutes;
+
     private readonly ILogger<LoginController> _logger;
 
     private static readonly (string, string)[] namespaces =
@@ -47,10 +51,16 @@ internal sealed partial class LoginController : SolaceControllerBase
         ("ns1", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"),
     ];
 
-    public LoginController(EarthDbContext earthDb, CryptoSecrets cryptoSecrets, ILogger<LoginController> logger)
+    public LoginController(EarthDbContext earthDb, CryptoSecrets cryptoSecrets, IConfiguration configuration, ILogger<LoginController> logger)
     {
         _earthDb = earthDb;
         _cryptoSecrets = cryptoSecrets;
+
+        _loginSoapHeaderValidityMinutes = configuration.GetValue<int>("Authentication:Login:SoapHeaderValidityMinutes");
+        _loginDeviceTokenValidityMinutes = configuration.GetValue<int>("Authentication:Login:DeviceTokenValidityMinutes");
+        _loginUserTokenValidityMinutes = configuration.GetValue<int>("Authentication:Login:UserTokenValidityMinutes");
+        _loginXboxTokenValidityMinutes = configuration.GetValue<int>("Authentication:Login:XboxTokenValidityMinutes");
+
         _logger = logger;
     }
 
@@ -264,9 +274,9 @@ internal sealed partial class LoginController : SolaceControllerBase
                 return TypedResults.BadRequest();
             }
 
-            var headerValidity = ValidityDatePair.Create(Config.Login.SoapHeaderValidityMinutes);
+            var headerValidity = ValidityDatePair.Create(_loginSoapHeaderValidityMinutes);
 
-            var deviceTokenValidity = ValidityDatePair.Create(Config.Login.DeviceTokenValidityMinutes);
+            var deviceTokenValidity = ValidityDatePair.Create(_loginDeviceTokenValidityMinutes);
             var deviceToken = new Tokens.Live.DeviceToken();
             string deviceTokenString = JwtUtils.Sign(deviceToken, _cryptoSecrets.LoginDeviceTokenSecret, deviceTokenValidity);
 
@@ -433,7 +443,7 @@ internal sealed partial class LoginController : SolaceControllerBase
 
             if (userToken is null || userToken.Expired is true)
             {
-                var headerValidity = ValidityDatePair.Create(Config.Login.SoapHeaderValidityMinutes);
+                var headerValidity = ValidityDatePair.Create(_loginSoapHeaderValidityMinutes);
                 string nonce = GenerateNonce();
 
                 string scheme = Request.IsHttps ? "https" : "http";
@@ -582,14 +592,14 @@ internal sealed partial class LoginController : SolaceControllerBase
             }
             else
             {
-                var headerValidity = ValidityDatePair.Create(Config.Login.SoapHeaderValidityMinutes);
+                var headerValidity = ValidityDatePair.Create(_loginSoapHeaderValidityMinutes);
                 string nonce = GenerateNonce();
 
-                var nextUserTokenValidity = ValidityDatePair.Create(Config.Login.UserTokenValidityMinutes);
+                var nextUserTokenValidity = ValidityDatePair.Create(_loginUserTokenValidityMinutes);
                 var nextUserToken = userToken.Data;
                 string nextUserTokenString = JwtUtils.Sign(nextUserToken, _cryptoSecrets.LoginUserTokenSecret, nextUserTokenValidity);
 
-                var xboxTokenValidity = ValidityDatePair.Create(Config.Login.XboxTokenValidityMinutes);
+                var xboxTokenValidity = ValidityDatePair.Create(_loginXboxTokenValidityMinutes);
                 var xboxToken = new Tokens.Shared.XboxTicketToken(userToken.Data.UserId, userToken.Data.Username);
                 string xboxTokenString = JwtUtils.Sign(xboxToken, _cryptoSecrets.LoginXboxTokenSecret, xboxTokenValidity);
 
@@ -801,7 +811,7 @@ internal sealed partial class LoginController : SolaceControllerBase
     {
         Debug.Assert(account.Username is not null);
 
-        var tokenValidity = ValidityDatePair.Create(Config.Login.UserTokenValidityMinutes);
+        var tokenValidity = ValidityDatePair.Create(_loginUserTokenValidityMinutes);
         var token = new Tokens.Live.UserToken(
             account.Id,
             account.Username,

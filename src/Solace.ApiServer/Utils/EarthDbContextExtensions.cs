@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Solace.DB;
 using Solace.DB.Models.Global;
+using Solace.DB.Utils;
 
 namespace Solace.ApiServer.Utils;
 
@@ -38,13 +39,18 @@ internal static class EarthDbContextExtensions
                 new() { Id = CryptoSecrets.PlayfabSessionTicketName, Value = GenerateSecureSecret(64) },
             ];
 
+            string insertSql = earthDb.Database.Provider switch
+            {
+                DatabaseProvider.Sqlite => "INSERT OR IGNORE INTO Secrets (Id, Value) VALUES ({0}, {1});",
+                DatabaseProvider.Postgres => "INSERT INTO \"Secrets\" (\"Id\", \"Value\") VALUES ({0}, {1}) ON CONFLICT (\"Id\") DO NOTHING;",
+                _ => throw new InvalidOperationException($"Unsupported database provider.")
+            };
+
             try
             {
                 foreach (var secret in potentialSecrets)
                 {
-                    await earthDb.Database.ExecuteSqlRawAsync(
-                        "INSERT OR IGNORE INTO Secrets (Id, Value) VALUES ({0}, {1});",
-                        secret.Id, secret.Value);
+                    await earthDb.Database.ExecuteSqlRawAsync(insertSql, secret.Id, secret.Value);
                 }
 
                 earthDb.ChangeTracker.Clear();

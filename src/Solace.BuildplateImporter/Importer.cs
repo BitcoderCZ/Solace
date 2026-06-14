@@ -45,7 +45,12 @@ public sealed partial class Importer : IAsyncDisposable
             return false;
         }
 
-        byte[] preview = await GeneratePreview(worldData);
+        var preview = await GeneratePreview(worldData);
+
+        if (preview is null)
+        {
+            return false;
+        }
 
         return await StoreTemplate(templateId, name, preview, worldData, cancellationToken);
     }
@@ -98,7 +103,12 @@ public sealed partial class Importer : IAsyncDisposable
 
         worldData = worldData with { Size = template.Size, Offset = template.Offset, Night = template.Night, };
 
-        byte[] preview = await GeneratePreview(worldData);
+        var preview = await GeneratePreview(worldData);
+
+        if (preview is null)
+        {
+            return null;
+        }
 
         string? newPreviewObjectId = await ObjectStoreClient.StoreAsync(preview);
         if (newPreviewObjectId is null)
@@ -242,12 +252,17 @@ public sealed partial class Importer : IAsyncDisposable
             return null;
         }
 
-        byte[]? preview = await ObjectStoreClient.GetAsync(template.PreviewObjectId);
+        var preview = await ObjectStoreClient.GetAsync(template.PreviewObjectId);
 
         if (preview is null)
         {
             LogTemplatePreviewLoadError(LogLevel.Warning, templateId);
             preview = await GeneratePreview(new WorldData(serverData, template.Size, template.Offset, template.Night));
+
+            if (preview is null)
+            {
+                return null;
+            }
         }
 
         var buidplateId = Guid.CreateVersion7();
@@ -309,7 +324,12 @@ public sealed partial class Importer : IAsyncDisposable
 
         worldData = worldData with { Size = buildplate.Size, Offset = buildplate.Offset, Night = buildplate.Night, };
 
-        byte[] preview = await GeneratePreview(worldData);
+        var preview = await GeneratePreview(worldData);
+
+        if (preview is null)
+        {
+            return false;
+        }
 
         string? newPreviewObjectId = await ObjectStoreClient.StoreAsync(preview);
         if (newPreviewObjectId is null)
@@ -405,7 +425,7 @@ public sealed partial class Importer : IAsyncDisposable
         }
     }
 
-    private async Task<byte[]> GeneratePreview(WorldData worldData)
+    private async Task<byte[]?> GeneratePreview(WorldData worldData)
     {
         string? preview;
         if (EventBusClient is not null)
@@ -426,10 +446,10 @@ public sealed partial class Importer : IAsyncDisposable
             preview = null;
         }
 
-        return preview is not null ? Encoding.ASCII.GetBytes(preview) : [];
+        return preview is not null ? Encoding.ASCII.GetBytes(preview) : null;
     }
 
-    private async Task<bool> StoreTemplate(Guid templateId, string name, byte[] preview, WorldData worldData, CancellationToken cancellationToken)
+    private async Task<bool> StoreTemplate(Guid templateId, string name, byte[]? preview, WorldData worldData, CancellationToken cancellationToken)
     {
         TemplateBuildplateEF? template;
         try

@@ -1,14 +1,8 @@
-using CommandLine;
 using Microsoft.EntityFrameworkCore;
-using Serilog;
-using Serilog.Events;
-using System.ComponentModel;
 using System.Diagnostics;
-using Uma.Uuid;
 using Solace.ApiServer.Utils;
 using Solace.BuildplateImporter;
 using Solace.Common;
-using Solace.Common.Utils;
 using Solace.DB;
 using Solace.EventBus.Client;
 using Solace.ObjectStore.Client;
@@ -19,51 +13,22 @@ using Asp.Versioning;
 using Solace.ApiServer.Authentication;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.HttpOverrides;
-using Serilog.Extensions.Logging;
+using System.Reflection;
 
 namespace Solace.ApiServer;
 
-public static class Program
+internal static partial class Program
 {
-    // initialized in main
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    internal static Config config;
-
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    private sealed class Options
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    {
-        [Option("earth-db", Default = "./earth.db", Required = false, HelpText = "Earth database connection string")]
-        public string EarthDatabaseConnectionString { get; set; }
-
-        [Option("live-db", Default = "./live.db", Required = false, HelpText = "Live database connection string")]
-        public string LiveDatabaseConnectionString { get; set; }
-
-        [Option("dir", Default = "./staticdata", Required = false, HelpText = "Static data path")]
-        public string StaticDataPath { get; set; }
-
-        [Option("eventbus", Default = "localhost:5532", Required = false, HelpText = "Event bus address")]
-        public string EventBusConnectionString { get; set; }
-
-        [Option("objectstore", Default = "localhost:5396", Required = false, HelpText = "Object storage address")]
-        public string ObjectStoreConnectionString { get; set; }
-
-        [Option("logger-url", Default = null, Required = false, HelpText = "Url to send logs to")]
-        public string? LoggerUrl { get; set; }
-
-        [Option("local-login-only", Default = false, Required = false, HelpText = "Whenther to only allow local accounts, or also allow microsoft accounts")]
-        public bool LocalLoginOnly { get; set; }
-    }
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-
     public static async Task<int> Main(string[] args)
     {
-        Environment.CurrentDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        // Environment.CurrentDirectory = AppDomain.CurrentDomain.BaseDirectory;
 
         if (!Debugger.IsAttached)
         {
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
+                Console.Error.WriteLine($"Unhandled exception: {e.ExceptionObject}");
+
                 try
                 {
                     var logger = GlobalLoggerFactory.CreateLogger(nameof(Program));
@@ -71,165 +36,39 @@ public static class Program
                 }
                 catch
                 {
-                    Console.Error.WriteLine($"Unhandled exception before logger initialization: {e.ExceptionObject}");
+                    Console.Error.WriteLine($"Unhandled exception before logger initialization");
                 }
 
-                Environment.Exit(1);
+                Console.Out.Flush();
+                Console.Error.Flush();
+
+                Environment.Exit(2);
             };
         }
-
-        if (options.LocalLoginOnly)
-        {
-            Log.Information("Local account only login enabled, Microsoft accounts will not work");
-        }
-        else
-        {
-            Log.Warning("Local account only login disabled, account credentials cannot be verified");
-        }
-
-        Log.Information("Loading configuration");
-        try
-        {
-            const string configFileName = "api_config.json";
-            if (!File.Exists(configFileName))
-            {
-                config = Config.Default;
-                File.WriteAllText(configFileName, Json.SerializeIndented(config));
-                Log.Information($"Configuration file not found or invalid, created with default values: {Path.GetFullPath(configFileName)}");
-            }
-            else
-            {
-                config = Json.Deserialize<Config>(File.ReadAllText(configFileName)) ?? Config.Default;
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Fatal($"Failed to load configuration: {ex}");
-            Log.CloseAndFlush();
-            return 1;
-        }
-
-        Log.Information("Loaded configuration");
-
-        Log.Information("Loading static data");
-        SData staticData;
-        try
-        {
-            staticData = new SData(options.StaticDataPath);
-        }
-        catch (StaticDataException staticDataException)
-        {
-            Log.Fatal($"Failed to load static data: {staticDataException}");
-            Log.CloseAndFlush();
-            return 1;
-        }
-
-        Log.Information("Loaded static data");
-
-        Log.Information("Importing shop buildplates");
-
-        await using (var earthDbContext = EarthDbContext.CreateFromPath(options.EarthDatabaseConnectionString!))
-        {
-            var currentShopBuildplates = await earthDbContext.TemplateBuildplates
-                .AsNoTracking()
-                .ToListAsync();
-
-            await using var importer = new Importer(earthDbContext, eventBus, objectStore, importerLogger)
-            {
-                OwnsEarthDb = false,
-                OwnsEventBusClient = false,
-                OwnsObjectStoreClient = false,
-            };
-
-            foreach (var buidplate in staticData.Buildplates.ShopBuildplates)
-            {
-                if (earthDbContext.TemplateBuildplates.Any(bp => bp.Id == buidplate.Id))
-                {
-                    Log.Debug($"Shop buildplate {buidplate.Id} already exists");
-                    continue;
-                }
-
-                try
-                {
-                    Log.Information($"Importing shop buildplate {buidplate.Id}");
-
-                    string name = "unknown buildplate";
-                    var bpPlayfabItem = staticData.Playfab.Items.Values.FirstOrDefault(item => item.Data is Playfab.Item.BuildplateData bpData && bpData.Id == buidplate.Id);
-                    if (bpPlayfabItem is not null)
-                    {
-                        name = bpPlayfabItem.Title;
-                    }
-
-                    using (var buidplateData = buidplate.OpenRead())
-                    {
-                        await importer.ImportTemplateAsync(buidplate.Id, $"[SHOP] {name}", buidplateData);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Fatal($"Failed to import shop buidplate {buidplate.Id}: {ex}");
-                    Log.CloseAndFlush();
-                    return 1;
-                }
-            }
-        }
-
-        Log.Information("Imported shop buidplates");
 
         var builder = WebApplication.CreateBuilder(args);
 
+        builder.AddServiceDefaults();
+
         var earthDbConnectionString = builder.Configuration.GetConnectionString("EarthDb");
         var earthDbProvider = builder.Configuration["DatabaseProvider"];
+
+        bool isEFTooling = Assembly.GetEntryAssembly()?.GetName().Name == "ef";
+
+        if (isEFTooling)
+        {
+            earthDbProvider ??= "Sqlite";
+            earthDbConnectionString ??= "Data Source=dummy.db";
+        }
+
         Debug.Assert(earthDbConnectionString is not null);
         Debug.Assert(earthDbProvider is not null);
 
-        var eventBusConnectionString = builder.Configuration.GetConnectionString("event-bus");
-        Debug.Assert(eventBusConnectionString is not null);
-        var eventBusUri = new Uri(eventBusConnectionString);
-
-        Log.Information("Connecting to event bus");
-        EventBusClient eventBus;
-        try
-        {
-            eventBus = await EventBusClient.ConnectAsync($"{eventBusUri.Host}:{eventBusUri.Port}");
-        }
-        catch (EventBusClientException ex)
-        {
-            Log.Fatal($"Could not connect to event bus: {ex}");
-            Log.CloseAndFlush();
-            return 1;
-        }
-
-        Log.Information("Connected to event bus");
-
-        var objectStoreConnectionString = builder.Configuration.GetConnectionString("object-store");
-        Debug.Assert(objectStoreConnectionString is not null);
-        var objectStoreUri = new Uri(objectStoreConnectionString);
-
-        Log.Information("Connecting to object storage");
-        ObjectStoreClient objectStore;
-        try
-        {
-            objectStore = await ObjectStoreClient.ConnectAsync($"{objectStoreUri.Host}:{objectStoreUri.Port}");
-        }
-        catch (ObjectStoreClientException ex)
-        {
-            Log.Fatal($"Could not connect to object storage: {ex}");
-            Log.CloseAndFlush();
-            return 1;
-        }
-
-        Log.Information("Connected to object storage");
-
-        // builder.Host.UseSerilog();
-
-        // builder.WebHost.UseUrls($"http://*:8080/");
-
-        builder.AddServiceDefaults();
-
-        builder.Services.AddSingleton(eventBus);
-        builder.Services.AddSingleton(objectStore);
-        builder.Services.AddSingleton(staticData);
+        builder.Services.AddSingleton<StartupDependencies>();
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().EventBus);
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().ObjectStore);
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().StaticData);
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().Secrets);
         builder.Services.AddSingleton<TappablesManager>();
         builder.Services.AddSingleton<BuildplateInstancesManager>();
         builder.Services.AddSingleton<BuildplateInstanceRequestHandler>();
@@ -261,16 +100,24 @@ public static class Program
         builder.Services.AddAuthentication("GenoaAuth")
             .AddScheme<AuthenticationSchemeOptions, GenoaAuthenticationHandler>("GenoaAuth", null);
 
-        builder.Services.AddDbContext<EarthDbContext>(options => EarthDbContext.ConfigureBuilder(options, earthDbConnectionString, earthDbProvider));
-
-        await using (var earthDbContext = EarthDbContext.CreateFromConnection(earthDbConnectionString, earthDbProvider))
-        {
-            var secrets = await earthDbContext.GetOrInitializeSecretsAsync();
-
-            builder.Services.AddSingleton(secrets);
-        }
+        builder.Services.AddDbContextFactory<EarthDbContext>(options =>
+            EarthDbContext.ConfigureBuilder(options, earthDbConnectionString, earthDbProvider));
 
         var app = builder.Build();
+
+        var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+        GlobalLoggerFactory.Initialize(loggerFactory);
+
+        var programLogger = loggerFactory.CreateLogger(nameof(Program));
+
+        if (builder.Configuration.GetValue<bool>("Authentication:LocalLoginOnly"))
+        {
+            LogLocalAccountOnlyEnabled(programLogger);
+        }
+        else
+        {
+            LogLocalAccountOnlyDisabled(programLogger);
+        }
 
         var forwardedHeadersOptions = new ForwardedHeadersOptions
         {
@@ -302,6 +149,77 @@ public static class Program
 
         app.MapControllers();
 
+        // init stuff that requires logger but needs to be injected
+        var startupDeps = app.Services.GetRequiredService<StartupDependencies>();
+
+        var eventBusConnectionString = builder.Configuration["services:event-bus:raw-tcp:0"];
+        Debug.Assert(eventBusConnectionString is not null);
+        var eventBusUri = new Uri(eventBusConnectionString);
+
+        LogConnectingToEventBus(programLogger);
+        EventBusClient eventBus;
+        try
+        {
+            eventBus = await EventBusClient.ConnectAsync($"{eventBusUri.Host}:{eventBusUri.Port}");
+        }
+        catch (EventBusClientException exception)
+        {
+            LogConnectToEventBusError(programLogger, exception);
+            loggerFactory.Dispose();
+            return 3;
+        }
+
+        LogConnectedToEventBus(programLogger);
+
+        var objectStoreConnectionString = builder.Configuration["services:object-store:raw-tcp:0"];
+        Debug.Assert(objectStoreConnectionString is not null);
+        var objectStoreUri = new Uri(objectStoreConnectionString);
+
+        LogConnectingToObjectStore(programLogger);
+        ObjectStoreClient objectStore;
+        try
+        {
+            objectStore = await ObjectStoreClient.ConnectAsync($"{objectStoreUri.Host}:{objectStoreUri.Port}");
+        }
+        catch (ObjectStoreClientException exception)
+        {
+            LogConnectToObjectStoreError(programLogger, exception);
+            loggerFactory.Dispose();
+            return 4;
+        }
+
+        LogConnectedToObjectStore(programLogger);
+
+        LogLoadingStaticData(programLogger);
+        SData staticData;
+        try
+        {
+            staticData = new SData(builder.Configuration["StaticDataPath"]!);
+        }
+        catch (StaticDataException exception)
+        {
+            LogLoadStaticDataError(programLogger, exception);
+            loggerFactory.Dispose();
+            return 5;
+        }
+
+        LogLoadedStaticData(programLogger);
+
+        startupDeps.EventBus = eventBus;
+        startupDeps.ObjectStore = objectStore;
+        startupDeps.StaticData = staticData;
+
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<EarthDbContext>();
+
+            await db.Database.MigrateAsync();
+
+            startupDeps.Secrets = await db.GetOrInitializeSecretsAsync();
+
+            await ImportShopBuildplates(db, eventBus, objectStore, staticData, programLogger);
+        }
+
         // init stuff that needs async initialization
         await app.Services.GetRequiredService<TappablesManager>().InitializeAsync(eventBus);
         await app.Services.GetRequiredService<BuildplateInstancesManager>().InitializeAsync(eventBus);
@@ -311,4 +229,112 @@ public static class Program
 
         return 0;
     }
+
+    private static async Task ImportShopBuildplates(EarthDbContext earthDbContext, EventBusClient eventBus, ObjectStoreClient objectStore, SData staticData, ILogger logger)
+    {
+        LogImportingShopBuildplates(logger);
+
+        var currentShopBuildplates = await earthDbContext.TemplateBuildplates
+            .AsNoTracking()
+            .ToListAsync();
+
+        await using var importer = new Importer(earthDbContext, eventBus, objectStore, logger)
+        {
+            OwnsEarthDb = false,
+            OwnsEventBusClient = false,
+            OwnsObjectStoreClient = false,
+        };
+
+        foreach (var buildplate in staticData.Buildplates.ShopBuildplates)
+        {
+            if (earthDbContext.TemplateBuildplates.Any(bp => bp.Id == buildplate.Id))
+            {
+                LogShopBuildplateAlreadyExists(logger, buildplate.Id);
+                continue;
+            }
+
+            try
+            {
+                LogImportingShopBuildplate(logger, buildplate.Id);
+
+                string name = "unknown buildplate";
+                var bpPlayfabItem = staticData.Playfab.Items.Values.FirstOrDefault(item => item.Data is Playfab.Item.BuildplateData bpData && bpData.Id == buildplate.Id);
+                if (bpPlayfabItem is not null)
+                {
+                    name = bpPlayfabItem.Title;
+                }
+
+                using (var buidplateData = buildplate.OpenRead())
+                {
+                    await importer.ImportTemplateAsync(buildplate.Id, $"[SHOP] {name}", buidplateData);
+                }
+            }
+            catch (Exception exception)
+            {
+                LogFailedToImportShopBuidplate(logger, exception, buildplate.Id);
+            }
+        }
+
+        LogImportedShopBuildplates(logger);
+    }
+
+    internal sealed class StartupDependencies
+    {
+        public EventBusClient EventBus { get; set; } = null!;
+        public ObjectStoreClient ObjectStore { get; set; } = null!;
+        public SData StaticData { get; set; } = null!;
+        public CryptoSecrets Secrets { get; set; } = null!;
+    }
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Unhandled exception")]
+    private static partial void LogUnhandledException(ILogger logger, Exception? exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Local account only login enabled, Microsoft accounts will not work")]
+    private static partial void LogLocalAccountOnlyEnabled(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Local account only login disabled, account credentials cannot be verified")]
+    private static partial void LogLocalAccountOnlyDisabled(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connecting to event bus")]
+    private static partial void LogConnectingToEventBus(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Could not connect to event bus")]
+    private static partial void LogConnectToEventBusError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connected to event bus")]
+    private static partial void LogConnectedToEventBus(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connecting to object store")]
+    private static partial void LogConnectingToObjectStore(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Could not connect to object store")]
+    private static partial void LogConnectToObjectStoreError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connected to object store")]
+    private static partial void LogConnectedToObjectStore(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loading static data")]
+    private static partial void LogLoadingStaticData(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Failed to load static data")]
+    private static partial void LogLoadStaticDataError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loaded static data")]
+    private static partial void LogLoadedStaticData(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Importing shop buildplates")]
+    private static partial void LogImportingShopBuildplates(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Shop buildplate {BuildplateId} already exists")]
+    private static partial void LogShopBuildplateAlreadyExists(ILogger logger, Guid BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Importing shop buildplate {BuildplateId}")]
+    private static partial void LogImportingShopBuildplate(ILogger logger, Guid BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to import shop buidplate {BuildplateId}")]
+    private static partial void LogFailedToImportShopBuidplate(ILogger logger, Exception exception, Guid BuildplateId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Imported shop buildplates")]
+    private static partial void LogImportedShopBuildplates(ILogger logger);
 }
+

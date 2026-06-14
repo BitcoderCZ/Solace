@@ -9,14 +9,18 @@ namespace Solace.ApiServer.Controllers.XboxLive.Auth;
 [Route("xsts.auth.xboxlive.com/xsts/authorize")]
 internal sealed class XstsController : SolaceControllerBase
 {
-    private static Config Config => Program.config;
-
     private readonly CryptoSecrets _cryptoSecrets;
+
+    private readonly int _xboxLiveTokenValidityMinutes;
+
     private readonly ILogger<XstsController> _logger;
 
-    public XstsController(CryptoSecrets cryptoSecrets, ILogger<XstsController> logger)
+    public XstsController(CryptoSecrets cryptoSecrets, IConfiguration configuration, ILogger<XstsController> logger)
     {
         _cryptoSecrets = cryptoSecrets;
+
+        _xboxLiveTokenValidityMinutes = configuration.GetValue<int>("Authentication:XboxLive:TokenValidityMinutes");
+
         _logger = logger;
     }
 
@@ -62,7 +66,7 @@ internal sealed class XstsController : SolaceControllerBase
         {
             case "http://xboxlive.com":
                 {
-                    var tokenValidity = ValidityDatePair.Create(Config.XboxLive.TokenValidityMinutes);
+                    var tokenValidity = ValidityDatePair.Create(_xboxLiveTokenValidityMinutes);
                     var token = new Tokens.Xbox.XapiToken(userToken.UserId, userToken.Username);
 
                     return JsonPascalCase(new AuthenticateResponse(
@@ -90,7 +94,7 @@ internal sealed class XstsController : SolaceControllerBase
 
             case "http://events.xboxlive.com":
                 {
-                    var tokenValidity = ValidityDatePair.Create(Config.XboxLive.TokenValidityMinutes);
+                    var tokenValidity = ValidityDatePair.Create(_xboxLiveTokenValidityMinutes);
                     var token = new Tokens.Xbox.XapiToken(userToken.UserId, userToken.Username);
 
                     return JsonPascalCase(new AuthenticateResponse(
@@ -111,7 +115,7 @@ internal sealed class XstsController : SolaceControllerBase
 
             case "https://b980a380.minecraft.playfabapi.com/":
                 {
-                    var tokenValidity = ValidityDatePair.Create(Config.XboxLive.TokenValidityMinutes);
+                    var tokenValidity = ValidityDatePair.Create(_xboxLiveTokenValidityMinutes);
                     var token = new Tokens.Shared.PlayfabXboxToken(userToken.UserId);
 
                     return JsonPascalCase(new AuthenticateResponse(

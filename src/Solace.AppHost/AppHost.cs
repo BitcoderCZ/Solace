@@ -2,16 +2,17 @@ using Microsoft.Extensions.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-bool isSelfHosted = builder.Configuration["Mode"] == "SelfHosted";
+bool useSqlite = builder.Configuration.GetValue<bool>("Shared:UseSqlite");
 
 IResourceBuilder<IResourceWithConnectionString> db;
-if (isSelfHosted)
+if (useSqlite)
 {
-    db = builder.AddConnectionString("EarthDb");
+    db = builder.AddSqlite("EarthDb", "data", "earth.db");
 }
 else
 {
-    db = builder.AddPostgres("postgres").AddDatabase("EarthDb");
+    var postgres = builder.AddPostgres("postgres").WithPgAdmin();
+    db = postgres.AddDatabase("EarthDb");
 }
 
 var eventBus = builder.AddProject<Projects.Solace_EventBus_Server>("event-bus")
@@ -34,9 +35,17 @@ var apiServer = builder.AddProject<Projects.Solace_ApiServer>("api-server")
     .WaitFor(eventBus)
     .WithReference(objectStore)
     .WaitFor(objectStore)
-    .WithEnvironment("Authentication__LocalLoginOnly", apiLocalLoginOnly.ToString());
+    .WithEnvironment("Authentication__LocalLoginOnly", apiLocalLoginOnly.ToString())
+    .WithEnvironment("Authentication__Login__SoapHeaderValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:SoapHeaderValidityMinutes"])
+    .WithEnvironment("Authentication__Login__UserTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:UserTokenValidityMinutes"])
+    .WithEnvironment("Authentication__Login__DeviceTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:DeviceTokenValidityMinutes"])
+    .WithEnvironment("Authentication__Login__XboxTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:Login:XboxTokenValidityMinutes"])
+    .WithEnvironment("Authentication__XboxLive__TokenValidityMinutes", builder.Configuration["ApiServer:Authentication:XboxLive:TokenValidityMinutes"])
+    .WithEnvironment("Authentication__PlayfabApi__EntityTokenValidityMinutes", builder.Configuration["ApiServer:Authentication:PlayfabApi:EntityTokenValidityMinutes"])
+    .WithEnvironment("Authentication__PlayfabApi__SessionTicketValidityMinutes", builder.Configuration["ApiServer:Authentication:PlayfabApi:SessionTicketValidityMinutes"])
+    .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"]);
 
-if (isSelfHosted)
+if (useSqlite)
 {
     apiServer.WithEnvironment("DatabaseProvider", "Sqlite");
 }

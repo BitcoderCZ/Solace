@@ -14,16 +14,22 @@ namespace Solace.ApiServer.Controllers.PlayfabApi;
 [Route("20CA2.playfabapi.com/Client")]
 internal sealed partial class LoginController : SolaceControllerBase
 {
-    private static Config Config => Program.config;
-
     private readonly EarthDbContext _dbContext;
     private readonly CryptoSecrets _cryptoSecrets;
+
+    private readonly int _playfabApiSessionTicketValidityMinutes;
+    private readonly int _playfabApiEntityTokenValidityMinutes;
+
     private readonly ILogger<LoginController> _logger;
 
-    public LoginController(EarthDbContext context, CryptoSecrets cryptoSecrets, ILogger<LoginController> logger)
+    public LoginController(EarthDbContext context, CryptoSecrets cryptoSecrets, IConfiguration configuration, ILogger<LoginController> logger)
     {
         _dbContext = context;
         _cryptoSecrets = cryptoSecrets;
+
+        _playfabApiSessionTicketValidityMinutes = configuration.GetValue<int>("Authentication:PlayfabApi:SessionTicketValidityMinutes");
+        _playfabApiEntityTokenValidityMinutes = configuration.GetValue<int>("Authentication:PlayfabApi:EntityTokenValidityMinutes");
+
         _logger = logger;
     }
 
@@ -102,11 +108,11 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.NotFound();
         }
 
-        var sessionTicketValidity = ValidityDatePair.Create(Config.PlayfabApi.SessionTicketValidityMinutes);
+        var sessionTicketValidity = ValidityDatePair.Create(_playfabApiSessionTicketValidityMinutes);
         var sessionTicket = new Tokens.Shared.PlayfabSessionTicket(userId);
         string sessionTicketString = JwtUtils.Sign(sessionTicket, _cryptoSecrets.PlayfabSessionTicketSecret, sessionTicketValidity);
 
-        var entityTokenValidity = ValidityDatePair.Create(Config.PlayfabApi.EntityTokenValidityMinutes);
+        var entityTokenValidity = ValidityDatePair.Create(_playfabApiEntityTokenValidityMinutes);
         var entityToken = new Tokens.Playfab.EntityToken(userId, "title_player_account");
         string entityTokenString = JwtUtils.Sign(entityToken, _cryptoSecrets.PlayfabEntityTokenSecret, entityTokenValidity);
 
