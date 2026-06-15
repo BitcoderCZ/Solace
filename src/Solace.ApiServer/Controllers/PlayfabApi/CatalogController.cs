@@ -122,6 +122,7 @@ internal sealed class CatalogController : SolaceControllerBase
     }
 
     [HttpPost("SearchStores")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult SearchStores()
         => JsonPascalCase(new PlayfabOkResponse(
             200,

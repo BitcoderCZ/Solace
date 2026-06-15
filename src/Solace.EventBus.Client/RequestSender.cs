@@ -207,7 +207,6 @@ public sealed partial class RequestSender : IAsyncDisposable
     private static bool ValidateData(string data)
         => !data.Any(c => c < 32 || c >= 127);
 
-
     [GeneratedRegex("^[^A-Za-z0-9_\\-]$")]
     private static partial Regex GetValidationRegex1();
 

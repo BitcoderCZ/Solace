@@ -41,7 +41,7 @@ public sealed partial class NetworkServer : IDisposable
             while (!_cts.Token.IsCancellationRequested)
             {
                 var socket = await _serverSocket.AcceptSocketAsync(_cts.Token);
-                LogNewConnection(socket.RemoteEndPoint);
+                LogNewConnection((IPEndPoint)socket.RemoteEndPoint!);
 
                 var connection = new Connection(this, socket, _server, _logger);
                 _ = connection.RunAsync();
@@ -631,7 +631,7 @@ public sealed partial class NetworkServer : IDisposable
     private partial void LogCreatedServer(int Port);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Connection from {EndPoint}")]
-    private partial void LogNewConnection(EndPoint? EndPoint);
+    private partial void LogNewConnection(IPEndPoint EndPoint);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Exception while accepting connection")]
     private partial void LogExceptionWhileAcceptingConnection(Exception exception);

@@ -190,6 +190,7 @@ internal sealed partial class LoginController : SolaceControllerBase
     }
 
     [HttpPost("LinkXboxAccount")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult LinkXboxAccount()
         => JsonCamelCase(new PlayfabErrorResponse(
             401,

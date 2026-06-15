@@ -65,10 +65,12 @@ internal sealed partial class LoginController : SolaceControllerBase
     }
 
     [HttpGet("ppsecure/InlineConnect.srf")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public VirtualFileHttpResult GetLoginPage()
         => TypedResults.VirtualFile("/login.html", "text/html");
 
     [HttpGet("ppsecure/reauthenticateStart")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public VirtualFileHttpResult GetReauthenticatePage()
         => TypedResults.VirtualFile("/reauthenticate.html", "text/html");
 
@@ -230,6 +232,7 @@ internal sealed partial class LoginController : SolaceControllerBase
     }
 
     [HttpPost("ppsecure/deviceaddcredential.srf")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult DeviceAddCredential()
         => TypedResults.Content("""
             <DeviceAddResponse Success="true"><success>true</success><puid>0</puid></DeviceAddResponse>

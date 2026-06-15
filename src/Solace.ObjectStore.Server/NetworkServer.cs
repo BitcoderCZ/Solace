@@ -33,7 +33,7 @@ public sealed partial class NetworkServer : IDisposable
             while (!_cts.Token.IsCancellationRequested)
             {
                 var client = await _serverSocket.AcceptTcpClientAsync(_cts.Token);
-                LogNewConnection(client.Client.RemoteEndPoint);
+                LogNewConnection((IPEndPoint)client.Client.RemoteEndPoint!);
 
                 _ = HandleConnectionAsync(client);
             }
@@ -188,7 +188,7 @@ public sealed partial class NetworkServer : IDisposable
     private partial void LogServerStarted(int Port);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Connection from {RemoteEndPoint}")]
-    private partial void LogNewConnection(EndPoint? RemoteEndPoint);
+    private partial void LogNewConnection(IPEndPoint RemoteEndPoint);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Error processing connection")]
     private partial void LogErrorProcessingConnection(Exception exception);

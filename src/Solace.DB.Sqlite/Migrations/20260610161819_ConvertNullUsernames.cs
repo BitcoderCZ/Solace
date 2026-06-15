@@ -2,50 +2,49 @@
 
 #nullable disable
 
-namespace Solace.DB.Migrations
+namespace Solace.DB.Migrations;
+
+/// <inheritdoc />
+public partial class ConvertNullUsernames : Migration
 {
     /// <inheritdoc />
-    public partial class ConvertNullUsernames : Migration
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.AlterColumn<string>(
-                name: "Username",
-                table: "Accounts",
-                type: "TEXT",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
+        migrationBuilder.AlterColumn<string>(
+            name: "Username",
+            table: "Accounts",
+            type: "TEXT",
+            nullable: true,
+            oldClrType: typeof(string),
+            oldType: "TEXT");
 
-            migrationBuilder.Sql("UPDATE \"Accounts\" SET \"Username\" = NULL WHERE \"Username\" = '[null]';");
+        migrationBuilder.Sql("UPDATE \"Accounts\" SET \"Username\" = NULL WHERE \"Username\" = '[null]';");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Accounts_Username",
-                table: "Accounts",
-                column: "Username",
-                unique: true);
-        }
+        migrationBuilder.CreateIndex(
+            name: "IX_Accounts_Username",
+            table: "Accounts",
+            column: "Username",
+            unique: true);
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropIndex(
-                name: "IX_Accounts_Username",
-                table: "Accounts");
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropIndex(
+            name: "IX_Accounts_Username",
+            table: "Accounts");
 
-            migrationBuilder.Sql("UPDATE \"Accounts\" SET \"Username\" = '[null]' WHERE \"Username\" IS NULL;");
+        migrationBuilder.Sql("UPDATE \"Accounts\" SET \"Username\" = '[null]' WHERE \"Username\" IS NULL;");
 
-            migrationBuilder.AlterColumn<string>(
-                name: "Username",
-                table: "Accounts",
-                type: "TEXT",
-                nullable: false,
-                defaultValue: "",
-                oldClrType: typeof(string),
-                oldType: "TEXT",
-                oldNullable: true);
+        migrationBuilder.AlterColumn<string>(
+            name: "Username",
+            table: "Accounts",
+            type: "TEXT",
+            nullable: false,
+            defaultValue: "",
+            oldClrType: typeof(string),
+            oldType: "TEXT",
+            oldNullable: true);
 
-        }
     }
 }

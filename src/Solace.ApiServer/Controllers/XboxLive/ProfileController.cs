@@ -138,8 +138,8 @@ internal sealed partial class ProfileController : LoginServerControllerBase
         ]));
     }
 
-    private Dictionary<string, string> GetProfile(Account account)
-        => new Dictionary<string, string>()
+    private Dictionary<string, string?> GetProfile(Account account)
+        => new Dictionary<string, string?>()
         {
             ["AppDisplayName"] = account.Username,
             ["AppDisplayPicRaw"] = $"{(Request.IsHttps ? "https://" : "http://")}{Request.Host.Value}/{account.ProfilePictureUrl ?? Account.DefaultPictureUrl}",
@@ -166,6 +166,6 @@ internal sealed partial class ProfileController : LoginServerControllerBase
 
     private sealed record ProfileSetting(
         string Id,
-        string Value
+        string? Value
     );
 }

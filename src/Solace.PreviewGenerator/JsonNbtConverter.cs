@@ -20,7 +20,7 @@ internal sealed class JsonNbtConverter
     public static JsonNbtTag Convert(NbtList tag)
         => new ListJsonNbtTag([.. tag.Select(Convert)]);
 
-    private static JsonNbtTag Convert(object tag)
+    private static JsonNbtTag Convert(object? tag)
     {
         if (tag is NbtMap map)
         {
@@ -48,7 +48,7 @@ internal sealed class JsonNbtConverter
         }
         else
         {
-            throw new UnsupportedOperationException($"Cannot convert tag of type {tag.GetType().Name}");
+            throw new UnsupportedOperationException($"Cannot convert tag of type {tag?.GetType()?.Name ?? "[null]"}");
         }
     }
 

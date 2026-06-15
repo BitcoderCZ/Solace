@@ -51,6 +51,7 @@ internal sealed class SeasonsController : SolaceControllerBase
 
     [HttpPost("player/seasonpass/purchase")]
     [HttpPost("seasonpass/purchase")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult PurchaseSeasonPass()
         => EarthJson(new Dictionary<string, object>
         {

@@ -18,6 +18,7 @@ internal sealed class TutorialController : SolaceControllerBase
     [HttpGet("tutorials")]
     [HttpGet("oobe")]
     [HttpGet("outofboxexperience")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult GetTutorialState()
         => EarthJson(new Dictionary<string, object>
         {
@@ -52,6 +53,7 @@ internal sealed class TutorialController : SolaceControllerBase
     [HttpPost("oobe/{tutorialId}")]
     [HttpPost("outofboxexperience")]
     [HttpPost("outofboxexperience/{tutorialId}")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult CompleteTutorial(string? tutorialId = null)
         => EarthJson(new Dictionary<string, object?>
         {

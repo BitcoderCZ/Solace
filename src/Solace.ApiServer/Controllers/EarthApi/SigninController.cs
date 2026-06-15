@@ -96,7 +96,7 @@ internal sealed partial class SigninController : SolaceControllerBase
             }
 
             userIdString = signinRequest.SessionTicket.AsSpan(0, dashIndex);
-            jwt = signinRequest.SessionTicket.AsSpan(dashIndex + 1);
+            // jwt = signinRequest.SessionTicket.AsSpan(dashIndex + 1);
 
             if (!GetUserIdRegex().IsMatch(userIdString))
             {

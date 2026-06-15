@@ -37,6 +37,7 @@ internal sealed class ChallengesController : ControllerBase
     );
 
     [HttpGet]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult Get()
     {
         // TODO: this is currently just a stub required for the journal to load properly in the client

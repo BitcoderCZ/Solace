@@ -15,6 +15,7 @@ namespace Solace.ApiServer.Controllers.EarthApi;
 internal sealed class EnvironmentSettingsController : ControllerBase
 {
     [HttpGet("features")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult Features()
     {
         var resp = new EarthApiResponse(new Dictionary<string, object>
@@ -68,6 +69,7 @@ internal sealed class EnvironmentSettingsController : ControllerBase
     }
 
     [HttpGet("settings")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult Settings()
     {
         var resp = new EarthApiResponse(new Dictionary<string, object>

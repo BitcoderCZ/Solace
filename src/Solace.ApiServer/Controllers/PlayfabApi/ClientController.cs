@@ -168,6 +168,7 @@ internal sealed partial class ClientController : SolaceControllerBase
     }
 
     [HttpPost("WritePlayerEvent")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult WritePlayerEvent()
         => JsonPascalCase(new PlayfabOkResponse(
             200,

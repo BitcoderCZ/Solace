@@ -110,6 +110,7 @@ internal sealed class ProfileController : SolaceControllerBase
 
     // required for the language selection option in the client to work
     [HttpPost("profile/language")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public Ok ChangeLanguage()
         => TypedResults.Ok();
 }

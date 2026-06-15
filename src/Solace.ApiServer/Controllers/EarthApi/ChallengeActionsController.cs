@@ -32,6 +32,7 @@ internal sealed class ChallengeActionsController : SolaceControllerBase
 
     [HttpPost("timed/generate")]
     [HttpPut("timed/generate")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult GenerateTimedChallenges()
         => EarthJson(new Dictionary<string, object?>
         {
@@ -40,6 +41,7 @@ internal sealed class ChallengeActionsController : SolaceControllerBase
 
     [HttpPost("reset")]
     [HttpPut("reset")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult ResetChallenges()
         => EarthJson(new Dictionary<string, object?>
         {
