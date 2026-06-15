@@ -9,16 +9,16 @@ internal static partial class ResourcePackManagerSingleton
     private static ResourcePackManager? resourcePackManager;
     private static readonly SemaphoreSlim resourcePackLock = new(1, 1);
 
-    public static async Task<ResourcePackManager> GetResourcePackManagerAsync()
+    public static async Task<ResourcePackManager> GetResourcePackManagerAsync(string staticDataPath)
     {
-        await EnsureResourcePackLoadedAsync();
+        await EnsureResourcePackLoadedAsync(staticDataPath);
 
         return resourcePackManager;
     }
 
 #pragma warning disable CS8774 // Member must have a non-null value when exiting.
     [MemberNotNull(nameof(resourcePackManager))]
-    private static async Task EnsureResourcePackLoadedAsync()
+    private static async Task EnsureResourcePackLoadedAsync(string staticDataPath)
     {
         if (resourcePackManager is not null)
         {
@@ -31,7 +31,7 @@ internal static partial class ResourcePackManagerSingleton
         {
             if (resourcePackManager is null)
             {
-                var dir = new DirectoryInfo(Path.Combine(Settings.Instance.StaticDataPath ?? "", "resourcepacks", "java"));
+                var dir = new DirectoryInfo(Path.Combine(staticDataPath, "resourcepacks", "java"));
                 if (dir.Exists)
                 {
                     resourcePackManager = await ResourcePackManager.LoadAllAsync(dir);

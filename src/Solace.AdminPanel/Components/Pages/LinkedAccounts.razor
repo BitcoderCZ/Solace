@@ -18,6 +18,8 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject IDbContextFactory<ApplicationDbContext> AppDbFactory
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject IConfiguration Configuration
+@inject StaticData.StaticData StaticData
 @inject ILogger<LinkedAccounts> Logger
 
 <div class="container mt-3" style="max-width: 900px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
@@ -377,7 +379,6 @@
     private bool IsChangingUsername { get; set; } = false;
     private bool IsChangingPassword { get; set; } = false;
     private bool IsLinkModalVisible { get; set; } = false;
-    private Solace.StaticData.StaticData staticData = new StaticData.StaticData(Program.StaticDataDir);
 
     private bool ShowPassword { get; set; } = false;
     private bool ShowLinkPassword { get; set; } = false;
@@ -388,7 +389,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _resourcePackManager = await ResourcePackManagerSingleton.GetResourcePackManagerAsync();
+        _resourcePackManager = await ResourcePackManagerSingleton.GetResourcePackManagerAsync(Configuration["StaticDataPath"]!);
         await using var appDb = await AppDbFactory.CreateDbContextAsync();
         await using var earthDb = await EarthDbFactory.CreateDbContextAsync();
 
@@ -674,15 +675,21 @@
 
     private int GetRequiredExperienceForNextLevel()
     {
-        if (SelectedAccount is null) return 100;
+        if (SelectedAccount is null)
+        {
+            return 100;
+        }
 
         int levelIndex = SelectedAccount.Level - 1;
-        return levelIndex < staticData.Levels.Levels.Length ? staticData.Levels.Levels[levelIndex].ExperienceRequired : 9999;
+        return levelIndex < StaticData.Levels.Levels.Length ? StaticData.Levels.Levels[levelIndex].ExperienceRequired : 9999;
     }
 
     private double GetLevelProgressPercentage()
     {
-        if (SelectedAccount is null) return 0;
+        if (SelectedAccount is null)
+        {
+            return 0;
+        }
 
         double requiredXp = GetRequiredExperienceForNextLevel();
         return double.Min((SelectedAccount.Experience / requiredXp) * 100, 100);

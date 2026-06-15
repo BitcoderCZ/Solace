@@ -19,16 +19,17 @@
 @using Solace.DB
 @using Solace.EventBus.Client
 @using Solace.AdminPanel.Data
-@using Solace.AdminPanel.Programs
 @using Solace.AdminPanel.Utils
 @using Solace.ObjectStore.Client
 @attribute [Authorize(Policy = Permissions.ViewBuildplates)]
 @rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
-@inject ServerManager ServerManager
 @inject IJSRuntime JSRuntime
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject EventBusClient EventBusClient
+@inject ObjectStoreClient ObjectStoreClient
+@inject IConfiguration Configuration
 @inject ILogger<Buildplates> Logger
 
 <PageTitle>Buildplates - Solace</PageTitle>
@@ -331,7 +332,7 @@
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _user = authState.User;
 
-        _resourcePackManager = await ResourcePackManagerSingleton.GetResourcePackManagerAsync();
+        _resourcePackManager = await ResourcePackManagerSingleton.GetResourcePackManagerAsync(Configuration["StaticDataPath"]!);
 
         await LoadBuildplates();
     }
@@ -437,16 +438,21 @@
         bp.IsRegeneratingPreview = true;
         bp.ErrorMessage = null;
 
-        if (!await ServerManager.EnsureComponentsOnline(EventBusServer.ExeName, ObjectStoreServer.ExeName, BuildplateLauncher.ExeName))
+        @* if (!await ServerManager.EnsureComponentsOnline(EventBusServer.ExeName, ObjectStoreServer.ExeName, BuildplateLauncher.ExeName))
         {
             bp.ErrorMessage = "The server must be running.";
             bp.IsRegeneratingPreview = false;
             return;
-        }
+        } *@
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, ownsEarthDb: true);
+            await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), EventBusClient, ObjectStoreClient, Logger)
+            {
+                OwnsEarthDb = true,
+                OwnsEventBusClient = false,
+                OwnsObjectStoreClient = false,
+            };
 
             if (await importer.RegenerateTemplatePreviewAsync(bp.Id, default) is null)
             {
@@ -535,11 +541,11 @@
     {
         _deleteErrorMessage = null;
 
-        if (!await ServerManager.EnsureComponentsOnline(ObjectStoreServer.ExeName))
+        @* if (!await ServerManager.EnsureComponentsOnline(ObjectStoreServer.ExeName))
         {
             _deleteErrorMessage = "The server must be running to delete buildplates.";
             return;
-        }
+        } *@
 
         if (_bpToDelete is not null && HasPermission(Permissions.ManageBuildplates))
         {
@@ -548,7 +554,13 @@
                 _isDeleting = true;
                 StateHasChanged();
 
-                await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, createEventBus: false, ownsEarthDb: true);
+                
+                await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), null, ObjectStoreClient, Logger)
+                {
+                    OwnsEarthDb = true,
+                    OwnsEventBusClient = false,
+                    OwnsObjectStoreClient = false,
+                };
 
                 if (!await importer.RemoveTemplateAsync(_bpToDelete.Id, _removeTemplateFromPlayers, default))
                 {
@@ -618,18 +630,16 @@
 
         try
         {
-            if (!await ServerManager.EnsureComponentsOnline(Programs.ObjectStoreServer.ExeName))
+            @* if (!await ServerManager.EnsureComponentsOnline(Programs.ObjectStoreServer.ExeName))
             {
                 _exportErrorMessage = $"Export failed: Failed to start necesarry server components";
                 return;
-            }
-
-            await using var objectStore = await ObjectStoreClient.ConnectAsync($"localhost:{Settings.Instance.ObjectStorePort}");
+            } *@
 
             Stream fileStream;
             if (solaceFormat)
             {
-                var data = await objectStore.GetAsync(_exportBp.ServerDataObjectId);
+                var data = await ObjectStoreClient.GetAsync(_exportBp.ServerDataObjectId);
 
                 if (data is null)
                 {
@@ -660,22 +670,20 @@
             }
             else
             {
-                var data = await objectStore.GetAsync(_exportBp.PreviewObjectId);
+                var data = await ObjectStoreClient.GetAsync(_exportBp.PreviewObjectId);
 
                 if (data is null)
                 {
                     // try to regenerate
-                    if (!await ServerManager.EnsureComponentsOnline(Programs.ObjectStoreServer.ExeName, Programs.EventBusServer.ExeName, Programs.BuildplateLauncher.ExeName))
+                    @* if (!await ServerManager.EnsureComponentsOnline(Programs.ObjectStoreServer.ExeName, Programs.EventBusServer.ExeName, Programs.BuildplateLauncher.ExeName))
                     {
                         _exportErrorMessage = $"Export failed: Failed to start necesarry server components";
                         return;
-                    }
+                    } *@
 
-                    await using var eventBus = await EventBusClient.ConnectAsync($"localhost:{Settings.Instance.EventBusPort}");
-
-                    await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), eventBus, objectStore, Logger)
+                    await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), EventBusClient, ObjectStoreClient, Logger)
                     {
-                        OwnsEarthDb = false,
+                        OwnsEarthDb = true,
                         OwnsEventBusClient = false,
                         OwnsObjectStoreClient = false,
                     };

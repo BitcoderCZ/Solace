@@ -4,7 +4,6 @@ using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using CommandLine;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -14,9 +13,6 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Serilog;
-using Serilog.Events;
-using Serilog.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.DB;
@@ -25,71 +21,81 @@ using Solace.AdminPanel.Components.Account;
 using Solace.AdminPanel.Data;
 using Solace.AdminPanel.Utils;
 using Solace.ObjectStore.Client;
+using System.Diagnostics;
+using System.Reflection;
+using Solace.EventBus.Client;
 
 namespace Solace.AdminPanel;
 
-public partial class Program
+internal static partial class Program
 {
-    public static readonly string ProgramsDir = Path.GetFullPath("./../components");
-    public static readonly string StaticDataDir = Path.GetFullPath(Path.Combine("..", "staticdata"));
-    public static readonly string DataDirRelative = Path.Combine("..", "data");
-    public static readonly string DataDir = Path.GetFullPath(DataDirRelative);
-    public static readonly string ObjectStoreDirName = "object_store";
-
     public static string Address { get; private set; } = "";
-
-    public static string LoggerAddress => Address + "/api/logs/create";
-
-    private sealed class Options
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    {
-        [Option('s', "start-on-startup", Default = false, Required = false, HelpText = "Start the server automatically when the application launches.")]
-        public bool StartOnStartup { get; set; }
-    }
 
     private static async Task<int> Main(string[] args)
     {
         // Environment.CurrentDirectory = AppContext.BaseDirectory;
 
-        Settings.Instance = await Settings.LoadAsync(Settings.DefaultPath, NullLogger.Instance);
+        if (!Debugger.IsAttached)
+        {
+            AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
+            {
+                Console.Error.WriteLine($"Unhandled exception: {e.ExceptionObject}");
+
+                try
+                {
+                    var logger = GlobalLoggerFactory.CreateLogger(nameof(Program));
+                    LogUnhandledException(logger, e.ExceptionObject as Exception);
+                }
+                catch
+                {
+                    Console.Error.WriteLine($"Unhandled exception before logger initialization");
+                }
+
+                Console.Out.Flush();
+                Console.Error.Flush();
+
+                Environment.Exit(2);
+            };
+        }
 
         var builder = WebApplication.CreateBuilder(args);
 
-        var logsLogService = new LogsLogService();
-        builder.Services.AddSingleton(logsLogService);
+        builder.AddServiceDefaults();
 
-        var log = new LoggerConfiguration()
-            .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
-            .WriteTo.File("logs/launcher/log.txt", rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true, fileSizeLimitBytes: 8338607, outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}", formatProvider: CultureInfo.InvariantCulture)
-            .WriteTo.LogsLogSink(logsLogService)
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Information)
-            .MinimumLevel.Override("Solace.ApiServer.Authentication", LogEventLevel.Information)
-            .CreateLogger();
+        var earthDbConnectionString = builder.Configuration.GetConnectionString("EarthDb");
+        var earthDbProvider = builder.Configuration["DatabaseProvider"];
 
-        Log.Logger = log;
+        bool isEFTooling = Assembly.GetEntryAssembly()?.GetName().Name == "ef";
 
-        builder.Logging.ClearProviders();
-        builder.Logging.AddSerilog(log);
-
-        var globalLoggerFactory = new SerilogLoggerFactory(log);
-        GlobalLoggerFactory.Initialize(globalLoggerFactory);
-        
-        bool isLegacyDb = await IsLegacyEarthDbAsync(Settings.Instance.EarthDatabaseConnectionString!);
-        string legacyDbPath = "";
-        string liveDbPath = "";
-        if (isLegacyDb)
+        if (isEFTooling)
         {
-            Log.Information("Detected legacy db format, backing up db");
-            legacyDbPath = Path.GetUniqueFilePath(Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old")));
-            File.Move(Settings.Instance.EarthDatabaseConnectionString!, legacyDbPath);
-            Log.Debug($"Moved legacy earth db to '{legacyDbPath}'");
-
-            liveDbPath = Path.GetUniqueFilePath(Path.GetFullPath(Path.Combine(DataDirRelative, "live.db.old")));
-            File.Move(Settings.Instance.LiveDatabaseConnectionString!, liveDbPath);
-            Log.Debug($"Moved legacy live db to '{liveDbPath}'");
+            earthDbProvider ??= "Sqlite";
+            earthDbConnectionString ??= "Data Source=dummy.db";
         }
+
+        Debug.Assert(earthDbConnectionString is not null);
+        Debug.Assert(earthDbProvider is not null);
+
+        builder.Services.AddSingleton<StartupDependencies>();
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().EventBus);
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().ObjectStore);
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().StaticData);
+
+        // bool isLegacyDb = await IsLegacyEarthDbAsync(Settings.Instance.EarthDatabaseConnectionString!);
+        // string legacyDbPath = "";
+        // string liveDbPath = "";
+        // if (isLegacyDb)
+        // {
+        //     Log.Information("Detected legacy db format, backing up db");
+        //     legacyDbPath = Path.GetUniqueFilePath(Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old")));
+        //     File.Move(Settings.Instance.EarthDatabaseConnectionString!, legacyDbPath);
+        //     Log.Debug($"Moved legacy earth db to '{legacyDbPath}'");
+
+        //     liveDbPath = Path.GetUniqueFilePath(Path.GetFullPath(Path.Combine(DataDirRelative, "live.db.old")));
+        //     File.Move(Settings.Instance.LiveDatabaseConnectionString!, liveDbPath);
+        //     Log.Debug($"Moved legacy live db to '{liveDbPath}'");
+        // }
+
         // bool isLegacyDb = true;
         // string legacyDbPath = Path.GetFullPath(Path.Combine(DataDirRelative, "earth.db.old"));
         // if (EF.IsDesignTime)
@@ -127,8 +133,6 @@ public partial class Program
         //     }
         // }
 
-        builder.Services.AddSingleton<ServerManager>();
-
         // Add services to the container.
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
@@ -151,15 +155,9 @@ public partial class Program
 
         builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
             options.UseSqlite(launcherConnectionString));
-        // builder.Services.AddDbContext<ApplicationDbContext>(options =>
-        //     options.UseSqlite(launcherConnectionString));
-
-        string earthConnectionString = "Data Source=" + Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!);
 
         builder.Services.AddDbContextFactory<EarthDbContext>(options =>
-            EarthDbContext.ConfigureBuilder(options, earthConnectionString, "Sqlite"));
-        // builder.Services.AddDbContext<EarthDbContext>(options =>
-        //     options.UseSqlite(earthConnectionString));
+            EarthDbContext.ConfigureBuilder(options, earthDbConnectionString, earthDbProvider));
         builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
         builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -181,6 +179,11 @@ public partial class Program
             });
 
         var app = builder.Build();
+
+        var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+        GlobalLoggerFactory.Initialize(loggerFactory);
+
+        var programLogger = loggerFactory.CreateLogger(nameof(Program));
 
         // Configure the HTTP request pipeline.
         if (app.Environment.IsDevelopment())
@@ -237,7 +240,7 @@ public partial class Program
             {
                 // make sure Data dir exists
                 Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "Data"));
-                Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), Path.GetDirectoryName(Settings.Instance.EarthDatabaseConnectionString)!));
+                // Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), Path.GetDirectoryName(Settings.Instance.EarthDatabaseConnectionString)!));
 
                 var appDbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 await appDbContext.Database.MigrateAsync();
@@ -249,89 +252,86 @@ public partial class Program
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
                 await EnsureBuiltInRolesAsync(roleManager, userManager);
 
-                if (isLegacyDb)
-                {
-#pragma warning disable CS0618 // Type or member is obsolete - needed for migration
-                    var optionsBuilder = new DbContextOptionsBuilder<LiveDbContext>();
-                    optionsBuilder.UseSqlite("Data Source=" + liveDbPath!);
+                // todo
+                //                 if (isLegacyDb)
+                //                 {
+                // #pragma warning disable CS0618 // Type or member is obsolete - needed for migration
+                //                     var optionsBuilder = new DbContextOptionsBuilder<LiveDbContext>();
+                //                     optionsBuilder.UseSqlite("Data Source=" + liveDbPath!);
 
-                    using var liveDbContext = new LiveDbContext(optionsBuilder.Options);
-#pragma warning restore CS0618 // Type or member is obsolete
+                //                     using var liveDbContext = new LiveDbContext(optionsBuilder.Options);
+                // #pragma warning restore CS0618 // Type or member is obsolete
 
-                    await MigrateLegacyDataAsync(earthDbContext, liveDbContext, legacyDbPath);
-                }
+                //                     await MigrateLegacyDataAsync(earthDbContext, liveDbContext, legacyDbPath);
+                //                 }
             }
         }
 
-        // extract buildplates from db/objectstore
-        // var sm = app.Services.GetService<ServerManager>()!;
-        // await sm.EnsureComponentsOnline(Programs.ObjectStoreServer.ExeName);
-
-        // using var earthDB = EarthDB.Open(Settings.Instance.EarthDatabaseConnectionString ?? "");
-        // await using var objectStore = await ObjectStoreClient.ConnectAsync("localhost:" + Settings.Instance.ObjectStorePort);
-
-        // var results = await new EarthDB.ObjectQuery(false)
-        //     .SearchBuildplates(out var searchArguments, true, true)
-        //     .ExecuteAsync(earthDB, default);
-
-        // var (buildplates, buildplatesCount, totalCount) = results.GetBuildplates(searchArguments);
-
-        // Directory.CreateDirectory("bps");
-
-        // foreach (var (buildplateId, dbBuildplate) in buildplates)
+        // if (args.Any(a => a.StartsWith("--applicationName", StringComparison.Ordinal)))
         // {
-        //     var preview64 = await objectStore.GetAsync(dbBuildplate!.PreviewObjectId);
-
-        //     var preview = Convert.FromBase64String(Encoding.UTF8.GetString(preview64!));
-
-        //     File.WriteAllBytes(Path.Combine("bps", dbBuildplate.Name[7..]), preview);
+        //     await app.RunAsync();
+        //     return 0;
         // }
+            // init stuff that requires logger but needs to be injected
+        var startupDeps = app.Services.GetRequiredService<StartupDependencies>();
 
-        if (args.Any(a => a.StartsWith("--applicationName", StringComparison.Ordinal)))
-        {
-            await app.RunAsync();
-            return 0;
-        }
+var eventBusConnectionString = builder.Configuration["services:event-bus:raw-tcp:0"];
+        Debug.Assert(eventBusConnectionString is not null);
+        var eventBusUri = new Uri(eventBusConnectionString);
 
-        ParserResult<Options> res = Parser.Default.ParseArguments<Options>(args);
-
-        Options options;
-        if (res is Parsed<Options> parsed)
+        LogConnectingToEventBus(programLogger);
+        
+        EventBusClient eventBus;
+        try
         {
-            options = parsed.Value;
+            eventBus = await EventBusClient.ConnectAsync($"{eventBusUri.Host}:{eventBusUri.Port}");
         }
-        else if (res is NotParsed<Options> notParsed)
+        catch (EventBusClientException exception)
         {
-            if (res.Errors.Any(error => error is HelpRequestedError))
-            {
-                return 0;
-            }
-            else if (res.Errors.Any(error => error is VersionRequestedError))
-            {
-                return 0;
-            }
-            else
-            {
-                return 1;
-            }
-        }
-        else
-        {
-            return 1;
+            LogConnectToEventBusError(programLogger, exception);
+            loggerFactory.Dispose();
+            return 3;
         }
 
-        if (options.StartOnStartup)
+        LogConnectedToEventBus(programLogger);
+
+        var objectStoreConnectionString = builder.Configuration["services:object-store:raw-tcp:0"];
+        Debug.Assert(objectStoreConnectionString is not null);
+        var objectStoreUri = new Uri(objectStoreConnectionString);
+
+        LogConnectingToObjectStore(programLogger);
+        ObjectStoreClient objectStore;
+        try
         {
-            Task.Run(async () =>
-            {
-                await Task.Delay(3000);
-                using (var scope = app.Services.CreateScope())
-                {
-                    var serverManager = scope.ServiceProvider.GetRequiredService<ServerManager>();
-                    await serverManager.Start();
-                }
-            }).Forget();
+            objectStore = await ObjectStoreClient.ConnectAsync($"{objectStoreUri.Host}:{objectStoreUri.Port}");
         }
+        catch (ObjectStoreClientException exception)
+        {
+            LogConnectToObjectStoreError(programLogger, exception);
+            loggerFactory.Dispose();
+            return 4;
+        }
+
+        LogConnectedToObjectStore(programLogger);
+
+        LogLoadingStaticData(programLogger);
+        StaticData.StaticData staticData;
+        try
+        {
+            staticData = new StaticData.StaticData(builder.Configuration["StaticDataPath"]!);
+        }
+        catch (StaticData.StaticDataException exception)
+        {
+            LogLoadStaticDataError(programLogger, exception);
+            loggerFactory.Dispose();
+            return 5;
+        }
+
+        LogLoadedStaticData(programLogger);
+        
+        startupDeps.EventBus = eventBus;
+        startupDeps.ObjectStore = objectStore;
+        startupDeps.StaticData = staticData;
 
         await app.RunAsync();
 
@@ -408,52 +408,52 @@ public partial class Program
         }
     }
 
-    private static async Task<bool> IsLegacyEarthDbAsync(string filePath)
-    {
-        if (!File.Exists(filePath))
-        {
-            return false;
-        }
+    //     private static async Task<bool> IsLegacyEarthDbAsync(string filePath)
+    //     {
+    //         if (!File.Exists(filePath))
+    //         {
+    //             return false;
+    //         }
 
-        using var connection = new SqliteConnection("Data Source=" + filePath);
-        await connection.OpenAsync();
+    //         using var connection = new SqliteConnection("Data Source=" + filePath);
+    //         await connection.OpenAsync();
 
-        using (var command = connection.CreateCommand())
-        {
-            command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name=$name;";
-            command.Parameters.AddWithValue("$name", "__EFMigrationsHistory");
+    //         using (var command = connection.CreateCommand())
+    //         {
+    //             command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name=$name;";
+    //             command.Parameters.AddWithValue("$name", "__EFMigrationsHistory");
 
-            using (var reader = command.ExecuteReader())
-            {
-                return !reader.HasRows;
-            }
-        }
-    }
+    //             using (var reader = command.ExecuteReader())
+    //             {
+    //                 return !reader.HasRows;
+    //             }
+    //         }
+    //     }
 
-#pragma warning disable CS0618 // Type or member is obsolete - needed for migration
-    private static async Task MigrateLegacyDataAsync(EarthDbContext earthDb, LiveDbContext liveDb, string legacyDbPath)
-#pragma warning restore CS0618 // Type or member is obsolete
-    {
-        using var legacyEarthDb = new SqliteConnection("Data Source=" + legacyDbPath);
-        await legacyEarthDb.OpenAsync();
+    // #pragma warning disable CS0618 // Type or member is obsolete - needed for migration
+    //     private static async Task MigrateLegacyDataAsync(EarthDbContext earthDb, LiveDbContext liveDb, string legacyDbPath)
+    // #pragma warning restore CS0618 // Type or member is obsolete
+    //     {
+    //         using var legacyEarthDb = new SqliteConnection("Data Source=" + legacyDbPath);
+    //         await legacyEarthDb.OpenAsync();
 
-        var migratorLogger = GlobalLoggerFactory.CreateLogger<DatabaseMigrator>();
-        var migrator = new DatabaseMigrator(earthDb, legacyEarthDb, liveDb, migratorLogger);
+    //         var migratorLogger = GlobalLoggerFactory.CreateLogger<DatabaseMigrator>();
+    //         var migrator = new DatabaseMigrator(earthDb, legacyEarthDb, liveDb, migratorLogger);
 
-        Log.Information($"Begining database migration from '{legacyDbPath}' to '{Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!)}'");
+    //         Log.Information($"Begining database migration from '{legacyDbPath}' to '{Path.GetFullPath(Settings.Instance.EarthDatabaseConnectionString!)}'");
 
-        try
-        {
-            await migrator.MigrateAsync();
+    //         try
+    //         {
+    //             await migrator.MigrateAsync();
 
-            Log.Information("Database migrated");
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, $"Failed to migrate database. To retry, delete earth.db and rename (earth/live).db.old to (earth/live).db. Error: {ex.Message}");
-            throw;
-        }
-    }
+    //             Log.Information("Database migrated");
+    //         }
+    //         catch (Exception ex)
+    //         {
+    //             Log.Error(ex, $"Failed to migrate database. To retry, delete earth.db and rename (earth/live).db.old to (earth/live).db. Error: {ex.Message}");
+    //             throw;
+    //         }
+    //     }
 
     private sealed class PermissionPolicyProvider(IOptions<AuthorizationOptions> options)
         : DefaultAuthorizationPolicyProvider(options)
@@ -471,4 +471,41 @@ public partial class Program
                 .Build();
         }
     }
+
+    internal sealed class StartupDependencies
+    {
+        public EventBusClient EventBus { get; set; } = null!;
+        public ObjectStoreClient ObjectStore { get; set; } = null!;
+        public StaticData.StaticData StaticData { get; set; } = null!;
+    }
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Unhandled exception")]
+    private static partial void LogUnhandledException(ILogger logger, Exception? exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connecting to event bus")]
+    private static partial void LogConnectingToEventBus(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Could not connect to event bus")]
+    private static partial void LogConnectToEventBusError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connected to event bus")]
+    private static partial void LogConnectedToEventBus(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connecting to object store")]
+    private static partial void LogConnectingToObjectStore(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Could not connect to object store")]
+    private static partial void LogConnectToObjectStoreError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connected to object store")]
+    private static partial void LogConnectedToObjectStore(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loading static data")]
+    private static partial void LogLoadingStaticData(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Failed to load static data")]
+    private static partial void LogLoadStaticDataError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loaded static data")]
+    private static partial void LogLoadedStaticData(ILogger logger);
 }

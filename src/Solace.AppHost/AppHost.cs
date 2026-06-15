@@ -3,7 +3,7 @@ using Solace.AppHost;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-bool useSqlite = builder.Configuration.GetValue<bool>("Shared:UseSqlite");
+var useSqlite = builder.Configuration.GetValue<bool>("Shared:UseSqlite");
 
 IResourceBuilder<IResourceWithConnectionString> db;
 if (useSqlite)
@@ -75,7 +75,7 @@ var tappableGenerator = builder.AddProject<Projects.Solace_TappablesGenerator>("
     .WaitFor(eventBus)
     .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"]);
 
-bool anyTileDataSources = builder.Configuration.GetSection("TileRenderer:TileSource").AsEnumerable().Any(item => !string.IsNullOrWhiteSpace(item.Value));
+var anyTileDataSources = builder.Configuration.GetSection("TileRenderer:TileSource").AsEnumerable().Any(item => !string.IsNullOrWhiteSpace(item.Value));
 
 if (anyTileDataSources)
 {
@@ -84,6 +84,32 @@ if (anyTileDataSources)
         .WaitFor(eventBus)
         .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"])
         .WithEnvironmentFromSection(builder.Configuration, "TileRenderer:TileSource", "TileRenderer:");
+}
+
+var adminPanelPort = builder.Configuration.GetValue<int>("AdminPanel:Port", 5000);
+
+var adminPanel = builder.AddProject<Projects.Solace_AdminPanel>("admin-panel")
+    .WithHttpEndpoint(port: adminPanelPort, name: "http")
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.TargetHost = "*";
+    })
+    .WithReference(db)
+    .WaitFor(db)
+    .WithReference(eventBus)
+    .WaitFor(eventBus)
+    .WithReference(objectStore)
+    .WaitFor(objectStore)
+    .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"])
+    .WithEnvironment("EnableAdminPanelBuildplatePreview", builder.Configuration["AdminPanel:EnableAdminPanelBuildplatePreview"]);
+
+if (useSqlite)
+{
+    adminPanel.WithEnvironment("DatabaseProvider", "Sqlite");
+}
+else
+{
+    adminPanel.WithEnvironment("DatabaseProvider", "Postgres");
 }
 
 builder.Build().Run();

@@ -6,17 +6,20 @@
 @using HomagGroup.Blazor3D.Viewers
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.JSInterop
+@using Solace.AdminPanel.Data
+@using Solace.AdminPanel.Utils
 @using Solace.BuildplateImporter
 @using Solace.BuildplateRenderer
 @using Solace.DB
-@using Solace.AdminPanel.Data
-@using Solace.AdminPanel.Programs
-@using Solace.AdminPanel.Utils
+@using Solace.EventBus.Client
+@using Solace.ObjectStore.Client
 
 @inject IJSRuntime JSRuntime
-@inject ServerManager ServerManager
 @inject IDbContextFactory<ApplicationDbContext> ApplicationDbFactory
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject EventBusClient EventBusClient
+@inject ObjectStoreClient ObjectStoreClient
+@inject IConfiguration Configuration
 @inject ILogger<BuildplatePreview> Logger
 @implements IAsyncDisposable
 
@@ -184,18 +187,18 @@
 
     private async Task LoadPreviewAsync(bool getFromCache = true)
     {
-        if (Settings.Instance.LauncherBuildplatePreview is not true)
+        if (!Configuration.GetValue<bool>("EnableAdminPanelBuildplatePreview"))
         {
             _isPreviewLoading = false;
             return;
         }
 
-        if (!await ServerManager.EnsureComponentsOnline(ObjectStoreServer.ExeName))
+        @* if (!await ServerManager.EnsureComponentsOnline(ObjectStoreServer.ExeName))
         {
             _isPreviewLoading = false;
             _isPreviewFailed = true;
             return;
-        }
+        } *@
 
         if (ResourcePackManager is null)
         {
@@ -206,7 +209,12 @@
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, createEventBus: false, ownsEarthDb: true);
+            await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), EventBusClient, ObjectStoreClient, Logger)
+            {
+                OwnsEarthDb = true,
+                OwnsEventBusClient = false,
+                OwnsObjectStoreClient = false,
+            };
 
             await using var dbContext = await ApplicationDbFactory.CreateDbContextAsync();
             var previewData = IsTemplate

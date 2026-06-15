@@ -18,22 +18,6 @@ namespace Solace.AdminPanel.Utils;
 public static class ImporterExtensions
 #pragma warning restore CA1708 // Identifiers should differ by more than case
 {
-    extension(Importer)
-    {
-        public static async Task<Importer> CreateFromSettings(Settings settings, EarthDbContext earthDb, ILogger logger, bool createEventBus = true, bool ownsEarthDb = false)
-        {
-            var eventBus = createEventBus ? await EventBusClient.ConnectAsync($"localhost:{settings.EventBusPort}") : null;
-            var objectStore = await ObjectStoreClient.ConnectAsync($"localhost:{settings.ObjectStorePort}");
-
-            return new Importer(earthDb, eventBus, objectStore, logger)
-            {
-                OwnsEarthDb = ownsEarthDb,
-                OwnsEventBusClient = true,
-                OwnsObjectStoreClient = true,
-            };
-        }
-    }
-
     extension(Importer importer)
     {
         public async Task<ArraySegment<byte>?> GetTemplateLauncherPreviewAsync(Guid templateId, ApplicationDbContext appDbContext, ResourcePackManager resourcePackManager, bool getFromCache = true, CancellationToken cancellationToken = default)

@@ -11,14 +11,15 @@
 @attribute [Authorize(Policy = Permissions.ViewData)]
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
-@inject ServerManager ServerManager
 @inject IJSRuntime JS
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
 @inject ILogger<DataManagement> Logger
 
 <PageTitle>Data - Solace</PageTitle>
 
-<div class="container mt-4">
+<h1>TODO</h1>
+
+@* <div class="container mt-4">
     <h2 class="mb-4"><i class="bi bi-database text-primary"></i> Data Management</h2>
 
     <div class="card mb-4">
@@ -703,4 +704,4 @@ allowAutomatic)
     {
         _mergeConflictTcs?.SetResult(actionSelected);
     }
-}
+} *@

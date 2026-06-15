@@ -7,81 +7,145 @@
 
 <div class="container mt-5">
     <div class="p-5 mb-4 bg-light rounded-3 border">
-        <div class="container-fluid py-5 text-center">
-            <h1 class="display-5 fw-bold">Solace Launcher</h1>
-            <p class="col-md-12 fs-4 text-muted">Manage, configure, and monitor your server.</p>
+        <div class="container-fluid py-3 text-center">
+            <h1 class="display-5 fw-bold text-primary">Solace Admin Panel</h1>
+            <p class="col-md-12 fs-5 text-muted">Server environment management</p>
         </div>
     </div>
 
     <div class="row g-4 justify-content-center">
         <AuthorizeView>
             <Authorized>
-                <div class="col-md-8">
-                    <div class="card shadow-sm">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0"><i class="bi bi-rocket-takeoff me-2"></i>Getting Started</h5>
-                        </div>
-                        <div class="card-body">
-                            <p class="card-text">Welcome back, <strong>@context.User.Identity?.Name</strong>! Here is how to get your server up and running:</p>
-                            
-                            <ul class="list-group list-group-flush">
-                                @if (HasPermission(context.User, Permissions.EditServerOptions))
-                                {
-                                    <li class="list-group-item d-flex align-items-center py-3">
-                                        <div class="bg-light rounded-circle p-2 me-3">
-                                            <span class="bi bi-gear-fill text-primary"></span>
-                                        </div>
-                                        <div>
-                                            <strong>Configure the environment</strong><br/>
-                                            <small class="text-muted">Head to <a href="Admin/ServerOptions" class="text-decoration-none">Server Options</a> to adjust your settings.</small>
-                                        </div>
-                                    </li>
-                                }
-
-                                <li class="list-group-item d-flex align-items-center py-3">
-                                    <div class="bg-light rounded-circle p-2 me-3">
-                                        <span class="bi bi-play-circle-fill text-success"></span>
-                                    </div>
-                                    <div>
-                                        <strong>Initialize the server</strong><br/>
-                                        <small class="text-muted">Once configured, visit <a href="ServerStatus" class="text-decoration-none">Server Status</a> to start the process.</small>
-                                    </div>
-                                </li>
-                            </ul>
+                <div class="col-12">
+                    <div class="card shadow-sm border-0 bg-dark text-white rounded-3">
+                        <div class="card-body p-4">
+                            <h4 class="mb-0 fw-bold">Welcome back, @context.User.Identity?.Name!</h4>
                         </div>
                     </div>
                 </div>
+
+                @{
+                    bool hasAnyPermission = HasPermission(context.User, Permissions.LinkPlayers) || HasPermission(context.User, Permissions.ViewPlayers) || HasPermission(context.User, Permissions.ViewBuildplates) || HasPermission(context.User, Permissions.ViewData) || HasPermission(context.User, Permissions.ViewUsers) || HasPermission(context.User, Permissions.EditRoles);
+                }
+                @if (hasAnyPermission)
+                {
+                    @if (HasPermission(context.User, Permissions.LinkPlayers) || HasPermission(context.User, Permissions.ViewPlayers))
+                    {
+                        <div class="col-md-6">
+                            <div class="card h-100 shadow-sm border">
+                                <div class="card-body p-4 d-flex flex-column">
+                                    <div class="mb-3">
+                                        <h5 class="fw-bold text-secondary mb-1">Player Operations</h5>
+                                    </div>
+                                    <div class="list-group list-group-flush flex-grow-1">
+                                        @if (HasPermission(context.User, Permissions.LinkPlayers))
+                                        {
+                                            <NavLink href="LinkedAccounts" class="list-group-item list-group-item-action px-0 py-3 border-0 border-bottom">
+                                                <div class="fw-bold text-dark">Link Game Accounts</div>
+                                                <div class="text-muted small">Update username/password, view info.</div>
+                                            </NavLink>
+                                        }
+                                        @if (HasPermission(context.User, Permissions.ViewPlayers))
+                                        {
+                                            <NavLink href="Admin/Players" class="list-group-item list-group-item-action px-0 py-3 border-0">
+                                                <div class="fw-bold text-dark">Player Management</div>
+                                                <div class="text-muted small">All player profiles.</div>
+                                            </NavLink>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (HasPermission(context.User, Permissions.ViewBuildplates) || HasPermission(context.User, Permissions.ViewData))
+                    {
+                        <div class="col-md-6">
+                            <div class="card h-100 shadow-sm border">
+                                <div class="card-body p-4 d-flex flex-column">
+                                    <div class="mb-3">
+                                        <h5 class="fw-bold text-secondary mb-1">Assets & Storage</h5>
+                                    </div>
+                                    <div class="list-group list-group-flush flex-grow-1">
+                                        @if (HasPermission(context.User, Permissions.ViewBuildplates))
+                                        {
+                                            <NavLink href="Buildplates" class="list-group-item list-group-item-action px-0 py-3 border-0 border-bottom">
+                                                <div class="fw-bold text-dark">Buildplates templates</div>
+                                                <div class="text-muted small">View and import buildplates.</div>
+                                            </NavLink>
+                                        }
+                                        @if (HasPermission(context.User, Permissions.ViewData))
+                                        {
+                                            <NavLink href="Admin/Data" class="list-group-item list-group-item-action px-0 py-3 border-0">
+                                                <div class="fw-bold text-dark">Data Management</div>
+                                                <div class="text-muted small">Storage usage and data import/export.</div>
+                                            </NavLink>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (HasPermission(context.User, Permissions.ViewUsers) || HasPermission(context.User, Permissions.EditRoles))
+                    {
+                        <div class="col-12 mt-2">
+                            <div class="card shadow-sm border bg-light-soft">
+                                <div class="card-body p-4">
+                                    <h5 class="fw-bold text-secondary mb-1">Access Configuration</h5>
+
+                                    <div class="row g-3">
+                                        @if (HasPermission(context.User, Permissions.ViewUsers))
+                                        {
+                                            <div class="col-sm-6">
+                                                <NavLink href="Admin/Users" class="d-block p-3 bg-white rounded border h-100 text-decoration-none list-group-item-action">
+                                                    <div class="fw-bold text-dark">Users</div>
+                                                    <div class="text-muted small">Manage admin panel accounts.</div>
+                                                </NavLink>
+                                            </div>
+                                        }
+                                        @if (HasPermission(context.User, Permissions.EditRoles))
+                                        {
+                                            <div class="col-sm-6">
+                                                <NavLink href="Admin/Roles" class="d-block p-3 bg-white rounded border h-100 text-decoration-none list-group-item-action">
+                                                    <div class="fw-bold text-dark">Roles & Permissions</div>
+                                                    <div class="text-muted small">Manage authorization rules.</div>
+                                                </NavLink>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="col-md-8 text-center mt-4">
+                        <div class="card shadow-sm border border-warning p-4 bg-light">
+                            <div class="card-body">
+                                <h5 class="fw-bold text-warning mb-2">Permissions Required</h5>
+                                <p class="text-muted mb-0">
+                                    Your account doesn't have any administrative privileges assigned yet.
+                                    Contact an administrator to request access.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                }
             </Authorized>
-            
-            <NotAuthorized>
-               <div class="col-md-6">
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-body p-4 d-flex flex-column">
-                            <div class="mb-3">
-                                <span class="badge bg-primary-soft text-primary p-2 px-3 rounded-pill mb-2">Access Control</span>
-                                <h3 class="fw-bold">Management Portal</h3>
-                            </div>
-                            <p class="text-muted flex-grow-1">Sign in to access administrative tools, manage buildplates, and configure server-side permissions.</p>
-                            <div class="d-grid gap-2 mt-4">
-                                <a href="Account/Login" class="btn btn-primary fw-bold py-2">Sign In</a>
-                                <a href="Account/Register" class="btn btn-outline-secondary py-2">Create Account</a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
+            <NotAuthorized>
                 <div class="col-md-6">
                     <div class="card h-100 shadow-sm border-0">
                         <div class="card-body p-4 d-flex flex-column">
                             <div class="mb-3">
-                                <span class="badge bg-success-soft text-success p-2 px-3 rounded-pill mb-2">Live Monitoring</span>
-                                <h3 class="fw-bold">System Health</h3>
+                                <h3 class="fw-bold">Management Portal</h3>
                             </div>
-                            <p class="text-muted flex-grow-1">View the current operational status of the server.</p>
-                            <div class="mt-4">
-                                <a href="ServerStatus" class="btn btn-light w-100 py-2 border fw-semibold">
-                                    <i class="bi bi-cpu me-2"></i>View Infrastructure Status
-                                </a>
+                            <p class="text-muted flex-grow-1">Sign in to access administrative tools.</p>
+                            <div class="d-grid gap-2 mt-4">
+                                <a href="Account/Login" class="btn btn-primary fw-bold py-2">Sign In</a>
+                                <a href="Account/Register" class="btn btn-outline-secondary py-2">Create Account</a>
                             </div>
                         </div>
                     </div>

@@ -5,14 +5,17 @@
 @using Solace.BuildplateImporter
 @using Solace.BuildplateRenderer
 @using Solace.DB
-@using Solace.AdminPanel.Programs
 @using Solace.AdminPanel.Utils
+@using Solace.EventBus.Client
+@using Solace.ObjectStore.Client
 @attribute [Authorize(Policy = Permissions.ManagePlayers)]
 @rendermode InteractiveServer
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
-@inject ServerManager ServerManager
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject EventBusClient EventBusClient
+@inject ObjectStoreClient ObjectStoreClient
+@inject IConfiguration Configuration
 @inject ILogger<PlayerBuildplates> Logger
 
 <PageTitle>Player Buildplates - Solace</PageTitle>
@@ -377,7 +380,7 @@ _playerPageSize));
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _user = authState.User;
 
-        _resourcePackManager = await ResourcePackManagerSingleton.GetResourcePackManagerAsync();
+        _resourcePackManager = await ResourcePackManagerSingleton.GetResourcePackManagerAsync(Configuration["StaticDataPath"]!);
 
         try
         {
@@ -520,17 +523,22 @@ _playerPageSize));
         template.SuccessMessage = null;
         StateHasChanged();
 
-        if (!await ServerManager.EnsureComponentsOnline(EventBusServer.ExeName, ObjectStoreServer.ExeName,
+        @* if (!await ServerManager.EnsureComponentsOnline(EventBusServer.ExeName, ObjectStoreServer.ExeName,
 BuildplateLauncher.ExeName))
         {
             template.ErrorMessage = "The server must be running.";
             template.IsAdding = false;
             return;
-        }
+        } *@
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, ownsEarthDb: true);
+            await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), EventBusClient, ObjectStoreClient, Logger)
+            {
+                OwnsEarthDb = true,
+                OwnsEventBusClient = false,
+                OwnsObjectStoreClient = false,
+            };
 
             var buildplateIdNullable = await importer.AddBuidplateToPlayer(template.Id, AccountId, default);
             if (buildplateIdNullable is null)
@@ -588,11 +596,11 @@ BuildplateLauncher.ExeName))
         var item = _playerBuildplates?.FirstOrDefault(x => x.Id == id);
         if (item is not null)
         {
-            if (!await ServerManager.EnsureComponentsOnline(ObjectStoreServer.ExeName))
+            @* if (!await ServerManager.EnsureComponentsOnline(ObjectStoreServer.ExeName))
             {
                 _errorMessage = "The server must be running.";
                 return;
-            }
+            } *@
 
             _idToDelete = id;
             _nameToDelete = item.Name;
@@ -637,7 +645,12 @@ BuildplateLauncher.ExeName))
 
     private async Task<bool> RemoveBuildplate(Guid id)
     {
-        await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, createEventBus: false, ownsEarthDb: true);
+        await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), null, ObjectStoreClient, Logger)
+        {
+            OwnsEarthDb = true,
+            OwnsEventBusClient = false,
+            OwnsObjectStoreClient = false,
+        };
 
         return await importer.RemoveBuildplateFromPlayer(id, AccountId, default);
     }
@@ -712,17 +725,22 @@ BuildplateLauncher.ExeName))
         bp.IsRegeneratingPreview = true;
         bp.ErrorMessage = null;
 
-        if (!await ServerManager.EnsureComponentsOnline(EventBusServer.ExeName, ObjectStoreServer.ExeName,
+        @* if (!await ServerManager.EnsureComponentsOnline(EventBusServer.ExeName, ObjectStoreServer.ExeName,
 BuildplateLauncher.ExeName))
         {
             bp.ErrorMessage = "The server must be running.";
             bp.IsRegeneratingPreview = false;
             return;
-        }
+        } *@
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, ownsEarthDb: true);
+            await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), EventBusClient, ObjectStoreClient, Logger)
+            {
+                OwnsEarthDb = true,
+                OwnsEventBusClient = false,
+                OwnsObjectStoreClient = false,
+            };
 
             if (!await importer.RegeneratePlayerBuildplatePreviewAsync(AccountId, bp.Id, default))
             {

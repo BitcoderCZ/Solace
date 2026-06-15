@@ -9,11 +9,18 @@ namespace Solace.AdminPanel.Controllers;
 [Route("api/genoa-textures")]
 internal sealed class GenoaTexturesController : ControllerBase
 {
+    private readonly string _staticDataPath;
+
+    public GenoaTexturesController(IConfiguration configuration)
+    {
+        _staticDataPath = configuration["StaticDataPath"]!;
+    }
+
     [HttpGet("ui/items/{name}.png")]
     [HttpHead("ui/items/{name}.png")]
     public async Task<Results<PhysicalFileHttpResult, NotFound>> GetUiTexture(string name)
     {
-        var cachePath = await GenoaResourcepackCache.GetCachePath();
+        var cachePath = await GenoaResourcepackCache.GetCachePath(_staticDataPath);
 
         if (cachePath is null)
         {

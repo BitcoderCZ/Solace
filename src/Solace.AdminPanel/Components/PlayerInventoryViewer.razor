@@ -6,6 +6,8 @@
 @using Solace.DB.Models.Common
 @using Item = Solace.StaticData.Catalog.ItemsCatalogR.Item;
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject IConfiguration Configuration
+@inject StaticData.StaticData StaticData
 @inject ILogger<PlayerInventoryViewer> Logger
 
 <div class="inventory-container">
@@ -300,8 +302,6 @@
     private Item? SelectedItemToAdd = null;
     private int AddItemCount = 1;
 
-    private Solace.StaticData.StaticData staticData = new StaticData.StaticData(Program.StaticDataDir);
-
     private string _searchTerm = "";
     private string SearchTerm
     {
@@ -381,7 +381,7 @@
         set { _addSearchTerm = value; AddCurrentPage = 1; }
     }
 
-    private List<Item> FullCatalogFiltered => staticData.Catalog.ItemsCatalog.Items
+    private List<Item> FullCatalogFiltered => StaticData.Catalog.ItemsCatalog.Items
         .Where(i => string.IsNullOrWhiteSpace(AddSearchTerm) || i.Name.Contains(AddSearchTerm, StringComparison.OrdinalIgnoreCase) || i.Id.ToString().Contains(AddSearchTerm, StringComparison.OrdinalIgnoreCase))
         .ToList();
 
@@ -408,7 +408,7 @@
         {
             try
             {
-                await GenoaResourcepackCache.GetCachePath();
+                await GenoaResourcepackCache.GetCachePath(Configuration["StaticDataPath"]!);
             }
             finally
             {
@@ -432,7 +432,7 @@
                 return;
             }
 
-            var catalog = staticData.Catalog.ItemsCatalog;
+            var catalog = StaticData.Catalog.ItemsCatalog;
 
             foreach (var (itemId, itemCount) in inventory.StackableItemsData)
             {

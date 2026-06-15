@@ -7,14 +7,14 @@
 @using Solace.BuildplateImporter
 @using Solace.DB
 @using Solace.EventBus.Client
-@using Solace.AdminPanel.Programs
 @using Solace.AdminPanel.Utils
 @using Solace.ObjectStore.Client
 @attribute [Authorize(Policy = Permissions.ManageBuildplates)]
 @rendermode InteractiveServer
 @inject NavigationManager NavManager
-@inject ServerManager ServerManager
 @inject IDbContextFactory<EarthDbContext> EarthDbFactory
+@inject EventBusClient EventBusClient
+@inject ObjectStoreClient ObjectStoreClient
 @inject ILogger<ImportBuildplate> Logger
 
 <PageTitle>Import Buildplate(s) - Solace</PageTitle>
@@ -288,17 +288,23 @@
         isImporting = true;
         StateHasChanged();
 
-        if (!await ServerManager.EnsureComponentsOnline(EventBusServer.ExeName, ObjectStoreServer.ExeName,
+        @* if (!await ServerManager.EnsureComponentsOnline(EventBusServer.ExeName, ObjectStoreServer.ExeName,
 BuildplateLauncher.ExeName))
         {
             ShowDialog(false, "The server must be running to import buildplates.");
             isImporting = false;
             return;
-        }
+        } *@
 
         try
         {
-            await using var importer = await Importer.CreateFromSettings(Settings.Instance, await EarthDbFactory.CreateDbContextAsync(), Logger, ownsEarthDb: true);
+            await using var importer = new Importer(await EarthDbFactory.CreateDbContextAsync(), EventBusClient, ObjectStoreClient, Logger)
+            {
+                OwnsEarthDb = true,
+                OwnsEventBusClient = false,
+                OwnsObjectStoreClient = false,
+            };
+
             int successCount = 0;
 
             foreach (var fileState in filesToImport)

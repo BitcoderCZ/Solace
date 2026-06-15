@@ -5,17 +5,6 @@ namespace Solace.AdminPanel;
 
 internal static class Permissions
 {
-    [PermissionInfo("Server", "Start the server")]
-    public const string StartServer = "server.start";
-    [PermissionInfo("Server", "Restart the server")]
-    public const string RestartServer = "server.restart";
-    [PermissionInfo("Server", "Stop the server")]
-    public const string StopServer = "server.stop";
-    [PermissionInfo("Server", "Edit the server options")]
-    public const string EditServerOptions = "server.options.edit";
-    [PermissionInfo("Server", "View the logs of the server")]
-    public const string ViewServerLogs = "server.view.logs";
-
     [PermissionInfo("Users", "Manage roles - add, edit, delete")]
     public const string EditRoles = "user.role.edit";
     [PermissionInfo("Users", "View all users accounts")]

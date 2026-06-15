@@ -4,16 +4,16 @@ namespace Solace.AdminPanel;
 
 internal static class GenoaResourcepackCache
 {
-    public static async Task<string?> GetCachePath()
+    public static async Task<string?> GetCachePath(string staticDataPath)
     {
-        var cachePath = Path.GetFullPath(Path.Combine(Program.StaticDataDir, "resourcepacks", "genoa_cache"));
+        var cachePath = Path.GetFullPath(Path.Combine(staticDataPath, "resourcepacks", "genoa_cache"));
 
         if (Directory.Exists(cachePath))
         {
             return cachePath;
         }
 
-        var resourcepackFilePath = Path.GetFullPath(Path.Combine(Program.StaticDataDir, "resourcepacks", "vanilla.zip"));
+        var resourcepackFilePath = Path.GetFullPath(Path.Combine(staticDataPath, "resourcepacks", "vanilla.zip"));
 
         if (!File.Exists(resourcepackFilePath))
         {
