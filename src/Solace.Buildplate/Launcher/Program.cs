@@ -149,7 +149,7 @@ internal static partial class Program
             }
         }
 
-        var starter = new Starter(eventBusClient, eventBusConnectionString, publicEndPoint, baseInstancePublicPort, javaCmd, fountainBridgeJarName, Path.GetFullPath(Path.Combine(StaticDataPath, "server_template_dir")), fabricJarName, connectorPluginJarName, GlobalLoggerFactory.CreateLogger<Starter>());
+        var starter = new Starter(eventBusClient, eventBusConnectionString, publicEndPoint, baseInstancePublicPort, javaCmd, fountainBridgeJarName, Path.GetFullPath(Path.Combine(StaticDataPath, "server_template_dir")), fabricJarName, connectorPluginJarName, loggerFactory, GlobalLoggerFactory.CreateLogger<Starter>());
 
         startupDeps.EventBus = eventBusClient;
         startupDeps.Starter = starter;

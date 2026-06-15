@@ -22,30 +22,32 @@ public sealed partial class Starter
 	private readonly DirectoryInfo _serverTemplateDir;
 	private readonly string _fabricJarName;
 	private readonly FileInfo _connectorPluginJar;
+	private readonly ILoggerFactory _loggerFactory;
 	private readonly ILogger<Starter> _logger;
 
 	private const ushort SERVER_INTERNAL_BASE_PORT = 25565;
 	private readonly HashSet<int> _portsInUse = [];
 	private readonly HashSet<int> _serverInternalPortsInUse = [];
 
-	public Starter(EventBusClient eventBusClient, string eventBusConnectionString, string publicAddress, ushort basePort, string javaCmd, string bridgeJar, string serverTemplateDir, string fabricJarName, string connectorPluginJar, ILogger<Starter> logger)
-	{
-		_eventBusClient = eventBusClient;
+    public Starter(EventBusClient eventBusClient, string eventBusConnectionString, string publicAddress, ushort basePort, string javaCmd, string bridgeJar, string serverTemplateDir, string fabricJarName, string connectorPluginJar, ILoggerFactory loggerFactory, ILogger<Starter> logger)
+    {
+        _eventBusClient = eventBusClient;
 
-		_publicAddress = publicAddress;
-		_basePort = basePort;
-		_javaCmd = javaCmd;
-		_tmpDir = new DirectoryInfo(Path.GetTempPath());
-		_eventBusConnectionString = eventBusConnectionString;
+        _publicAddress = publicAddress;
+        _basePort = basePort;
+        _javaCmd = javaCmd;
+        _tmpDir = new DirectoryInfo(Path.GetTempPath());
+        _eventBusConnectionString = eventBusConnectionString;
 
-		_fountainBridgeJar = new FileInfo(Path.GetFullPath(bridgeJar));
-		_serverTemplateDir = new DirectoryInfo(Path.GetFullPath(serverTemplateDir));
-		_fabricJarName = fabricJarName;
-		_connectorPluginJar = new FileInfo(connectorPluginJar);
-		_logger = logger;
-	}
+        _fountainBridgeJar = new FileInfo(Path.GetFullPath(bridgeJar));
+        _serverTemplateDir = new DirectoryInfo(Path.GetFullPath(serverTemplateDir));
+        _fabricJarName = fabricJarName;
+        _connectorPluginJar = new FileInfo(connectorPluginJar);
+        _logger = logger;
+        _loggerFactory = loggerFactory;
+    }
 
-	public Instance? StartInstance(Guid instanceId, Guid? playerId, Guid buildplateId, Instance.BuildplateSource buildplateSource, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime)
+    public Instance? StartInstance(Guid instanceId, Guid? playerId, Guid buildplateId, Instance.BuildplateSource buildplateSource, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime)
 	{
 		DirectoryInfo? baseDir = CreateInstanceBaseDir(instanceId);
 		if (baseDir is null)
@@ -55,8 +57,9 @@ public sealed partial class Starter
 
 		int port = FindPort(_portsInUse, _basePort);
 		int serverInternalPort = FindPort(_serverInternalPortsInUse, SERVER_INTERNAL_BASE_PORT);
-		// todo: create new logger with instance if and port properties
-		var instance = Instance.Run(_eventBusClient, playerId, buildplateId, buildplateSource, instanceId, survival, night, saveEnabled, inventoryType, shutdownTime, _publicAddress, port, serverInternalPort, _javaCmd, _fountainBridgeJar, _serverTemplateDir, _fabricJarName, _connectorPluginJar, baseDir, _eventBusConnectionString, _logger);
+		
+		var instanceLogger = _loggerFactory.CreateLogger($"{nameof(Instance)}({port}/{serverInternalPort})");
+		var instance = Instance.Run(_eventBusClient, playerId, buildplateId, buildplateSource, instanceId, survival, night, saveEnabled, inventoryType, shutdownTime, _publicAddress, port, serverInternalPort, _javaCmd, _fountainBridgeJar, _serverTemplateDir, _fabricJarName, _connectorPluginJar, baseDir, _eventBusConnectionString, _loggerFactory, instanceLogger);
 
 		Task.Run(async () =>
 		{

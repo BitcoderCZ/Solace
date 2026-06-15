@@ -12,7 +12,9 @@ if (useSqlite)
 }
 else
 {
-    var postgres = builder.AddPostgres("postgres").WithPgAdmin();
+    var postgres = builder.AddPostgres("postgres")
+        .WithDataVolume()
+        .WithPgAdmin();
     db = postgres.AddDatabase("EarthDb");
 }
 

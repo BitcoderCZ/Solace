@@ -19,14 +19,14 @@ public sealed partial class Instance
 {
     private const long HOST_PLAYER_CONNECT_TIMEOUT = 120_000;
 
-    public static Instance Run(EventBusClient eventBusClient, Guid? playerId, Guid buildplateId, BuildplateSource buildplateSource, Guid instanceId, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime, string publicAddress, int port, int serverInternalPort, string javaCmd, FileInfo fountainBridgeJar, DirectoryInfo serverTemplateDir, string fabricJarName, FileInfo connectorPluginJar, DirectoryInfo baseDir, string eventBusConnectionString, ILogger logger)
+    public static Instance Run(EventBusClient eventBusClient, Guid? playerId, Guid buildplateId, BuildplateSource buildplateSource, Guid instanceId, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime, string publicAddress, int port, int serverInternalPort, string javaCmd, FileInfo fountainBridgeJar, DirectoryInfo serverTemplateDir, string fabricJarName, FileInfo connectorPluginJar, DirectoryInfo baseDir, string eventBusConnectionString, ILoggerFactory loggerFactory, ILogger logger)
     {
         if (playerId is null && buildplateSource is BuildplateSource.PLAYER)
         {
             throw new ArgumentException($"{nameof(playerId)} cannot be null when {nameof(buildplateSource)} is {nameof(BuildplateSource.PLAYER)}");
         }
 
-        var instance = new Instance(eventBusClient, playerId, buildplateId, buildplateSource, instanceId, survival, night, saveEnabled, inventoryType, shutdownTime, publicAddress, port, serverInternalPort, javaCmd, fountainBridgeJar, serverTemplateDir, fabricJarName, connectorPluginJar, baseDir, eventBusConnectionString, logger);
+        var instance = new Instance(eventBusClient, playerId, buildplateId, buildplateSource, instanceId, survival, night, saveEnabled, inventoryType, shutdownTime, publicAddress, port, serverInternalPort, javaCmd, fountainBridgeJar, serverTemplateDir, fabricJarName, connectorPluginJar, baseDir, eventBusConnectionString, loggerFactory, logger);
         instance._threadStartedSemaphore.Wait();
         instance._thread = instance.RunAsync();
         instance._threadStartedSemaphore.Wait();
@@ -60,6 +60,8 @@ public sealed partial class Instance
     private readonly string _eventBusQueueName;
     private readonly string _connectorPluginArgString;
 
+    private readonly ILoggerFactory _loggerFactory;
+
     private Task? _thread;
     private readonly SemaphoreSlim _threadStartedSemaphore = new SemaphoreSlim(1, 1);
     private readonly ILogger _logger;
@@ -79,7 +81,7 @@ public sealed partial class Instance
 
     private volatile bool _hostPlayerConnected;
 
-    private Instance(EventBusClient eventBusClient, Guid? playerId, Guid buildplateId, BuildplateSource buildplateSource, Guid instanceId, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime, string publicAddress, int port, int serverInternalPort, string javaCmd, FileInfo fountainBridgeJar, DirectoryInfo serverTemplateDir, string fabricJarName, FileInfo connectorPluginJar, DirectoryInfo baseDir, string eventBusConnectionString, ILogger logger)
+    private Instance(EventBusClient eventBusClient, Guid? playerId, Guid buildplateId, BuildplateSource buildplateSource, Guid instanceId, bool survival, bool night, bool saveEnabled, InventoryType inventoryType, long? shutdownTime, string publicAddress, int port, int serverInternalPort, string javaCmd, FileInfo fountainBridgeJar, DirectoryInfo serverTemplateDir, string fabricJarName, FileInfo connectorPluginJar, DirectoryInfo baseDir, string eventBusConnectionString, ILoggerFactory loggerFactory, ILogger logger)
     {
         _eventBusClient = eventBusClient;
 
@@ -97,6 +99,8 @@ public sealed partial class Instance
         Port = port;
         _serverInternalPort = serverInternalPort;
 
+        _loggerFactory = loggerFactory;
+
         _javaCmd = javaCmd;
         _fountainBridgeJar = fountainBridgeJar;
         _serverTemplateDir = serverTemplateDir;
@@ -111,7 +115,7 @@ public sealed partial class Instance
             _inventoryType
         ));
 
-        _logger = logger; // Log.Logger.ForContext("InstanceId", InstanceId);
+        _logger = logger;
     }
 
     private async Task RunAsync()
@@ -900,20 +904,22 @@ public sealed partial class Instance
 
                 _serverProcess = new ConsoleProcess(_javaCmd, _logger, useShellExecute: useShellExecute, redirect: redirect, openInNewWindow: true);
 
+                var serverLogger = _loggerFactory.CreateLogger($"{nameof(Instance)}({Port}/{_serverInternalPort}/server)");
+
                 if (redirect && !useShellExecute)
                 {
                     _serverProcess.StandartTextReceived += (sender, e) =>
                     {
                         if (!string.IsNullOrWhiteSpace(e.Data))
                         {
-                            LogReceivedServerData(LogLevel.Information, e.Data);
+                            LogReceivedServerData(serverLogger, LogLevel.Information, e.Data);
                         }
                     };
                     _serverProcess.ErrorTextReceived += (sender, e) =>
                     {
                         if (!string.IsNullOrWhiteSpace(e.Data))
                         {
-                            LogReceivedServerData(LogLevel.Error, e.Data);
+                            LogReceivedServerData(serverLogger, LogLevel.Error, e.Data);
                         }
                     };
                 }
@@ -952,6 +958,8 @@ public sealed partial class Instance
                 bool useShellExecute = true;
                 bool redirect = false;
 
+                var bridgeLogger = _loggerFactory.CreateLogger($"{nameof(Instance)}({Port}/{_serverInternalPort}/bridge)");
+
                 _bridgeProcess = new ConsoleProcess(_javaCmd, _logger, useShellExecute: useShellExecute, redirect: redirect, openInNewWindow: true);
                 if (redirect && !useShellExecute)
                 {
@@ -959,14 +967,14 @@ public sealed partial class Instance
                     {
                         if (!string.IsNullOrWhiteSpace(e.Data))
                         {
-                            LogReceivedBridgeData(LogLevel.Information, e.Data);
+                            LogReceivedBridgeData(bridgeLogger, LogLevel.Information, e.Data);
                         }
                     };
                     _bridgeProcess.ErrorTextReceived += (sender, e) =>
                     {
                         if (!string.IsNullOrWhiteSpace(e.Data))
                         {
-                            LogReceivedBridgeData(LogLevel.Error, e.Data);
+                            LogReceivedBridgeData(bridgeLogger, LogLevel.Error, e.Data);
                         }
                     };
                 }
@@ -1263,7 +1271,7 @@ public sealed partial class Instance
     private partial void LogStartingServerProcess();
 
     [LoggerMessage(Message = "[server] {Message}")]
-    private partial void LogReceivedServerData(LogLevel logLevel, string Message);
+    private static partial void LogReceivedServerData(ILogger logger, LogLevel logLevel, string Message);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Server process started, PID: {Pid}")]
     private partial void LogServerProcessStarted(int Pid);
@@ -1281,7 +1289,7 @@ public sealed partial class Instance
     private partial void LogStartingBridgeProcess();
 
     [LoggerMessage(Message = "[bridge] {Message}")]
-    private partial void LogReceivedBridgeData(LogLevel logLevel, string Message);
+    private static partial void LogReceivedBridgeData(ILogger logger, LogLevel logLevel, string Message);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Bridge process started, PID: {Pid}")]
     private partial void LogBridgeProcessStarted(int Pid);

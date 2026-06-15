@@ -1,7 +1,6 @@
 # TODO
 
 - Logging - assign event id in LoggerMessage
-- Make sure only 1 instance of the launcher can run at a time (with migrations and stuff it could screw up the db) - lock a file, if fail, log and exit
 - Launcher buildplate preview - liquid rendering
 - Shop management
 - Encounter generation and AR
@@ -19,6 +18,5 @@
 - Some kind of auth for the logs, maybe pass a random secret to the cli args and verify it in the controller?
 - A lot of things are quite slower on windows, investigate and/or add spinners
 - find out the tokens for the first time tutorial, daily login and possibly more
-- per instance logs server/bridge
 
 ## Refactoring
