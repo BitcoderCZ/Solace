@@ -37,6 +37,10 @@ var apiPort = builder.Configuration.GetValue<int>("ApiServer:Port", 8088);
 
 var apiServer = builder.AddProject<Projects.Solace_ApiServer>("api-server")
     .WithHttpEndpoint(port: apiPort, name: "http")
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.TargetHost = "*";
+    })
     .WithReference(db)
     .WaitFor(db)
     .WithReference(eventBus)
@@ -59,6 +63,10 @@ var locatorPort = builder.Configuration.GetValue<int>("Locator:Port", 8088);
 
 var locator = builder.AddProject<Projects.Solace_Locator>("locator")
     .WithHttpEndpoint(port: locatorPort, name: "http")
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.TargetHost = "*";
+    })
     .WithReference(apiServer)
     .WaitFor(apiServer);
 
