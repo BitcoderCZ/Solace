@@ -5,12 +5,12 @@ using Solace.StaticData;
 
 namespace Solace.TappablesGenerator;
 
-public sealed partial class EncounterGenerator
+internal sealed partial class EncounterGenerator
 {
     // TODO: make these configurable
-    private static readonly int CHANCE_PER_TILE = 4;
-    private static readonly long MIN_DELAY = 1 * 60 * 1000;
-    private static readonly long MAX_DELAY = 2 * 60 * 1000;
+    private const int CHANCE_PER_TILE = 4;
+    private const long MIN_DELAY = 1 * 60 * 1000;
+    private const long MAX_DELAY = 2 * 60 * 1000;
 
     private readonly StaticData.StaticData _staticData;
     private readonly int _maxDuration;
@@ -42,11 +42,13 @@ public sealed partial class EncounterGenerator
         }
 
         List<Encounter> encounters = [];
+#pragma warning disable CA5394 // Do not use insecure randomness - idc
         if (_random.Next(0, CHANCE_PER_TILE) == 0)
         {
             long spawnDelay = _random.NextInt64(MIN_DELAY, MAX_DELAY + 1);
 
             EncountersConfig.EncounterConfig encounterConfig = _staticData.EncountersConfig.Encounters[_random.Next(0, _staticData.EncountersConfig.Encounters.Length)];
+#pragma warning restore CA5394 // Do not use insecure randomness
 
             Span<float> tileBounds = stackalloc float[4];
             GetTileBounds(tileX, tileY, tileBounds);

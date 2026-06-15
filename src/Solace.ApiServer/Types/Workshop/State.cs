@@ -3,7 +3,7 @@
 namespace Solace.ApiServer.Types.Workshop;
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum State
+internal enum State
 {
     [JsonStringEnumMemberName("Empty")] EMPTY,
     [JsonStringEnumMemberName("Active")] ACTIVE,

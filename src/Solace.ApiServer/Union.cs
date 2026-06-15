@@ -2,7 +2,8 @@
 
 namespace Solace.ApiServer;
 
-public readonly struct Union<TA, TB>
+// todo: use c# union when available
+internal readonly struct Union<TA, TB>
     where TA : notnull
     where TB : notnull
 {
@@ -29,7 +30,7 @@ public readonly struct Union<TA, TB>
         => Union.CreateB<TA, TB>(value);
 }
 
-public static class Union
+internal static class Union
 {
     public static Union<TA, TB> CreateA<TA, TB>(TA value)
         where TA : notnull

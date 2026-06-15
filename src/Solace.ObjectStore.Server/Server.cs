@@ -2,7 +2,7 @@
 
 namespace Solace.ObjectStore.Server;
 
-public sealed partial class Server
+internal sealed partial class Server
 {
     private readonly DataStore _dataStore;
 

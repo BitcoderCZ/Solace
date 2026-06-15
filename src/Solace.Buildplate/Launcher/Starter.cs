@@ -8,7 +8,7 @@ using Solace.EventBus.Client;
 
 namespace Solace.Buildplate.Launcher;
 
-public sealed partial class Starter
+internal sealed partial class Starter
 {
 	private readonly EventBusClient _eventBusClient;
 

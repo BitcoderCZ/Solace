@@ -13,14 +13,6 @@ public sealed class NbtList : IList, IList<object?>
     public readonly NbtType _type;
     [JsonInclude, JsonPropertyName("array")]
     public readonly Array _array;
-#pragma warning disable IDE0044 // Add readonly modifier
-#pragma warning disable CS0169
-    [JsonIgnore]
-    private bool hashCodeGenerated;
-    [JsonIgnore]
-    private int hashCode;
-#pragma warning restore CS0169
-#pragma warning restore IDE0044 // Add readonly modifier
 
     public bool IsFixedSize => true;
 

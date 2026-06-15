@@ -17,7 +17,7 @@ using Solace.ApiServer.Utils;
 
 namespace Solace.ApiServer;
 
-public sealed class CatalogResponseCacheService
+internal sealed class CatalogResponseCacheService
 {
     private readonly Catalog _catalog;
     private readonly IMemoryCache _cache;

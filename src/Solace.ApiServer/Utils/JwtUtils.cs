@@ -86,8 +86,10 @@ internal static partial class JwtUtils
 
             var claims = jwtHandler.ValidateToken(token, new TokenValidationParameters()
             {
+#pragma warning disable CA5404 // Do not disable token validation checks todo
                 ValidateIssuer = false,
                 ValidateAudience = false,
+#pragma warning restore CA5404 // Do not disable token validation checks
                 ValidateLifetime = !allowExpired,
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKey = signingKey,

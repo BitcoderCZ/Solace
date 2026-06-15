@@ -116,7 +116,7 @@ internal sealed class TappablesController : SolaceControllerBase
         long requestStartedOn = HttpContext.GetTimestamp();
 
         TappablesManager.Tappable? tappable = _tappablesManager.GetTappableWithId(tappableRequest.Id, tileId);
-        if (tappable is null || !_tappablesManager.IsTappableValidFor(tappable, requestStartedOn, tappableRequest.PlayerCoordinate.Latitude, tappableRequest.PlayerCoordinate.Longitude))
+        if (tappable is null || !TappablesManager.IsTappableValidFor(tappable, requestStartedOn, tappableRequest.PlayerCoordinate.Latitude, tappableRequest.PlayerCoordinate.Longitude))
         {
             return TypedResults.BadRequest();
         }

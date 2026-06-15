@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Solace.ObjectStore.Server;
 
-public sealed partial class NetworkServer : IDisposable
+internal sealed partial class NetworkServer : IDisposable
 {
     private readonly Server _server;
     private readonly TcpListener _serverSocket;

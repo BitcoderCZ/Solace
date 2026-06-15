@@ -1,11 +1,11 @@
 ﻿namespace Solace.ApiServer.Types.Catalog;
 
-public sealed record RecipesCatalog(
+internal sealed record RecipesCatalog(
     RecipesCatalog.CraftingRecipe[] Crafting,
     RecipesCatalog.SmeltingRecipe[] Smelting
 )
 {
-    public sealed record CraftingRecipe(
+    internal sealed record CraftingRecipe(
         Guid Id,
         string Category,
         string Duration,
@@ -15,23 +15,23 @@ public sealed record RecipesCatalog(
         bool Deprecated
     )
     {
-        public sealed record Ingredient(
+        internal sealed record Ingredient(
             Guid[] Items,
             int Quantity
         );
 
-        public sealed record OutputR(
+        internal sealed record OutputR(
             Guid ItemId,
             int Quantity
         );
 
-        public sealed record ReturnItem(
+        internal sealed record ReturnItem(
             Guid Id,
             int Amount
         );
     }
 
-    public sealed record SmeltingRecipe(
+    internal sealed record SmeltingRecipe(
         Guid Id,
         int HeatRequired,
         Guid InputItemId,
@@ -40,12 +40,12 @@ public sealed record RecipesCatalog(
         bool Deprecated
     )
     {
-        public sealed record OutputR(
+        internal sealed record OutputR(
             Guid ItemId,
             int Quantity
         );
 
-        public sealed record ReturnItem(
+        internal sealed record ReturnItem(
             Guid Id,
             int Amount
         );

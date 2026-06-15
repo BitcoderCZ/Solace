@@ -5,18 +5,18 @@ using static Solace.ApiServer.Types.Journal.JournalRecord;
 
 namespace Solace.ApiServer.Types.Journal;
 
-public sealed record JournalRecord(
-     Dictionary<Guid, InventoryJournalEntry> InventoryJournal,
-     ActivityLogEntry[] ActivityLog
+internal sealed record JournalRecord(
+    Dictionary<Guid, InventoryJournalEntry> InventoryJournal,
+    ActivityLogEntry[] ActivityLog
 )
 {
-    public sealed record InventoryJournalEntry(
+    internal sealed record InventoryJournalEntry(
         string FirstSeen,
         string LastSeen,
         int AmountCollected
     );
 
-    public sealed record ActivityLogEntry(
+    internal sealed record ActivityLogEntry(
         ActivityLogEntry.Type Scenario,
         string EventTime,
         Rewards Rewards,
@@ -24,7 +24,7 @@ public sealed record JournalRecord(
     )
     {
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public enum Type
+        internal enum Type
         {
 #pragma warning disable CA1707 // Identifiers should not contain underscores
             [JsonStringEnumMemberName("LevelUp")] LEVEL_UP,
@@ -38,9 +38,9 @@ public sealed record JournalRecord(
     }
 }
 
-public static class ActivityLogTypeExtensions
+internal static class ActivityLogTypeExtensions
 {
-    extension (ActivityLogEntry.Type)
+    extension(ActivityLogEntry.Type)
     {
         public static ActivityLogEntry.Type FromDb(DB.Models.Player.ActivityLogEF.Entry.TypeE type)
             => type switch

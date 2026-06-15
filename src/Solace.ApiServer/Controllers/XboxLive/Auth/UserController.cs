@@ -24,13 +24,13 @@ internal sealed class UserController : SolaceControllerBase
         _logger = logger;
     }
 
-    public sealed record AuthenticateRequest(
+    internal sealed record AuthenticateRequest(
         AuthenticateRequest.PropertiesR Properties,
         string RelyingParty,
         string TokenType
     )
     {
-        public sealed record PropertiesR(
+        internal sealed record PropertiesR(
             string AuthMethod,
             string RpsTicket,
             string SiteName

@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 
 namespace Solace.ApiServer.Authentication;
 
-public class ETagMiddleware
+internal sealed class ETagMiddleware
 {
     private readonly RequestDelegate _next;
 
@@ -82,7 +82,7 @@ public class ETagMiddleware
     }
 }
 
-public static class ApplicationBuilderExtensions
+internal static class ApplicationBuilderExtensions
 {
     extension(IApplicationBuilder app)
     {

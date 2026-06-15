@@ -9,7 +9,7 @@ using Solace.EventBus.Client;
 
 namespace Solace.Buildplate.Launcher;
 
-public sealed partial class InstanceManager
+internal sealed partial class InstanceManager
 {
     private readonly Starter _starter;
 

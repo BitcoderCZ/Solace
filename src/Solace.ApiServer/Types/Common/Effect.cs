@@ -1,6 +1,6 @@
 ﻿namespace Solace.ApiServer.Types.Common;
 
-public sealed record Effect(
+internal sealed record Effect(
     string Type,
     string? Duration,
     int? Value,

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace Solace.ApiServer.Types.Common;
 
-public sealed record Token(
+internal sealed record Token(
     Token.Type ClientType,
     Dictionary<string, string> ClientProperties,
     Rewards Rewards,
@@ -12,7 +12,7 @@ public sealed record Token(
 )
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum Type
+    internal enum Type
     {
 #pragma warning disable CA1707 // Identifiers should not contain underscores
         [JsonStringEnumMemberName("adv_zyki")]
@@ -27,7 +27,7 @@ public sealed record Token(
     }
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum LifetimeE
+    internal enum LifetimeE
     {
         [JsonStringEnumMemberName("Persistent")]
         PERSISTENT,
@@ -36,7 +36,7 @@ public sealed record Token(
     }
 }
 
-public static class TokenTypeExtensions
+internal static class TokenTypeExtensions
 {
     extension(Token.Type)
     {

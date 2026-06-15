@@ -2,7 +2,7 @@
 
 namespace Solace.ApiServer.Utils;
 
-public static partial class ItemWear
+internal static partial class ItemWear
 {
     public static float WearToHealth(Guid itemId, int wear, Catalog.ItemsCatalogR itemsCatalog, ILogger logger)
     {

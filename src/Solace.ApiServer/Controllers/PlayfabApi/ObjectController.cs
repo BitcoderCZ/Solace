@@ -14,7 +14,7 @@ internal sealed class ObjectController : LoginServerControllerBase
         object? EscapeObject
     )
     {
-        public sealed record EntityR(
+        internal sealed record EntityR(
             Guid Id,
             string Type
         );
@@ -235,12 +235,12 @@ internal sealed class ObjectController : LoginServerControllerBase
         object? Objects
     )
     {
-        public sealed record EntityR(
+        internal sealed record EntityR(
             Guid Id,
             string Type
         );
 
-        public sealed record ObjectsR(
+        internal sealed record ObjectsR(
         // TODO  
         );
     }

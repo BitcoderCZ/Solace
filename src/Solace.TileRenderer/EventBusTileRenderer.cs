@@ -64,7 +64,6 @@ internal sealed partial class EventBusTileRenderer : IAsyncDisposable
         {
             LogEventBusSubscriberError();
             await DisposeAsync();
-            Serilog.Log.CloseAndFlush();
             Environment.Exit(1);
         }));
 

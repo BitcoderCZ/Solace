@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Solace.TileRenderer;
 
-public sealed partial class TileRenderer
+internal sealed partial class TileRenderer
 {
     // Map layers with their JSON string versions
     private static readonly FrozenDictionary<string, RenderLayer> layerStringMapping = new Dictionary<string, RenderLayer>()

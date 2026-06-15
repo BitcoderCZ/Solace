@@ -22,7 +22,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
-    <PackageReference Include="Serilog" Version="4.3.1" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
   </ItemGroup>
 

@@ -1,5 +1,5 @@
 ﻿using System.Text.Json.Serialization;
-using Solace.Common.Excceptions;
+using Solace.Common.Exceptions;
 using Solace.PreviewGenerator.NBT;
 
 namespace Solace.PreviewGenerator;

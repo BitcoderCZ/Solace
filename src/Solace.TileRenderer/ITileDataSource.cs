@@ -3,7 +3,7 @@ using Solace.TileRenderer.Wkb;
 
 namespace Solace.TileRenderer;
 
-public interface ITileDataSource : IDisposable
+internal interface ITileDataSource : IDisposable
 {
     string GetTagMapJson(StaticData.TileRenderer tileRenderer);
 

@@ -46,7 +46,7 @@ internal sealed partial class DatabaseMigrator
         {
             command.CommandText = "SELECT type, id, value FROM objects";
 
-            using (var reader = command.ExecuteReader())
+            using (var reader = await command.ExecuteReaderAsync())
             {
                 while (await reader.ReadAsync())
                 {
@@ -92,7 +92,7 @@ internal sealed partial class DatabaseMigrator
                 {
                     command.CommandText = "SELECT id, value FROM tiles";
 
-                    using (var reader = command.ExecuteReader())
+                    using (var reader = await command.ExecuteReaderAsync())
                     {
                         while (await reader.ReadAsync())
                         {
@@ -132,7 +132,7 @@ internal sealed partial class DatabaseMigrator
                 {
                     command.CommandText = "SELECT id, value FROM buildplates";
 
-                    using (var reader = command.ExecuteReader())
+                    using (var reader = await command.ExecuteReaderAsync())
                     {
                         while (await reader.ReadAsync())
                         {

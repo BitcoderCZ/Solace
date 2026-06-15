@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Solace.TappablesGenerator;
 
-public sealed record Encounter(
+internal sealed record Encounter(
     Guid Id,
     float Lat,
     float Lon,
@@ -15,7 +15,7 @@ public sealed record Encounter(
 )
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum RarityE
+    internal enum RarityE
     {
         COMMON,
         UNCOMMON,
@@ -25,7 +25,7 @@ public sealed record Encounter(
     }
 }
 
-public static class EncounterRarityExtensions
+internal static class EncounterRarityExtensions
 {
     extension(Encounter.RarityE)
     {

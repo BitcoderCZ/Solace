@@ -8,7 +8,7 @@ using static Solace.DB.Models.Player.TokensEF;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed partial class LevelUtils
+internal sealed partial class LevelUtils
 {
 #pragma warning disable IDE0060 // Remove unused parameter
     public static async Task CheckAndHandlePlayerLevelUpAsync(EarthDbContext.Results results, Guid accountId, long currentTime, StaticData.StaticData staticData)

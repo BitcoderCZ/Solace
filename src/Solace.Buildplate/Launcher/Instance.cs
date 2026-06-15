@@ -14,7 +14,7 @@ using Solace.EventBus.Client;
 namespace Solace.Buildplate.Launcher;
 
 #pragma warning disable CA1001 // Types that own disposable fields should be disposable
-public sealed partial class Instance
+internal sealed partial class Instance
 #pragma warning restore CA1001 // Types that own disposable fields should be disposable
 {
     private const long HOST_PLAYER_CONNECT_TIMEOUT = 120_000;
@@ -741,7 +741,7 @@ public sealed partial class Instance
         using (var byteArrayInputStream = new MemoryStream(serverData))
         using (var zipInputStream = new ZipArchive(byteArrayInputStream))
         {
-            foreach (ZipArchiveEntry entry in zipInputStream.Entries)
+            foreach (var entry in zipInputStream.Entries)
             {
                 if (entry.IsDirectory)
                 {
@@ -750,10 +750,10 @@ public sealed partial class Instance
 
                 string path = Path.Combine(worldDir.FullName, entry.FullName);
 
-                using (Stream zipStream = entry.Open())
-                using (FileStream fs = File.OpenWriteNew(path))
+                using (var zipStream = await entry.OpenAsync())
+                using (var fs = File.OpenWriteNew(path))
                 {
-                    zipStream.CopyTo(fs);
+                    await zipStream.CopyToAsync(fs);
                 }
             }
         }
@@ -1131,7 +1131,7 @@ public sealed partial class Instance
     );
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum BuildplateSource
+    internal enum BuildplateSource
     {
         PLAYER,
         SHARED,

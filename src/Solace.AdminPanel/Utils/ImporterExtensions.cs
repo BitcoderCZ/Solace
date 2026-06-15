@@ -15,7 +15,7 @@ using Solace.ObjectStore.Client;
 namespace Solace.AdminPanel.Utils;
 
 #pragma warning disable CA1708 // Identifiers should differ by more than case
-public static class ImporterExtensions
+internal static class ImporterExtensions
 #pragma warning restore CA1708 // Identifiers should differ by more than case
 {
     extension(Importer importer)

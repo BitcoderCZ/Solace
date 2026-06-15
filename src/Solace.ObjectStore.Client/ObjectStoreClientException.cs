@@ -2,6 +2,11 @@
 
 public class ObjectStoreClientException : Exception
 {
+    public ObjectStoreClientException()
+        : base()
+    {
+    }
+
     public ObjectStoreClientException(string? message)
         : base(message)
     {

@@ -7,7 +7,7 @@ namespace Solace.PreviewGenerator;
 
 public static partial class Generator
 {
-    private static readonly int CHUNK_RADIUS = 2;
+    private const int CHUNK_RADIUS = 2;
 
     public static string Generate(Stream stream, ILogger logger)
     {

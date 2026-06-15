@@ -5,7 +5,7 @@ using Solace.PreviewGenerator.Registry;
 
 namespace Solace.Buildplate.Launcher;
 
-public static partial class PreviewGenerator
+internal static partial class PreviewGenerator
 {
     public static string? GeneratePreview(byte[] serverData, bool isNight, string staticDataPath, ILogger logger)
     {

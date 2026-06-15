@@ -215,7 +215,7 @@ internal sealed partial class Chunk
             LongTag @long => @long.Value.ToString(CultureInfo.InvariantCulture),
             ShortTag @short => @short.Value.ToString(CultureInfo.InvariantCulture),
             StringTag @string => @string.Value,
-            _ => throw new ArgumentException($"Unsuported tag type '{tag?.GetType().ToString() ?? "null"}'", nameof(tag)),
+            _ => throw new ArgumentException($"Unsuported tag type '{tag.GetType()}'", nameof(tag)),
         };
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to read chunk")]

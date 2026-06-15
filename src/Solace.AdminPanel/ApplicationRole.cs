@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Solace.AdminPanel;
 
-public class ApplicationRole : IdentityRole
+internal sealed class ApplicationRole : IdentityRole
 {
     public const string Owner = "owner";
     public const string Default = "everyone";

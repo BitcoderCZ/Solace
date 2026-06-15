@@ -5,7 +5,7 @@ using Solace.StaticData;
 
 namespace Solace.ApiServer.Utils;
 
-public static class SmeltingCalculator
+internal static class SmeltingCalculator
 {
     public static State CalculateState(long currentTime, SmeltingSlot.ActiveJobR activeJob, SmeltingSlot.BurningR? burning, Catalog catalog)
     {
@@ -232,7 +232,7 @@ public static class SmeltingCalculator
         return duration;
     }
 
-    public sealed record State(
+    internal sealed record State(
         int CompletedRounds,
         int AvailableRounds,
         int TotalRounds,
@@ -248,7 +248,7 @@ public static class SmeltingCalculator
         bool Completed
     )
     {
-        public sealed record OutputItem(
+        internal sealed record OutputItem(
             Guid Id,
             int Count
         );
@@ -275,7 +275,7 @@ public static class SmeltingCalculator
         return new FinishPrice(price, validFor);
     }
 
-    public sealed record FinishPrice(
+    internal sealed record FinishPrice(
         int Price,
         int ValidFor
     );

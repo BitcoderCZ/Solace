@@ -1,6 +1,6 @@
 ﻿namespace Solace.ApiServer.Types.Inventory;
 
-public sealed record StackableInventoryItem(
+internal sealed record StackableInventoryItem(
     Guid Id,
     int Owned,
     int Fragments,
@@ -8,7 +8,7 @@ public sealed record StackableInventoryItem(
     StackableInventoryItem.OnR Seen
 )
 {
-    public sealed record OnR(
+    internal sealed record OnR(
         string On
     );
 }

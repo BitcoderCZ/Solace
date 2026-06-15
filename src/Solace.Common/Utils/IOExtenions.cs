@@ -10,7 +10,7 @@ public static class IOExtenions
 {
     extension(ZipArchiveEntry entry)
     {
-        public bool IsDirectory => entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\') || entry.Name == string.Empty;
+        public bool IsDirectory => entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\') || entry.Name.Length is 0;
     }
 
     extension(File)
@@ -35,10 +35,10 @@ public static class IOExtenions
             }
 
             const string VersionPlaceholder = "___VERSION_PLACEHOLDER___";
-            string templateWithToken = template.Replace("{{version}}", VersionPlaceholder);
+            string templateWithToken = template.Replace("{{version}}", VersionPlaceholder, StringComparison.Ordinal);
             string escapedTemplate = Regex.Escape(templateWithToken);
 
-            string pattern = "^" + escapedTemplate.Replace(VersionPlaceholder, @"(?<version>\d+(?:\.\d+)+)") + "$";
+            string pattern = "^" + escapedTemplate.Replace(VersionPlaceholder, @"(?<version>\d+(?:\.\d+)+)", StringComparison.Ordinal) + "$";
 
             var regex = new Regex(pattern, RegexOptions.CultureInvariant);
 

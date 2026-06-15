@@ -294,10 +294,20 @@ public static partial class JavaBlocks
         return new BedrockMapping(id, waterlogged, blockEntity, extraData);
     }
 
-    private sealed class BedrockMappingFailException : Exception
+    public sealed class BedrockMappingFailException : Exception
     {
+        public BedrockMappingFailException()
+            : base()
+        {
+        }
+
         public BedrockMappingFailException(string? message)
             : base(message)
+        {
+        }
+
+        public BedrockMappingFailException(string? message, Exception innerException)
+            : base(message, innerException)
         {
         }
     }

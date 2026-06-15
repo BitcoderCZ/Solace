@@ -120,7 +120,8 @@ internal static partial class Program
             }
             else
             {
-                LogVersionedStaticFileFound(programLogger, path);
+                fountainBridgeJarName = path;
+                LogVersionedStaticFileFound(programLogger, fountainBridgeJarName);
             }
         }
 
@@ -134,8 +135,8 @@ internal static partial class Program
 
         if (connectorPluginJarName.Contains("{{version}}", StringComparison.Ordinal))
         {
-            var fileName = Path.GetFileName(fountainBridgeJarName);
-            var directory = Path.GetDirectoryName(fountainBridgeJarName)!;
+            var fileName = Path.GetFileName(connectorPluginJarName);
+            var directory = Path.GetDirectoryName(connectorPluginJarName)!;
 
             if (!File.TryFindCompatibleFile(directory, MinimumBuildplateConnectorPluginVersion, fileName, out var path))
             {
@@ -145,7 +146,8 @@ internal static partial class Program
             }
             else
             {
-                LogVersionedStaticFileFound(programLogger, path);
+                connectorPluginJarName = path;
+                LogVersionedStaticFileFound(programLogger, connectorPluginJarName);
             }
         }
 
@@ -199,7 +201,7 @@ internal static partial class Program
     [LoggerMessage(Level = LogLevel.Error, Message = "Static data file '{Path}' does not exist, is outdated, or unsupported. Minimum version is {MinimumVersion}")]
     private static partial void LogVersionedStaticDataNotFoundError(ILogger logger, string Path, Version MinimumVersion);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Versioned static file found '{Path}'")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Versioned static file found '{Path}'")]
     private static partial void LogVersionedStaticFileFound(ILogger logger, string Path);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Ctrl+C received")]

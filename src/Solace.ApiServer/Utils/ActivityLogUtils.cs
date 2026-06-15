@@ -5,7 +5,7 @@ using Solace.DB.Utils;
 
 namespace Solace.ApiServer.Utils;
 
-public static class ActivityLogUtils
+internal static class ActivityLogUtils
 {
     public static async Task AddEntryAsync(EarthDbContext.Results results, Guid accountId, ActivityLogEF.Entry entry)
     {

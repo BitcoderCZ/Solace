@@ -4,7 +4,7 @@ namespace Solace.Buildplate.Launcher;
 
 internal sealed class NbtBuilder
 {
-    public sealed class Compound
+    internal sealed class Compound
     {
         private readonly List<Tag> tags = [];
 
@@ -105,7 +105,7 @@ internal sealed class NbtBuilder
         }
     }
 
-    public sealed class List
+    internal sealed class List
     {
         private readonly TagType type;
         private readonly List<Tag> tags = [];

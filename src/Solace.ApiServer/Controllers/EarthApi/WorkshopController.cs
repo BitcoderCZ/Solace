@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using System.Diagnostics;
 using Solace.ApiServer.Utils;
-using Solace.Common.Excceptions;
+using Solace.Common.Exceptions;
 using Solace.Common.Utils;
 using Solace.StaticData;
 using BurnRate = Solace.ApiServer.Types.Common.BurnRate;
@@ -1158,7 +1158,7 @@ internal sealed class WorkshopRouter : SolaceControllerBase
         StartRequestCrafting.Item[] Ingredients
     )
     {
-        public sealed record Item(
+        internal sealed record Item(
             Guid ItemId,
             int Quantity,
             Guid[] ItemInstanceIds
@@ -1173,7 +1173,7 @@ internal sealed class WorkshopRouter : SolaceControllerBase
         StartRequestSmelting.Item Fuel
     )
     {
-        public sealed record Item(
+        internal sealed record Item(
             Guid ItemId,
             int Quantity,
             Guid[] ItemInstanceIds

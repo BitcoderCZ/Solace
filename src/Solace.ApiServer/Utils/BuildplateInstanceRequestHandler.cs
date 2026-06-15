@@ -15,7 +15,7 @@ using Solace.DB.Utils;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
+internal sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
 {
     private readonly IDbContextFactory<EarthDbContext> _earthDbFactory;
     private readonly ObjectStoreClient _objectStoreClient;
@@ -187,7 +187,6 @@ public sealed partial class BuildplateInstanceRequestHandler : IAsyncDisposable
             async () =>
             {
                 LogBuildplatesEventBusRequestHandlerError();
-                Serilog.Log.CloseAndFlush();
                 Environment.Exit(1);
             }
         ));

@@ -6,7 +6,7 @@ using Solace.DB.Utils;
 
 namespace Solace.ApiServer.Utils;
 
-public static class TokenUtils
+internal static class TokenUtils
 {
     public static async Task<string> AddTokenAsync(EarthDbContext.Results results, Guid accountId, TokensEF.Token token)
     {

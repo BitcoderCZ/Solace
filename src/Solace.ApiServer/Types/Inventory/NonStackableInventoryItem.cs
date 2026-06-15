@@ -1,6 +1,6 @@
 ﻿namespace Solace.ApiServer.Types.Inventory;
 
-public sealed record NonStackableInventoryItem(
+internal sealed record NonStackableInventoryItem(
     Guid Id,
     NonStackableInventoryItem.Instance[] Instances,
     int Fragments,
@@ -8,12 +8,12 @@ public sealed record NonStackableInventoryItem(
     NonStackableInventoryItem.OnR Seen
 )
 {
-    public sealed record Instance(
+    internal sealed record Instance(
         Guid Id,
         float Health
     );
 
-    public sealed record OnR(
+    internal sealed record OnR(
         string On
     );
 }

@@ -38,7 +38,7 @@ EarthApiResponse LocatorHandler(HttpContext context, ILogger<Program> logger)
         ["2020.1217.02"] = ["production"],
         ["2020.1210.01"] = ["production"],
     }
-    ));
+    ), new object());
 }
 
 app.MapGet("/player/environment", LocatorHandler);
@@ -58,10 +58,10 @@ internal sealed record LocatorResponse(
     Dictionary<string, List<string>> SupportedEnvironments
 )
 {
-    public sealed record Environment(string ServiceUri, string CdnUri, string PlayfabTitleId);
+    internal sealed record Environment(string ServiceUri, string CdnUri, string PlayfabTitleId);
 }
 
-internal sealed record EarthApiResponse(LocatorResponse Result);
+internal sealed record EarthApiResponse(LocatorResponse Result, object Updates);
 
 [JsonSerializable(typeof(EarthApiResponse))]
 [JsonSerializable(typeof(LocatorResponse))]

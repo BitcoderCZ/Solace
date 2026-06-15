@@ -226,9 +226,9 @@ public sealed partial class ConsoleProcess : IDisposable
                 return "\"\"";
             }
 
-            if (a.Contains(' ') || a.Contains('{') || a.Contains('"'))
+            if (a.Contains(' ', StringComparison.Ordinal) || a.Contains('{', StringComparison.Ordinal) || a.Contains('"', StringComparison.Ordinal))
             {
-                return $"\"{a.Replace("\"", "\\\"")}\"";
+                return $"\"{a.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
             }
 
             return a;
@@ -265,14 +265,14 @@ public sealed partial class ConsoleProcess : IDisposable
 
             Process.StartInfo.FileName = _cachedLinuxTerminal;
 
-            var linuxArgs = args.Select(a => $"'{a.Replace("'", "'\\''")}'");
+            var linuxArgs = args.Select(a => $"'{a.Replace("'", "'\\''", StringComparison.Ordinal)}'");
 
-            string innerCommand = $"'{_filePath.Replace("'", "'\\''")}' {string.Join(" ", linuxArgs)}";
+            string innerCommand = $"'{_filePath.Replace("'", "'\\''", StringComparison.Ordinal)}' {string.Join(" ", linuxArgs)}";
 
             innerCommand = innerCommand
-                .Replace("\\", "\\\\")
-                .Replace("$", "\\$")
-                .Replace("\"", "\\\"");
+                .Replace("\\", "\\\\", StringComparison.Ordinal)
+                .Replace("$", "\\$", StringComparison.Ordinal)
+                .Replace("\"", "\\\"", StringComparison.Ordinal);
 
             _pidFilePath = Path.GetTempFileName();
 
@@ -289,9 +289,9 @@ public sealed partial class ConsoleProcess : IDisposable
             string command = $"'{_filePath}' {arguments}";
 
 #if KEEP_WINDOW_OPEN
-            string appleScript = $"tell application \"Terminal\" to do script \"{command.Replace("\"", "\\\"")}\"";
+            string appleScript = $"tell application \"Terminal\" to do script \"{command.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
 #else
-            string appleScript = $"tell application \"Terminal\" to do script \"{command.Replace("\"", "\\\"")}; exit\"";
+            string appleScript = $"tell application \"Terminal\" to do script \"{command.Replace("\"", "\\\"", StringComparison.Ordinal)}; exit\"";
 #endif
 
             Process.StartInfo.FileName = "osascript";

@@ -94,7 +94,7 @@ internal sealed class CatalogController : SolaceControllerBase
                 .ToArray()
                 .Select(item => ToResponse(item, Request));
         }
-        catch (Exception)
+        catch
         {
             items = [];
         }
@@ -356,10 +356,12 @@ internal sealed class CatalogController : SolaceControllerBase
 
         using var _0 = InitLock.EnterScope();
 
+#pragma warning disable CA1508 // Avoid dead conditional code - static volatile
         if (itemData is not null)
         {
             return;
         }
+#pragma warning restore CA1508 // Avoid dead conditional code
 
         var brfPrice = new Item.PriceR([
             new([new("ecd19d3c-7635-402c-a185-eb11cb6c6946", "ecd19d3c-7635-402c-a185-eb11cb6c6946", "ecd19d3c-7635-402c-a185-eb11cb6c6946", 0)]),
@@ -443,51 +445,51 @@ internal sealed class CatalogController : SolaceControllerBase
         string? ETag = null
     )
     {
-        public sealed record Entity(
+        internal sealed record Entity(
             string Id,
             string Type,
             string TypeString
         );
 
-        public sealed record AlternateId(
+        internal sealed record AlternateId(
             string Type,
             Guid Value
         );
 
-        public sealed record KeywordValues(
+        internal sealed record KeywordValues(
             IEnumerable<string> Values
         );
 
-        public sealed record Image(
+        internal sealed record Image(
             string Id,
             string Tag,
             string Type,
             string Url
         );
 
-        public sealed record ItemReference(
+        internal sealed record ItemReference(
             Guid Id,
             int Amount
         );
 
-        public sealed record PriceR(
+        internal sealed record PriceR(
             PriceR.Price[] Prices,
             PriceR.Price[] RealPrices
         )
         {
-            public sealed record Price(
+            internal sealed record Price(
                 CurrencyAmount[] Amounts
             );
         }
 
-        public sealed record CurrencyAmount(
+        internal sealed record CurrencyAmount(
             string CurrencyId,
             string Id,
             string ItemId,
             int Amount
         );
 
-        public sealed record QueryManifestContent(
+        internal sealed record QueryManifestContent(
             string Id,
             string Url,
             string MaxClientVersion,
@@ -496,13 +498,13 @@ internal sealed class CatalogController : SolaceControllerBase
             string Type
         );
 
-        public sealed record PackIdentity(
+        internal sealed record PackIdentity(
             [property: JsonPropertyName("type")] string Type,
             [property: JsonPropertyName("uuid")] Guid Uuid,
             [property: JsonPropertyName("version")] string Version
         );
 
-        public sealed record DisplayPropertiesR(
+        internal sealed record DisplayPropertiesR(
             // query manifest
             [property: JsonPropertyName("minClientVersion")] string? MinClientVersion = null,
             [property: JsonPropertyName("maxClientVersion")] string? MaxClientVersion = null,
@@ -553,14 +555,14 @@ internal sealed class CatalogController : SolaceControllerBase
             public static DisplayPropertiesR CreatePersona(string creatorName, int price, bool purchasable, string rarity, IEnumerable<PackIdentity> packIdentity, Guid offerId, string pieceType)
                 => new DisplayPropertiesR(CreatorName: creatorName, Price: price, Purchasable: purchasable, Rarity: rarity, PackIdentity: packIdentity, OfferId: offerId, PieceType: pieceType);
 
-            public sealed record Tab(
-              [property: JsonPropertyName("screenLayoutQueries")] IEnumerable<Tab.ScreenLayoutQuery> ScreenLayoutQueries,
-              [property: JsonPropertyName("tabIcon")] string TabIcon,
-              [property: JsonPropertyName("tabTitle")] string TabTitle,
-              [property: JsonPropertyName("tabId")] string TabId
-          )
+            internal sealed record Tab(
+                [property: JsonPropertyName("screenLayoutQueries")] IEnumerable<Tab.ScreenLayoutQuery> ScreenLayoutQueries,
+                [property: JsonPropertyName("tabIcon")] string TabIcon,
+                [property: JsonPropertyName("tabTitle")] string TabTitle,
+                [property: JsonPropertyName("tabId")] string TabId
+            )
             {
-                public sealed record ScreenLayoutQuery(
+                internal sealed record ScreenLayoutQuery(
                     [property: JsonPropertyName("column_rectangle")] object? ColumnRectangle,
                     [property: JsonPropertyName("column_square")] object? ColumnSquare,
                     [property: JsonPropertyName("column_grid")] object? ColumnGrid,
@@ -568,7 +570,7 @@ internal sealed class CatalogController : SolaceControllerBase
                     [property: JsonPropertyName("componentId")] Guid ComponentId
                 )
                 {
-                    public sealed record Query(
+                    internal sealed record Query(
                         [property: JsonPropertyName("productIds")] IEnumerable<string> ProductIds,
                         [property: JsonPropertyName("queryContentTypes")] IEnumerable<string> QueryContentTypes,
                         [property: JsonPropertyName("topCount")] int TopCount

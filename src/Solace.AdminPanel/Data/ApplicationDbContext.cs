@@ -4,7 +4,7 @@ using Solace.AdminPanel.Models.Db;
 
 namespace Solace.AdminPanel.Data;
 
-public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+internal sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
     : IdentityDbContext<ApplicationUser, ApplicationRole, string>(options)
 {
     public DbSet<DbBuildplatePreview> BuildplatePreviews { get; set; }

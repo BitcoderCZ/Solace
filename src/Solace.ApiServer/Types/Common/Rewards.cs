@@ -1,7 +1,7 @@
 ﻿namespace Solace.ApiServer.Types.Common;
 
 // TODO: determine format
-public sealed record Rewards(
+internal sealed record Rewards(
     int? Rubies,
     int? ExperiencePoints,
     int? Level,
@@ -12,14 +12,14 @@ public sealed record Rewards(
     Rewards.UtilityBlock[] UtilityBlocks
 )
 {
-    public sealed record Item(
+    internal sealed record Item(
         Guid Id,
         int Amount
     );
 
-    public sealed record Challenge(
+    internal sealed record Challenge(
         string Id
     );
 
-    public sealed record UtilityBlock();
+    internal sealed record UtilityBlock();
 }

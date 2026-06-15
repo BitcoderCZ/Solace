@@ -2,12 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace Solace.AdminPanel;
 
-public class PermissionRequirement(string permission) : IAuthorizationRequirement
+internal sealed class PermissionRequirement(string permission) : IAuthorizationRequirement
 {
     public string Permission { get; } = permission;
 }
 
-public class PermissionHandler : AuthorizationHandler<PermissionRequirement>
+internal sealed class PermissionHandler : AuthorizationHandler<PermissionRequirement>
 {
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, PermissionRequirement requirement)
     {

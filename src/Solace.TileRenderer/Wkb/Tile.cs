@@ -1,6 +1,6 @@
 ﻿namespace Solace.TileRenderer.Wkb;
 
-public sealed class Tile
+internal sealed class Tile
 {
     public Tile(Point slippy, int zoom, int resolution)
     {

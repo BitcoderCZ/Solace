@@ -9,7 +9,7 @@ using Solace.StaticData;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed class Rewards
+internal sealed class Rewards
 {
     private int _rubies;
     private int _experiencePoints;

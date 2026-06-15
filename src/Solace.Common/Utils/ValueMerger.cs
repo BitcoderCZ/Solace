@@ -5,9 +5,9 @@ namespace Solace.Common.Utils;
 
 public abstract class ValueMerger
 {
-    public string? CurrentUserId { protected get; set; } = "Unknown";
+    public string? CurrentUserId { get; set; } = "Unknown";
 
-    public string? CurrentUsername { protected get; set; }
+    public string? CurrentUsername { get; set; }
 
     public abstract Task<MergeAction> PromptMergeConflictAsync(string context, string currentValue, string incomingValue, bool
 allowAutomatic);

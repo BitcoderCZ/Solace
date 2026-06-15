@@ -2,7 +2,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace Solace.AppHost;
 
-public static class AspireExtension
+internal static class AspireExtension
 {
     public static IResourceBuilder<T> WithEnvironmentFromSection<T>(
         this IResourceBuilder<T> builder,
@@ -26,7 +26,7 @@ public static class AspireExtension
                 envName = envName[prefixToRemove.Length..];
             }
 
-            envName = envName.Replace(":", "__");
+            envName = envName.Replace(":", "__", StringComparison.Ordinal);
             builder.WithEnvironment(envName, kvp.Value);
         }
 

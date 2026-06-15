@@ -5,7 +5,7 @@ using Solace.Common.Utils;
 
 namespace Solace.EventBus.Server;
 
-public sealed partial class Server : IDisposable
+internal sealed partial class Server : IDisposable
 {
     private readonly ReaderWriterLockSlim _subscribersLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
     private readonly Dictionary<string, HashSet<Subscriber>> _subscribers = [];
@@ -39,7 +39,7 @@ public sealed partial class Server : IDisposable
         return subscriber;
     }
 
-    public sealed partial class Subscriber
+    internal sealed partial class Subscriber
     {
         private readonly Server _server;
 
@@ -100,7 +100,7 @@ public sealed partial class Server : IDisposable
             }
         }
 
-        public abstract class Message
+        internal abstract class Message
         {
             protected Message()
             {
@@ -108,7 +108,7 @@ public sealed partial class Server : IDisposable
             }
         }
 
-        public sealed class EntryMessage : Message
+        internal sealed class EntryMessage : Message
         {
             public readonly long Timestamp;
             public readonly string Type;
@@ -122,7 +122,7 @@ public sealed partial class Server : IDisposable
             }
         }
 
-        public sealed class ErrorMessage : Message
+        internal sealed class ErrorMessage : Message
         {
             internal ErrorMessage()
             {
@@ -148,7 +148,7 @@ public sealed partial class Server : IDisposable
         return new Publisher(this, _logger);
     }
 
-    public sealed partial class Publisher
+    internal sealed partial class Publisher
     {
         private readonly Server _server;
         private bool _closed;
@@ -228,7 +228,7 @@ public sealed partial class Server : IDisposable
         _requestHandlersLock.Dispose();
     }
 
-    public sealed partial class RequestHandler
+    internal sealed partial class RequestHandler
     {
         private readonly Server _server;
 
@@ -297,7 +297,7 @@ public sealed partial class Server : IDisposable
             }
         }
 
-        public sealed class RequestR
+        internal sealed class RequestR
         {
             public readonly long Timestamp;
             public readonly string Type;
@@ -311,7 +311,7 @@ public sealed partial class Server : IDisposable
             }
         }
 
-        public sealed class ErrorMessage
+        internal sealed class ErrorMessage
         {
             internal ErrorMessage()
             {
@@ -337,7 +337,7 @@ public sealed partial class Server : IDisposable
         return new RequestSender(this, _logger);
     }
 
-    public sealed partial class RequestSender
+    internal sealed partial class RequestSender
     {
         private readonly Server _server;
 

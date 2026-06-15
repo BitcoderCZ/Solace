@@ -6,9 +6,9 @@ using Solace.EventBus.Client;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed partial class TappablesManager : IAsyncDisposable
+internal sealed partial class TappablesManager : IAsyncDisposable
 {
-    private static readonly long GRACE_PERIOD = 30000;
+    private const long GRACE_PERIOD = 30000;
 
     private Subscriber? _subscriber;
     private RequestSender? _requestSender;
@@ -31,7 +31,6 @@ public sealed partial class TappablesManager : IAsyncDisposable
             async () =>
             {
                 LogTappablesEventBusSubscriberError();
-                Serilog.Log.CloseAndFlush();
                 Environment.Exit(1);
             }));
         _requestSender = await eventBusClient.AddRequestSenderAsync();
@@ -119,7 +118,7 @@ public sealed partial class TappablesManager : IAsyncDisposable
     }
 
 #pragma warning disable IDE0060 // Remove unused parameter
-    public bool IsTappableValidFor(Tappable tappable, long requestTime, float lat, float lon)
+    public static bool IsTappableValidFor(Tappable tappable, long requestTime, float lat, float lon)
 #pragma warning restore IDE0060 // Remove unused parameter
     {
         if (tappable.SpawnTime - GRACE_PERIOD > requestTime || tappable.SpawnTime + tappable.ValidFor + GRACE_PERIOD <= requestTime)
@@ -134,7 +133,9 @@ public sealed partial class TappablesManager : IAsyncDisposable
 
     // TODO: actually use this
 #pragma warning disable IDE0060 // Remove unused parameter
+#pragma warning disable CA1822 // Mark members as static
     public bool IsEncounterValidFor(Encounter encounter, long requestTime, float lat, float lon)
+#pragma warning restore CA1822 // Mark members as static
 #pragma warning restore IDE0060 // Remove unused parameter
     {
         if (encounter.SpawnTime - GRACE_PERIOD > requestTime || encounter.SpawnTime + encounter.ValidFor <= requestTime) // no grace period when checking end time because the buildplate instance shutdown does not include the grace period anyway
@@ -299,7 +300,7 @@ public sealed partial class TappablesManager : IAsyncDisposable
     private static int YToTile(double y)
         => (int)Math.Floor(y * (1 << 16));
 
-    public sealed record Tappable(
+    internal sealed record Tappable(
         Guid Id,
         float Lat,
         float Lon,
@@ -311,7 +312,7 @@ public sealed partial class TappablesManager : IAsyncDisposable
     )
     {
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public enum RarityE
+        internal enum RarityE
         {
             COMMON,
             UNCOMMON,
@@ -320,13 +321,13 @@ public sealed partial class TappablesManager : IAsyncDisposable
             LEGENDARY
         }
 
-        public sealed record Item(
+        internal sealed record Item(
             Guid Id,
             int Count
         );
     }
 
-    public sealed record Encounter(
+    internal sealed record Encounter(
         Guid Id,
         float Lat,
         float Lon,
@@ -338,7 +339,7 @@ public sealed partial class TappablesManager : IAsyncDisposable
     )
     {
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public enum RarityE
+        internal enum RarityE
         {
             COMMON,
             UNCOMMON,

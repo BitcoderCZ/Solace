@@ -5,15 +5,15 @@ using Solace.StaticData;
 
 namespace Solace.TappablesGenerator;
 
-public sealed partial class TappableGenerator
+internal sealed partial class TappableGenerator
 {
     // TODO: make these configurable
-    private static readonly int MIN_COUNT = 1;
-    private static readonly int MAX_COUNT = 3;
-    private static readonly long MIN_DURATION = 2 * 60 * 1000;
-    private static readonly long MAX_DURATION = 5 * 60 * 1000;
-    private static readonly long MIN_DELAY = 1 * 60 * 1000;
-    private static readonly long MAX_DELAY = 2 * 60 * 1000;
+    private const int MIN_COUNT = 1;
+    private const int MAX_COUNT = 3;
+    private const long MIN_DURATION = 2 * 60 * 1000;
+    private const long MAX_DURATION = 5 * 60 * 1000;
+    private const long MIN_DELAY = 1 * 60 * 1000;
+    private const long MAX_DELAY = 2 * 60 * 1000;
 
     private readonly StaticData.StaticData _staticData;
 
@@ -41,6 +41,7 @@ public sealed partial class TappableGenerator
             return [];
         }
 
+#pragma warning disable CA5394 // Do not use insecure randomness - idc
         int count = _random.Next(MIN_COUNT, MAX_COUNT + 1);
 
         var tappables = new List<Tappable>(count);
@@ -80,6 +81,7 @@ public sealed partial class TappableGenerator
             {
                 TappablesConfig.TappableConfig.ItemCount itemCount = tappableConfig.ItemCounts[itemId];
                 items.Add(new Tappable.Item(itemId, _random.Next(itemCount.Min, itemCount.Max + 1)));
+#pragma warning restore CA5394 // Do not use insecure randomness
             }
 
             var rarity = Tappable.RarityE.FromStaticData(items.Max(item => _staticData.Catalog.ItemsCatalog.GetItem(item.Id)!.Rarity));

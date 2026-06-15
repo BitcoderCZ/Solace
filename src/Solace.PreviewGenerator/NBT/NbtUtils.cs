@@ -86,7 +86,7 @@ public static class NbtUtils
         return builder.ToString();
     }
 
-    private static readonly string HEX_CODE = "0123456789ABCDEF";
+    private const string HEX_CODE = "0123456789ABCDEF";
 
     public static string ToHexString(byte[] data)
     {

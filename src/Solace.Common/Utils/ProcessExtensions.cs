@@ -112,7 +112,9 @@ public static partial class ProcessExtensions
 
                 await process.WaitForExitAsync(timeout, cancellationToken);
             }
-            catch { }
+            catch
+            {
+            }
 
             return process.HasExited;
         }
@@ -127,7 +129,7 @@ public static partial class ProcessExtensions
                     var linkInfo = File.ResolveLinkTarget($"/proc/{process.Id}/fd/0", returnFinalTarget: true);
                     string targetPath = linkInfo?.FullName ?? string.Empty;
 
-                    if (targetPath.Contains("/dev/tty") || targetPath.Contains("/dev/pts"))
+                    if (targetPath.Contains("/dev/tty", StringComparison.Ordinal) || targetPath.Contains("/dev/pts", StringComparison.Ordinal))
                     {
                         return "INT";
                     }
@@ -151,7 +153,7 @@ public static partial class ProcessExtensions
                     string tty = await ps.StandardOutput.ReadToEndAsync(cancellationToken);
                     await ps.WaitForExitAsync(cancellationToken);
 
-                    if (!string.IsNullOrWhiteSpace(tty) && !tty.Contains('?'))
+                    if (!string.IsNullOrWhiteSpace(tty) && !tty.Contains('?', StringComparison.Ordinal))
                     {
                         return "INT";
                     }
@@ -172,7 +174,9 @@ public static partial class ProcessExtensions
 
                 await process.WaitForExitAsync(timeout, cancellationToken);
             }
-            catch { }
+            catch
+            {
+            }
 
             return process.HasExited;
         }

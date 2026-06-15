@@ -24,6 +24,8 @@ public sealed partial class RequestSender : IAsyncDisposable
         _client.RemoveRequestSender(_channelId);
         await _client.SendMessageAsync(_channelId, "CLOSE");
         await ClosedAsync();
+
+        _lock.Dispose();
     }
 
     public async Task<string?> RequestAsync(string queueName, string type, string data)

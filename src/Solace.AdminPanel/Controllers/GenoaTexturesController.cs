@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -29,10 +30,21 @@ internal sealed class GenoaTexturesController : ControllerBase
 
         var path = Path.Combine(cachePath, "textures", "ui", "items", name + ".png");
 
-        if (!System.IO.File.Exists(path))
+        string baseDirectory = Path.GetFullPath(Path.Combine(cachePath, "textures", "ui", "items"));
+
+        string fullPath = Path.GetFullPath(Path.Combine(baseDirectory, name + ".png"));
+
+        if (!fullPath.StartsWith(baseDirectory, RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
         {
             return TypedResults.NotFound();
         }
+
+#pragma warning disable CA3003 // Review code for file path injection vulnerabilities - mitigated by the above code
+        if (!System.IO.File.Exists(fullPath))
+        {
+            return TypedResults.NotFound();
+        }
+#pragma warning restore CA3003 // Review code for file path injection vulnerabilities
 
         return TypedResults.PhysicalFile(path);
     }

@@ -72,10 +72,22 @@ public sealed partial class EventBusClient : IAsyncDisposable
         return new EventBusClient(tcpClient);
     }
 
-    public sealed class ConnectException : Exception
+    public sealed class ConnectException : EventBusClientException
     {
-        public ConnectException(string message) : base(message) { }
-        public ConnectException(string message, Exception innerException) : base(message, innerException) { }
+        public ConnectException()
+            : base()
+        {
+        }
+
+        public ConnectException(string message)
+            : base(message)
+        {
+        }
+
+        public ConnectException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -96,17 +108,19 @@ public sealed partial class EventBusClient : IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _isClosed, 1) == 0)
         {
-            _cts.Cancel();
+            await _cts.CancelAsync();
             _outgoingMessageQueue.Writer.TryComplete();
 
             try
             {
-                _tcpClient.Dispose(); // Closes underlying stream and socket
+                _tcpClient.Dispose();
             }
             catch
             {
-                // empty
             }
+
+            await _networkStream.DisposeAsync();
+            _cts.Dispose();
         }
 
         await Task.CompletedTask;

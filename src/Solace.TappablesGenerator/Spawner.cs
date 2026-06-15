@@ -6,9 +6,9 @@ using Solace.EventBus.Client;
 
 namespace Solace.TappablesGenerator;
 
-public sealed partial class Spawner : IAsyncDisposable
+internal sealed partial class Spawner : IAsyncDisposable
 {
-    private static readonly long SPAWN_INTERVAL = 15 * 1000;
+    private const long SPAWN_INTERVAL = 15 * 1000;
 
     private readonly ActiveTiles _activeTiles;
     private readonly TappableGenerator _tappableGenerator;

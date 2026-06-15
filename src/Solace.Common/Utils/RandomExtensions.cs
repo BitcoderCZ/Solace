@@ -4,6 +4,7 @@ public static class RandomExtensions
 {
     extension(Random random)
     {
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA5394:Do not use insecure randomness", Justification = "Extension for random")]
         public float NextSingle(float min, float max)
         {
             if (min >= max)

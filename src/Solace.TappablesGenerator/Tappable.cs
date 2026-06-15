@@ -3,7 +3,7 @@ using static Solace.TappablesGenerator.Tappable;
 
 namespace Solace.TappablesGenerator;
 
-public sealed record Tappable(
+internal sealed record Tappable(
     Guid Id,
     float Lat,
     float Lon,
@@ -14,7 +14,7 @@ public sealed record Tappable(
     Item[] Items
 )
 {
-    public enum RarityE
+    internal enum RarityE
     {
         COMMON,
         UNCOMMON,
@@ -23,13 +23,13 @@ public sealed record Tappable(
         LEGENDARY
     }
 
-    public sealed record Item(
+    internal sealed record Item(
         Guid Id,
         int Count
     );
 }
 
-public static class TappableRarityExtensions
+internal static class TappableRarityExtensions
 {
     extension(Tappable.RarityE)
     {

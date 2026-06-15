@@ -179,7 +179,7 @@ internal sealed partial class LoginController : SolaceControllerBase
         account.LastName = lastName;
         account.PasswordSalt = passwordSalt;
         account.PasswordHash = paswordHash;
-        
+
         try
         {
             await _earthDb.SaveChangesAsync(cancellationToken);
@@ -421,10 +421,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             {
                 var deviceTokenXml = new XmlDocument();
                 deviceTokenXml.LoadXml(deviceDATokenXMLString);
-                if (deviceTokenXml is not null)
-                {
-                    deviceTokenString = deviceTokenXml.SelectSingleNode("/EncryptedData/CipherData/CipherValue")?.InnerText ?? string.Empty;
-                }
+                deviceTokenString = deviceTokenXml.SelectSingleNode("/EncryptedData/CipherData/CipherValue")?.InnerText ?? string.Empty;
             }
 
             double requestCount = EvaluateNumber(request, "count(/S:Envelope/S:Body/ps:RequestMultipleSecurityTokens/*)", nsmgr);
@@ -894,6 +891,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             aes.Key = messageKey;
             aes.IV = iv;
 
+#pragma warning disable CA5401 // Do not use CreateEncryptor with non-default IV
             using (var encryptor = aes.CreateEncryptor(messageKey, iv))
             {
                 byte[] cipherData = encryptor.TransformFinalBlock(plainTextBytes, 0, plainTextBytes.Length);
@@ -901,6 +899,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                 iv.AsSpan().CopyTo(cipherText.AsSpan());
                 cipherData.AsSpan().CopyTo(cipherText.AsSpan(iv.Length..));
             }
+#pragma warning restore CA5401 // Do not use CreateEncryptor with non-default IV
         }
 
         return Convert.ToBase64String(cipherText);

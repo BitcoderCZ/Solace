@@ -2,11 +2,11 @@
 
 namespace Solace.ApiServer.Types.Catalog;
 
-public sealed record JournalCatalog(
+internal sealed record JournalCatalog(
     Dictionary<string, Item> Items
 )
 {
-    public sealed record Item(
+    internal sealed record Item(
         string ReferenceId,
         string ParentCollection,
         int OverallOrder,

@@ -6,7 +6,7 @@ namespace Solace.AdminPanel;
 
 internal static partial class ResourcePackManagerSingleton
 {
-    private static ResourcePackManager? resourcePackManager;
+    private static volatile ResourcePackManager? resourcePackManager;
     private static readonly SemaphoreSlim resourcePackLock = new(1, 1);
 
     public static async Task<ResourcePackManager> GetResourcePackManagerAsync(string staticDataPath)
@@ -29,7 +29,9 @@ internal static partial class ResourcePackManagerSingleton
 
         try
         {
+#pragma warning disable CA1508 // Avoid dead conditional code - static volatile
             if (resourcePackManager is null)
+#pragma warning restore CA1508 // Avoid dead conditional code
             {
                 var dir = new DirectoryInfo(Path.Combine(staticDataPath, "resourcepacks", "java"));
                 if (dir.Exists)

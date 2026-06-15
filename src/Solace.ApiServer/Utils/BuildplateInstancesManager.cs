@@ -6,7 +6,7 @@ using Solace.EventBus.Client;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed partial class BuildplateInstancesManager : IAsyncDisposable
+internal sealed partial class BuildplateInstancesManager : IAsyncDisposable
 {
     private Subscriber? _subscriber;
     private RequestSender? _requestSender;
@@ -29,7 +29,6 @@ public sealed partial class BuildplateInstancesManager : IAsyncDisposable
            async () =>
            {
                LogBuildplatesEventBusSubscriberError();
-               Serilog.Log.CloseAndFlush();
                Environment.Exit(1);
            }
        ));
@@ -323,7 +322,7 @@ public sealed partial class BuildplateInstancesManager : IAsyncDisposable
     );
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum InstanceType
+    internal enum InstanceType
     {
 #pragma warning disable CA1707 // Identifiers should not contain underscores
         BUILD,
@@ -334,7 +333,7 @@ public sealed partial class BuildplateInstancesManager : IAsyncDisposable
 #pragma warning restore CA1707 // Identifiers should not contain underscores
     }
 
-    public sealed record InstanceInfo(
+    internal sealed record InstanceInfo(
         InstanceType Type,
 
         Guid InstanceId,

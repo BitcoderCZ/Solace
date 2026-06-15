@@ -14,6 +14,11 @@ public sealed class ObjectStoreClient : IAsyncDisposable
 {
     public sealed class ConnectException : ObjectStoreClientException
     {
+        public ConnectException()
+            : base()
+        {
+        }
+
         public ConnectException(string? message)
             : base(message)
         {
@@ -31,6 +36,8 @@ public sealed class ObjectStoreClient : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly TaskCompletionSource _initialConnectTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Task _processingTask;
+
+    private byte _disposed;
 
     public static async Task<ObjectStoreClient> ConnectAsync(string connectionString)
     {
@@ -121,7 +128,11 @@ public sealed class ObjectStoreClient : IAsyncDisposable
             }
             finally
             {
-                stream?.Dispose();
+                if (stream is not null)
+                {
+                    await stream.DisposeAsync();
+                }
+                
                 socket?.Dispose();
             }
         }
@@ -139,7 +150,7 @@ public sealed class ObjectStoreClient : IAsyncDisposable
         var writeTask = WriteLoopAsync(writer, pendingResponses.Writer, loopCts.Token);
 
         Task completedTask = await Task.WhenAny(readTask, writeTask);
-        loopCts.Cancel();
+        await loopCts.CancelAsync();
 
         try
         {
@@ -313,7 +324,12 @@ public sealed class ObjectStoreClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _cts.Cancel();
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) is not 0)
+        {
+            return;
+        }
+
+        await _cts.CancelAsync();
         _commandQueue.Writer.TryComplete();
 
         try
@@ -330,6 +346,8 @@ public sealed class ObjectStoreClient : IAsyncDisposable
         {
             cmd.Tcs.TrySetException(ex);
         }
+
+        _cts.Dispose();
     }
 
     private enum CommandType

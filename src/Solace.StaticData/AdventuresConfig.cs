@@ -110,7 +110,9 @@ public sealed class AdventuresConfig
             return default;
         }
 
+#pragma warning disable CA5394 // Do not use insecure randomness - idc
         int roll = random.Next(0, totalWeight);
+#pragma warning restore CA5394 // Do not use insecure randomness
         foreach (var item in weightedItems)
         {
             roll -= item.Weight;

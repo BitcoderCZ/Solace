@@ -1,14 +1,19 @@
-﻿namespace Solace.Common.Excceptions;
+﻿namespace Solace.Common.Exceptions;
 
 public class UnsupportedOperationException : Exception
 {
     public UnsupportedOperationException()
         : base()
     {
-
     }
+
     public UnsupportedOperationException(string? message)
         : base(message)
+    {
+    }
+
+    public UnsupportedOperationException(string? message, Exception? innerException)
+        : base(message, innerException)
     {
 
     }

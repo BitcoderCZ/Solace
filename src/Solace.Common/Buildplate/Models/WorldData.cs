@@ -61,7 +61,7 @@ public sealed partial record class WorldData(
                         }
                     }
 
-                    using (var entryStream = entry.Open())
+                    using (var entryStream = await entry.OpenAsync(cancellationToken))
                     using (var ms = new MemoryStream())
                     {
                         await entryStream.CopyToAsync(ms, cancellationToken);
@@ -97,7 +97,7 @@ public sealed partial record class WorldData(
                             }
 
                             var entry = zip.CreateEntry(filePath, CompressionLevel.SmallestSize);
-                            using (var entryStream = entry.Open())
+                            using (var entryStream = await entry.OpenAsync(cancellationToken))
                             {
                                 entryStream.Write(data);
                             }

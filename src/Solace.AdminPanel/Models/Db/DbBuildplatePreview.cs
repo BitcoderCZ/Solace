@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Solace.AdminPanel.Models.Db;
 
-public class DbBuildplatePreview
+internal sealed class DbBuildplatePreview
 {
     public int Id { get; set; }
 

@@ -8,7 +8,7 @@ using CICIBIEType = Solace.StaticData.Catalog.ItemsCatalogR.Item.BoostInfoR.Effe
 
 namespace Solace.ApiServer.Utils;
 
-public static class BoostUtils
+internal static class BoostUtils
 {
     public static IEnumerable<Catalog.ItemsCatalogR.Item.BoostInfoR.Effect> GetActiveEffects(BoostsEF boosts, long currentTime, Catalog.ItemsCatalogR itemsCatalog)
     {
@@ -56,7 +56,7 @@ public static class BoostUtils
         }
     }
 
-    public sealed record StatModiferValues(
+    internal sealed record StatModiferValues(
         int MaxPlayerHealthMultiplier,
         int AttackMultiplier,
         int DefenseMultiplier,

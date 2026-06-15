@@ -6,10 +6,10 @@ using Solace.EventBus.Client;
 
 namespace Solace.TappablesGenerator;
 
-public sealed partial class ActiveTiles : IAsyncDisposable
+internal sealed partial class ActiveTiles : IAsyncDisposable
 {
-    private static readonly int ACTIVE_TILE_RADIUS = 3;
-    private static readonly long ACTIVE_TILE_EXPIRY_TIME = 2 * 60 * 1000;
+    private const int ACTIVE_TILE_RADIUS = 3;
+    private const long ACTIVE_TILE_EXPIRY_TIME = 2 * 60 * 1000;
 
     private readonly Dictionary<int, ActiveTile> _activeTiles = [];
     private IActiveTileListener? _activeTileListener;
@@ -131,7 +131,7 @@ public sealed partial class ActiveTiles : IAsyncDisposable
         _activeTileListener.Inactive(entriesToRemove.Select(item => item.Value));
     }
 
-    public record ActiveTile(
+    internal sealed record ActiveTile(
         int TileX,
         int TileY,
         long FirstActiveTime,
@@ -144,14 +144,14 @@ public sealed partial class ActiveTiles : IAsyncDisposable
         string PlayerId
     );
 
-    public interface IActiveTileListener
+    internal interface IActiveTileListener
     {
         Task Active(IEnumerable<ActiveTile> activeTiles);
 
         Task Inactive(IEnumerable<ActiveTile> activeTiles);
     }
 
-    public class ActiveTileListener : IActiveTileListener
+    internal sealed class ActiveTileListener : IActiveTileListener
     {
         public Func<IEnumerable<ActiveTile>, Task>? OnActive;
         public Func<IEnumerable<ActiveTile>, Task>? OnInactive;

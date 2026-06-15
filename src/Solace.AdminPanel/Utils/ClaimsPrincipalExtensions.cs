@@ -2,7 +2,7 @@ using System.Security.Claims;
 
 namespace Solace.AdminPanel.Utils;
 
-public static class ClaimsPrincipalExtensions
+internal static class ClaimsPrincipalExtensions
 {
     extension (ClaimsPrincipal principal)
     {

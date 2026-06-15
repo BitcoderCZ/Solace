@@ -1,6 +1,6 @@
 ﻿namespace Solace.ApiServer.Utils;
 
-public sealed class ChallengeProgressVersion
+internal sealed class ChallengeProgressVersion
 {
     public long UpdatedAt { get; set; }
     public string? DailyDateUtc { get; set; }

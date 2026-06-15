@@ -9,7 +9,7 @@ using Solace.Common.Utils;
 
 namespace Solace.EventBus.Server;
 
-public sealed partial class NetworkServer : IDisposable
+internal sealed partial class NetworkServer : IDisposable
 {
     private readonly Server _server;
     private readonly TcpListener _serverSocket;
@@ -29,6 +29,7 @@ public sealed partial class NetworkServer : IDisposable
         Stop();
         _serverSocket.Dispose();
         _server.Dispose();
+        _cts.Dispose();
     }
 
     public async Task RunAsync()
@@ -478,7 +479,7 @@ public sealed partial class NetworkServer : IDisposable
                                 SendMessage("NREP");
                             }
                         }
-                    });
+                    }).Forget();
                 }
                 else
                 {
