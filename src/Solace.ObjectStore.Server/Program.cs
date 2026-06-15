@@ -68,6 +68,7 @@ internal static partial class Program
         catch (IOException exception)
         {
             LogFatalErrorDuringServerStartup(logger, exception);
+            loggerFactory.Dispose();
             return 1;
         }
 

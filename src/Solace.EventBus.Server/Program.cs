@@ -63,6 +63,7 @@ internal static partial class Program
         {
             var logger = loggerFactory.CreateLogger(nameof(Program));
             LogFatalErrorDuringServerStartup(logger, exception);
+            loggerFactory.Dispose();
             return 1;
         }
 

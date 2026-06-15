@@ -27,7 +27,9 @@ var objectStore = builder.AddProject<Projects.Solace_ObjectStore_Server>("object
 
 var buildplateLauncher = builder.AddProject<Projects.Solace_Buildplate>("buildplate-launcher")
     .WithReference(eventBus)
-    .WaitFor(eventBus);
+    .WaitFor(eventBus)
+    .WithEnvironmentFromSection(builder.Configuration, "BuildplateLauncher", "BuildplateLauncher:")
+    .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"]);
 
 var apiPort = builder.Configuration.GetValue<int>("ApiServer:Port", 8088);
 
@@ -57,5 +59,21 @@ var locator = builder.AddProject<Projects.Solace_Locator>("locator")
     .WithHttpEndpoint(port: locatorPort, name: "http")
     .WithReference(apiServer)
     .WaitFor(apiServer);
+
+var tappableGenerator = builder.AddProject<Projects.Solace_TappablesGenerator>("tappable-generator")
+    .WithReference(eventBus)
+    .WaitFor(eventBus)
+    .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"]);
+
+bool anyTileDataSources = builder.Configuration.GetSection("TileRenderer:TileSource").AsEnumerable().Any(item => !string.IsNullOrWhiteSpace(item.Value));
+
+if (anyTileDataSources)
+{
+    var tileRenderer = builder.AddProject<Projects.Solace_TileRenderer>("tile-renderer")
+        .WithReference(eventBus)
+        .WaitFor(eventBus)
+        .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"])
+        .WithEnvironmentFromSection(builder.Configuration, "TileRenderer:TileSource", "TileRenderer:");
+}
 
 builder.Build().Run();

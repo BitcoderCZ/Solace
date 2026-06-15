@@ -19,7 +19,7 @@ public sealed partial class TappableGenerator
 
     private readonly Random _random;
 
-    public TappableGenerator(StaticData.StaticData staticData, ILogger logger)
+    public TappableGenerator(StaticData.StaticData staticData, ILogger<TappableGenerator> logger)
     {
         _staticData = staticData;
 

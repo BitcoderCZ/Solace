@@ -17,7 +17,7 @@ public sealed partial class EncounterGenerator
 
     private readonly Random _random;
 
-    public EncounterGenerator(StaticData.StaticData staticData, ILogger logger)
+    public EncounterGenerator(StaticData.StaticData staticData, ILogger<EncounterGenerator> logger)
     {
         _staticData = staticData;
 

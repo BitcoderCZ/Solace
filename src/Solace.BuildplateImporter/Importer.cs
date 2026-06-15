@@ -514,7 +514,7 @@ public sealed partial class Importer : IAsyncDisposable
         }
         else
         {
-            LogTemplateNotFoundInformation(templateId);
+            LogTemplateNotFoundDebug(templateId);
 
             LogStoringTemplateWorldData();
             string? serverDataObjectId = await ObjectStoreClient.StoreAsync(worldData.ServerData);
@@ -710,8 +710,8 @@ public sealed partial class Importer : IAsyncDisposable
     [LoggerMessage(Level = LogLevel.Error, Message = "Template '{TemplateId}' already exists")]
     private partial void LogTemplateAlreadyExists(Guid TemplateId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Template '{TemplateId}' not found")]
-    private partial void LogTemplateNotFoundInformation(Guid TemplateId);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Template '{TemplateId}' not found")]
+    private partial void LogTemplateNotFoundDebug(Guid TemplateId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Storing template world data")]
     private partial void LogStoringTemplateWorldData();

@@ -14,22 +14,8 @@ internal static partial class Program
 {
     internal static string StaticDataPath = "./staticdata";
 
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    private sealed class Options
-    {
-        [Option("bridgeJar", Required = true, HelpText = "Fountain bridge JAR file")]
-        public string BridgeJar { get; set; }
-        [Option("serverTemplateDir", Required = true, HelpText = "Minecraft/Fabric server template directory, containing the Fabric JAR, mods, and libraries")]
-        public string ServerTemplateDir { get; set; }
-        [Option("fabricJarName", Required = true, HelpText = "Name of the Fabric JAR to run within the server template directory")]
-        public string FabricJarName { get; set; }
-        [Option("connectorPluginJar", Required = true, HelpText = "Fountain connector plugin JAR")]
-        public string ConnectorPluginJar { get; set; }
-
-        [Option("dir", Default = "./staticdata", Required = false, HelpText = "Static data path")]
-        public string StaticDataPath { get; set; }
-    }
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+    public static readonly Version MinimumFountainBridgeVersion = new Version(0, 0, 2);
+    public static readonly Version MinimumBuildplateConnectorPluginVersion = new Version(0, 0, 1);
 
     private static async Task<int> Main(string[] args)
     {
@@ -72,20 +58,25 @@ internal static partial class Program
 
         var programLogger = loggerFactory.CreateLogger(nameof(Program));
 
-        StaticDataPath = options.StaticDataPath;
+        {
+            var staticDataPath = builder.Configuration["StaticDataPath"];
+            Debug.Assert(staticDataPath is not null);
+            StaticDataPath = Path.GetFullPath(staticDataPath);
+        }
 
         // init stuff that requires logger but needs to be injected
         var startupDeps = app.Services.GetRequiredService<StartupDependencies>();
 
-        var eventBusConnectionString = builder.Configuration["services:event-bus:raw-tcp:0"];
-        Debug.Assert(eventBusConnectionString is not null);
-        var eventBusUri = new Uri(eventBusConnectionString);
+        var eventBusConnectionStringConfig = builder.Configuration["services:event-bus:raw-tcp:0"];
+        Debug.Assert(eventBusConnectionStringConfig is not null);
+        var eventBusUri = new Uri(eventBusConnectionStringConfig);
+        var eventBusConnectionString = $"{eventBusUri.Host}:{eventBusUri.Port}";
 
         LogConnectingToEventBus(programLogger);
         EventBusClient eventBusClient;
         try
         {
-            eventBusClient = await EventBusClient.ConnectAsync($"{eventBusUri.Host}:{eventBusUri.Port}");
+            eventBusClient = await EventBusClient.ConnectAsync(eventBusConnectionString);
         }
         catch (EventBusClientException exception)
         {
@@ -96,19 +87,80 @@ internal static partial class Program
 
         LogConnectedToEventBus(programLogger);
 
-        string javaCmd = JavaLocator.Locate(GlobalLoggerFactory.CreateLogger(nameof(JavaLocator)));
-        var starter = new Starter(eventBusClient, options.EventBusConnectionString, builder.Configuration["PublicEndPoint"], checked((ushort)builder.Configuration.GetValue<int>("BaseInstancePublicPort")), javaCmd, options.BridgeJar, options.ServerTemplateDir, options.FabricJarName, options.ConnectorPluginJar, GlobalLoggerFactory.CreateLogger<Starter>());
+        var javaCmd = JavaLocator.Locate(GlobalLoggerFactory.CreateLogger(nameof(JavaLocator)));
+
+        var publicEndPoint = builder.Configuration["PublicEndPoint"];
+        Debug.Assert(publicEndPoint is not null);
+
+        var baseInstancePublicPort = checked((ushort)builder.Configuration.GetValue<int>("BaseInstancePublicPort"));
+
+        var fabricJarName = builder.Configuration["FabricJarName"];
+        Debug.Assert(fabricJarName is not null);
+
+        var serverJarsDir = Path.Combine(StaticDataPath, "server_jars");
+
+        var fountainBridgeJarName = builder.Configuration["FountainBridgeJarName"];
+        Debug.Assert(fountainBridgeJarName is not null);
+
+        if (!Path.IsPathFullyQualified(fountainBridgeJarName))
+        {
+            fountainBridgeJarName = Path.GetFullPath(Path.Combine(serverJarsDir, fountainBridgeJarName));
+        }
+
+        if (fountainBridgeJarName.Contains("{{version}}", StringComparison.Ordinal))
+        {
+            var fileName = Path.GetFileName(fountainBridgeJarName);
+            var directory = Path.GetDirectoryName(fountainBridgeJarName)!;
+
+            if (!File.TryFindCompatibleFile(directory, MinimumFountainBridgeVersion, fileName, out var path))
+            {
+                LogVersionedStaticDataNotFoundError(programLogger, Path.GetFullPath(Path.Combine(StaticDataPath, fountainBridgeJarName)), MinimumFountainBridgeVersion);
+                loggerFactory.Dispose();
+                return 4;
+            }
+            else
+            {
+                LogVersionedStaticFileFound(programLogger, path);
+            }
+        }
+
+        var connectorPluginJarName = builder.Configuration["ConnectorPluginJarName"];
+        Debug.Assert(connectorPluginJarName is not null);
+
+        if (!Path.IsPathFullyQualified(connectorPluginJarName))
+        {
+            connectorPluginJarName = Path.GetFullPath(Path.Combine(serverJarsDir, connectorPluginJarName));
+        }
+
+        if (connectorPluginJarName.Contains("{{version}}", StringComparison.Ordinal))
+        {
+            var fileName = Path.GetFileName(fountainBridgeJarName);
+            var directory = Path.GetDirectoryName(fountainBridgeJarName)!;
+
+            if (!File.TryFindCompatibleFile(directory, MinimumBuildplateConnectorPluginVersion, fileName, out var path))
+            {
+                LogVersionedStaticDataNotFoundError(programLogger, Path.GetFullPath(Path.Combine(StaticDataPath, connectorPluginJarName)), MinimumBuildplateConnectorPluginVersion);
+                loggerFactory.Dispose();
+                return 5;
+            }
+            else
+            {
+                LogVersionedStaticFileFound(programLogger, path);
+            }
+        }
+
+        var starter = new Starter(eventBusClient, eventBusConnectionString, publicEndPoint, baseInstancePublicPort, javaCmd, fountainBridgeJarName, Path.GetFullPath(Path.Combine(StaticDataPath, "server_template_dir")), fabricJarName, connectorPluginJarName, GlobalLoggerFactory.CreateLogger<Starter>());
 
         startupDeps.EventBus = eventBusClient;
         startupDeps.Starter = starter;
 
         // init stuff that needs async initialization
-        await app.Services.GetRequiredService<InstanceManager>().InitializeAsync(eventBusClient);
-
+        var instanceManager = app.Services.GetRequiredService<InstanceManager>();
+        await instanceManager.InitializeAsync(eventBusClient);
 
         Console.CancelKeyPress += (sender, e) =>
         {
-            Log.Information("Ctrl+C received");
+            LogCtrlCReceived(programLogger);
             instanceManager.ShutdownAsync().Forget();
             e.Cancel = true;
         };
@@ -118,8 +170,7 @@ internal static partial class Program
             instanceManager.ShutdownAsync().Wait();
         };
 
-        Log.Information("Started, public address: {Address}, base port: {BasePort}", options.PublicAddress, options.BasePublicPort);
-        LogStarted(programLogger);
+        LogStarted(programLogger, publicEndPoint, baseInstancePublicPort);
 
         while (true)
         {
@@ -144,6 +195,15 @@ internal static partial class Program
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Connected to event bus")]
     private static partial void LogConnectedToEventBus(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Static data file '{Path}' does not exist, is outdated, or unsupported. Minimum version is {MinimumVersion}")]
+    private static partial void LogVersionedStaticDataNotFoundError(ILogger logger, string Path, Version MinimumVersion);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Versioned static file found '{Path}'")]
+    private static partial void LogVersionedStaticFileFound(ILogger logger, string Path);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Ctrl+C received")]
+    private static partial void LogCtrlCReceived(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Started, public address: {Address}, base port: {BasePort}")]
     private static partial void LogStarted(ILogger logger, string Address, int BasePort);
