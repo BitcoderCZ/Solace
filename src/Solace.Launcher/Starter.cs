@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
 
 namespace Solace.Launcher;
@@ -20,6 +21,8 @@ internal sealed class Starter : IAsyncDisposable
         var dashboardOtlpPort = _configuration.GetValue<int>("AspireDashboard:OtlpPort", 4317);
         var dashboardUiPort = _configuration.GetValue<int>("AspireDashboard:UiPort", 18888);
         var otlpEndpoint = $"http://localhost:{dashboardOtlpPort}";
+    
+        var otlpApiKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
 
         var earthDbUseSqlite = _configuration.GetValue<bool>("Database:Earth:UseSqlite");
         if (!earthDbUseSqlite)
@@ -28,19 +31,21 @@ internal sealed class Starter : IAsyncDisposable
         }
 
         _aspireDashboard = Component.Builder.Command("aspire", ["dashboard", "run", "--frontend-url", $"http://localhost:{dashboardUiPort}", "--otlp-grpc-url", otlpEndpoint])
+            .WithEnvironmentVariable("Dashboard__Otlp__AuthMode", "ApiKey")
+            .WithEnvironmentVariable("Dashboard__Otlp__PrimaryApiKey", otlpApiKey)
             .Build();
 
         _eventBusServer = Component.Builder.Executable(new FileInfo($"{PathToComponents}/event-bus/EventBusServer"), [])
             .WithEndpoint("TCP_PORT", 5532)
-            .WithOtel("event-bus", otlpEndpoint)
+            .WithOtel("event-bus", otlpEndpoint, otlpApiKey)
             .Build();
 
         var objectStoreDataDirectory = Path.GetFullPath(_configuration.GetValue<string>("ObjectStore:DataDirectory", "data"));
-        
+
         _objectStoreServer = Component.Builder.Executable(new FileInfo($"{PathToComponents}/object-store/ObjectStoreServer"), [])
             .WithEndpoint("TCP_PORT", 5396)
             .WithEnvironmentVariable("DataDirectory", objectStoreDataDirectory)
-            .WithOtel("object-store", otlpEndpoint)
+            .WithOtel("object-store", otlpEndpoint, otlpApiKey)
             .Build();
 
         var apiPort = _configuration.GetValue<int>("ApiServer:Port", 8088);
@@ -54,7 +59,7 @@ internal sealed class Starter : IAsyncDisposable
             .WithEnvironmentVariable("ConnectionStrings__EarthDb", $"Data Source={Path.GetFullPath("../data/earth.db")}")
             .WithEnvironmentVariable("StaticDataPath", staticDataPath)
             .WithEnvironmentFromSection(_configuration, "ApiServer:Authentication", "ApiServer:")
-            .WithOtel("api-server", otlpEndpoint)
+            .WithOtel("api-server", otlpEndpoint, otlpApiKey)
             .Build();
     }
 

@@ -189,7 +189,7 @@ internal sealed class Component : IAsyncDisposable
             return this;
         }
 
-        public Builder WithOtel(string serviceName, string otlpEndpoint)
+        public Builder WithOtel(string serviceName, string otlpEndpoint, string otlpApiKey)
         {
             WithEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", otlpEndpoint);
             WithEnvironmentVariable("OTEL_SERVICE_NAME", serviceName);
@@ -199,6 +199,7 @@ internal sealed class Component : IAsyncDisposable
             WithEnvironmentVariable("OTEL_METRICS_EXEMPLAR_FILTER", "trace_based");
             WithEnvironmentVariable("OTEL_METRIC_EXPORT_INTERVAL", "1000");
             WithEnvironmentVariable("OTEL_TRACES_SAMPLER", "always_on");
+            WithEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS", $"x-otlp-api-key={otlpApiKey}");
             return this;
         }
 
