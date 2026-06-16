@@ -11,6 +11,28 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <Target Name="MoveDependenciesToShared" AfterTargets="Publish" Condition="'$(UseSharedLibs)' == 'true'">
+
+    <PropertyGroup>
+      <SharedLibsDir>$([System.IO.Path]::GetFullPath('$(PublishDir)..\shared_libs'))\</SharedLibsDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <FilesToMove Include="$(PublishDir)*.dll;$(PublishDir)*.pdb" Exclude="$(PublishDir)$(TargetName).dll;$(PublishDir)$(TargetName).pdb" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(SharedLibsDir)" />
+
+    <Copy SourceFiles="@(FilesToMove)" DestinationFolder="$(SharedLibsDir)" SkipUnchangedFiles="true" Retries="5" RetryDelayMilliseconds="500" />
+
+    <Delete Files="@(FilesToMove)" />
+
+  </Target>
+
+  <PropertyGroup Condition="'$(UseSharedLibs)' == 'true'">
+    <DefineConstants>$(DefineConstants);USE_SHARED_LIBS</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Asp.Versioning.Mvc" Version="10.0.0" />
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />

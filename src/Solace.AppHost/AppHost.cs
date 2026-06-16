@@ -25,7 +25,7 @@ var objectStoreDataDirectory = Path.GetFullPath(builder.Configuration.GetValue<s
 
 var objectStore = builder.AddProject<Projects.Solace_ObjectStore_Server>("object-store")
     .WithEndpoint(scheme: "tcp", name: "raw-tcp", env: "TCP_PORT")
-    .WithEnvironment("ObjectStore__DataDirectory", objectStoreDataDirectory);
+    .WithEnvironment("DataDirectory", objectStoreDataDirectory);
 
 var buildplateLauncher = builder.AddProject<Projects.Solace_Buildplate>("buildplate-launcher")
     .WithReference(eventBus)

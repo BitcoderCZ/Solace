@@ -33,6 +33,15 @@ public static partial class ProcessExtensions
                 {
                     return true;
                 }
+            }
+            catch (InvalidOperationException)
+            {
+                // no associated process
+                return true;
+            }
+
+            try
+            {
 
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {

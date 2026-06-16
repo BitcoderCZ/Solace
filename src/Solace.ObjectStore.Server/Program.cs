@@ -4,12 +4,36 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Solace.Common;
 using System.Diagnostics;
+using System.Runtime.Loader;
 
 namespace Solace.ObjectStore.Server;
 
-internal static partial class Program
+internal static class Program
 {
-    private static async Task<int> Main(string[] args)
+    private static Task<int> Main(string[] args)
+    {
+#if USE_SHARED_LIBS
+        AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
+        {
+            string sharedDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "shared_libs"));
+            string assemblyPath = Path.Combine(sharedDir, $"{assemblyName.Name}.dll");
+
+            if (File.Exists(assemblyPath))
+            {
+                return context.LoadFromAssemblyPath(assemblyPath);
+            }
+
+            return null;
+        };
+#endif
+
+        return App.RunAsync(args);
+    }
+}
+
+internal static partial class App
+{
+    public static async Task<int> RunAsync(string[] args)
     {
         if (!Debugger.IsAttached)
         {
@@ -38,7 +62,7 @@ internal static partial class Program
 
         builder.AddServiceDefaults();
 
-        string dataDirectory = Path.GetFullPath(builder.Configuration.GetValue<string>("ObjectStore:DataDirectory", "data/object_store"));
+        string dataDirectory = Path.GetFullPath(builder.Configuration.GetValue<string>("DataDirectory", "data/object_store"));
 
         builder.Services.AddSingleton<DataStore>(new DataStore(new DirectoryInfo(dataDirectory)));
         builder.Services.AddSingleton<Server>();

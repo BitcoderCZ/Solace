@@ -352,7 +352,7 @@ public sealed partial class ConsoleProcess : IDisposable
         }
     }
 
-    private async Task<int?> ResolveActualPidAsync(string pidFile,  int timeout = 5000)
+    private async Task<int?> ResolveActualPidAsync(string pidFile, int timeout = 5000)
     {
         using var cts = new CancellationTokenSource(timeout);
 
