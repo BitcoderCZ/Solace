@@ -3,10 +3,10 @@ using Solace.AppHost;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var useSqlite = builder.Configuration.GetValue<bool>("Shared:UseSqlite");
+var earthDbUseSqlite = builder.Configuration.GetValue<bool>("Database:Earth:UseSqlite");
 
 IResourceBuilder<IResourceWithConnectionString> db;
-if (useSqlite)
+if (earthDbUseSqlite)
 {
     db = builder.AddSqlite("EarthDb", "data", "earth.db");
 }
@@ -50,7 +50,7 @@ var apiServer = builder.AddProject<Projects.Solace_ApiServer>("api-server")
     .WithEnvironmentFromSection(builder.Configuration, "ApiServer:Authentication", "ApiServer:")
     .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"]);
 
-if (useSqlite)
+if (earthDbUseSqlite)
 {
     apiServer.WithEnvironment("DatabaseProvider", "Sqlite");
 }
@@ -103,7 +103,7 @@ var adminPanel = builder.AddProject<Projects.Solace_AdminPanel>("admin-panel")
     .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"])
     .WithEnvironment("EnableAdminPanelBuildplatePreview", builder.Configuration["AdminPanel:EnableAdminPanelBuildplatePreview"]);
 
-if (useSqlite)
+if (earthDbUseSqlite)
 {
     adminPanel.WithEnvironment("DatabaseProvider", "Sqlite");
 }
