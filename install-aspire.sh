@@ -484,8 +484,8 @@ cat << EOF > /tmp/earth
         echo "===================================================="
         
         while true; do
-            read -p "Type 'true' to accept the EULA and continue: " user_input
-            if [ "\${user_input,,}" = "true" ]; then
+            read -p "Type 'accept' to accept the EULA and continue: " user_input
+            if [ "\${user_input,,}" = "accept" ]; then
                 if grep -q "eula=" "\$EULA_PATH"; then
                     sed -i 's/eula=.*/eula=true/I' "\$EULA_PATH"
                 else
@@ -494,7 +494,7 @@ cat << EOF > /tmp/earth
                 echo "EULA accepted successfully."
                 break
             else
-                echo "Invalid input. You must type 'true' to proceed."
+                echo "Invalid input. You must type 'accept' to proceed."
             fi
         done
         
