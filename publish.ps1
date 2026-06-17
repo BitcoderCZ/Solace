@@ -40,6 +40,8 @@ foreach ($PublishProfile in $Profiles) {
         
     Get-ChildItem -Path "$outDir/launcher" -Include *.dbg, *.pdb -Recurse | Remove-Item -Force
 
+    Copy-Item -Path "$outDir/launcher/appsettings.json" -Destination "$outDir/launcher/DO_NOT_MODIFY_default_apps_settings.json" -Recurse -Force
+
     $projects = @{
         "src/Solace.EventBus.Server"    = "components/event-bus"
         "src/Solace.ObjectStore.Server" = "components/object-store"
