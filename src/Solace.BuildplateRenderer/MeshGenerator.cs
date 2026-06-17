@@ -175,9 +175,9 @@ public sealed class BuildplateMeshGenerator
                 var modelVariantsLength = _resourcePack.GetModelVariants(blockState, _rng, modelVariants);
                 foreach (var modelVariant in modelVariants.AsSpan(0, modelVariantsLength))
                 {
-                    GenerateBlockMesh(modelVariant, chunkBlockPosition + blockPosition + offset, mesh, blockPosition =>
+                    GenerateBlockMesh(modelVariant, chunkBlockPosition + blockPosition + offset, mesh, queryPos =>
                     {
-                        var localPosition = blockPosition - chunkBlockPosition;
+                        var localPosition = queryPos - chunkBlockPosition - offset;
 
                         if (!localPosition.InBounds(ChunkUtils.SubChunkSize, ChunkUtils.SubChunkSize, ChunkUtils.SubChunkSize))
                         {
@@ -189,7 +189,7 @@ public sealed class BuildplateMeshGenerator
                 }
             }
 
-            incrementPos:
+        incrementPos:
             blockPosition.X++;
             if (blockPosition.X >= ChunkUtils.Width)
             {
@@ -356,11 +356,11 @@ public sealed class BuildplateMeshGenerator
     private static Matrix4x4 CreateMinecraftRotation(float degreesX, float degreesY, float degreesZ)
     {
         float radX = degreesX * (MathF.PI / 180f);
-        float radY = -degreesY * (MathF.PI / 180f); 
+        float radY = -degreesY * (MathF.PI / 180f);
         float radZ = degreesZ * (MathF.PI / 180f);
 
-        return Matrix4x4.CreateRotationY(radY) 
-            * Matrix4x4.CreateRotationX(radX) 
+        return Matrix4x4.CreateRotationY(radY)
+            * Matrix4x4.CreateRotationX(radX)
             * Matrix4x4.CreateRotationZ(radZ);
     }
 
