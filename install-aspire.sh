@@ -534,7 +534,7 @@ else
 fi
 
 if [ "$INSTALL_MODE" = "source" ]; then
-    APPSETTINGS_PATH=$SOURCE_DIR/src/Solace.AppHost/appsettings.json
+    APPSETTINGS_PATH=$SOURCE_DIR/src/Solace.AppHost/appsettings.Development.json
 else
     APPSETTINGS_PATH=$SERVER_DIR/launcher/appsettings.json
 fi
