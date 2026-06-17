@@ -456,7 +456,7 @@
 
             if (await importer.RegenerateTemplatePreviewAsync(bp.Id, default) is null)
             {
-                bp.ErrorMessage = "Failed to regenerate preview, check Launcher logs for details.";
+                bp.ErrorMessage = "Failed to regenerate preview, check AdminPanel logs for details.";
                 return;
             }
 
@@ -564,7 +564,7 @@
 
                 if (!await importer.RemoveTemplateAsync(_bpToDelete.Id, _removeTemplateFromPlayers, default))
                 {
-                    _deleteErrorMessage = "Failed to delete buildplate, check Launcher logs for details.";
+                    _deleteErrorMessage = "Failed to delete buildplate, check AdminPanel logs for details.";
                     return;
                 }
 

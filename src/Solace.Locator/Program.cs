@@ -27,7 +27,7 @@ internal static class Program
     }
 }
 
-internal partial class App
+internal sealed partial class App
 {
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Run(string[] args)

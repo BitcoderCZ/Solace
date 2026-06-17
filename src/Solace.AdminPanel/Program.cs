@@ -24,14 +24,38 @@ using Solace.ObjectStore.Client;
 using System.Diagnostics;
 using System.Reflection;
 using Solace.EventBus.Client;
+using System.Runtime.Loader;
 
 namespace Solace.AdminPanel;
 
-internal static partial class Program
+internal static class Program
+{
+    private static Task<int> Main(string[] args)
+    {
+#if USE_SHARED_LIBS
+        AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
+        {
+            string sharedDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "shared_libs"));
+            string assemblyPath = Path.Combine(sharedDir, $"{assemblyName.Name}.dll");
+
+            if (File.Exists(assemblyPath))
+            {
+                return context.LoadFromAssemblyPath(assemblyPath);
+            }
+
+            return null;
+        };
+#endif
+
+        return App.RunAsync(args);
+    }
+}
+
+internal static partial class App
 {
     public static string Address { get; private set; } = "";
 
-    private static async Task<int> Main(string[] args)
+    public static async Task<int> RunAsync(string[] args)
     {
         // Environment.CurrentDirectory = AppContext.BaseDirectory;
 
@@ -43,7 +67,7 @@ internal static partial class Program
 
                 try
                 {
-                    var logger = GlobalLoggerFactory.CreateLogger(nameof(Program));
+                    var logger = GlobalLoggerFactory.CreateLogger(nameof(App));
                     LogUnhandledException(logger, e.ExceptionObject as Exception);
                 }
                 catch
@@ -151,10 +175,10 @@ internal static partial class Program
         builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         builder.Services.AddScoped<IAuthorizationHandler, PermissionHandler>();
 
-        var launcherConnectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+        var adminPanelConnectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
         builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-            options.UseSqlite(launcherConnectionString));
+            options.UseSqlite(adminPanelConnectionString));
 
         builder.Services.AddDbContextFactory<EarthDbContext>(options =>
             EarthDbContext.ConfigureBuilder(options, earthDbConnectionString, earthDbProvider));
@@ -183,7 +207,7 @@ internal static partial class Program
         var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
         GlobalLoggerFactory.Initialize(loggerFactory);
 
-        var programLogger = loggerFactory.CreateLogger(nameof(Program));
+        var programLogger = loggerFactory.CreateLogger(nameof(App));
 
         // Configure the HTTP request pipeline.
         if (app.Environment.IsDevelopment())
@@ -203,7 +227,7 @@ internal static partial class Program
         app.UseAntiforgery();
 
         app.MapStaticAssets();
-        app.MapRazorComponents<App>()
+        app.MapRazorComponents<Components.App>()
             .AddInteractiveServerRenderMode();
 
         // Add additional endpoints required by the Identity /Account Razor components.
@@ -272,15 +296,15 @@ internal static partial class Program
         //     await app.RunAsync();
         //     return 0;
         // }
-            // init stuff that requires logger but needs to be injected
+        // init stuff that requires logger but needs to be injected
         var startupDeps = app.Services.GetRequiredService<StartupDependencies>();
 
-var eventBusConnectionString = builder.Configuration["services:event-bus:raw-tcp:0"];
+        var eventBusConnectionString = builder.Configuration["services:event-bus:raw-tcp:0"];
         Debug.Assert(eventBusConnectionString is not null);
         var eventBusUri = new Uri(eventBusConnectionString);
 
         LogConnectingToEventBus(programLogger);
-        
+
         EventBusClient eventBus;
         try
         {
@@ -328,7 +352,7 @@ var eventBusConnectionString = builder.Configuration["services:event-bus:raw-tcp
         }
 
         LogLoadedStaticData(programLogger);
-        
+
         startupDeps.EventBus = eventBus;
         startupDeps.ObjectStore = objectStore;
         startupDeps.StaticData = staticData;

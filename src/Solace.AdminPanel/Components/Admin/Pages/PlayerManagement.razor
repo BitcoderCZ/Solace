@@ -218,7 +218,10 @@
                                 {
                                     <div class="text-end mt-2">
                                         <a href="/Admin/Players/@(player.Id)/Buildplates" class="btn btn-sm btn-outline-info w-100 mb-1">
-                                            <i class="bi bi-boxes me-1"></i>Manage Buildplates
+                                            <i class="bi bi-boxes me-1"></i>Buildplates
+                                        </a>
+                                        <a href="/Admin/Players/@(player.Id)/Inventory" class="btn btn-sm btn-outline-info w-100 mb-1" title="Inventory">
+                                            <i class="bi bi-bag-fill me-1"></i> Inventory
                                         </a>
                                         <button class="btn btn-sm btn-outline-primary w-100" @onclick="() => StartEdit(player)">
                                             <i class="bi bi-pencil me-1"></i>Edit Player

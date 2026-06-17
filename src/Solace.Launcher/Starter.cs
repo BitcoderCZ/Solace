@@ -15,6 +15,7 @@ internal sealed class Starter : IAsyncDisposable
     private readonly Component _locator;
     private readonly Component _tappableGenerator;
     private readonly Component? _tileRenderer;
+    private readonly Component _adminPanel;
 
     public Starter(IConfiguration configuration)
     {
@@ -99,6 +100,19 @@ internal sealed class Starter : IAsyncDisposable
                 .WithOtel("tile-renderer", otlpEndpoint, otlpApiKey)
                 .Build();
         }
+
+        var adminPanelPort = _configuration.GetValue<int>("AdminPanel:Port", 5000);
+
+        _adminPanel = Component.Builder.Executable(new FileInfo($"{PathToComponents}/admin-panel/AdminPanel"), [])
+            .WithHttpEndpoint(adminPanelPort)
+            .WithEndpointReference("event-bus", "raw-tcp", "tcp", 5532)
+            .WithEndpointReference("object-store", "raw-tcp", "tcp", 5396)
+            .WithEnvironmentVariable("DatabaseProvider", "Sqlite")
+            .WithEnvironmentVariable("ConnectionStrings__EarthDb", $"Data Source={Path.GetFullPath("../data/earth.db")}")
+            .WithEnvironmentVariable("StaticDataPath", staticDataPath)
+            .WithEnvironmentVariable("EnableAdminPanelBuildplatePreview", _configuration["AdminPanel:EnableAdminPanelBuildplatePreview"]!)
+            .WithOtel("admin-panel", otlpEndpoint, otlpApiKey)
+            .Build();
     }
 
     public IEnumerable<KeyValuePair<string, bool>> GetComponentStatus()
@@ -114,6 +128,8 @@ internal sealed class Starter : IAsyncDisposable
         {
             yield return new("Tile Renderer", _tileRenderer.IsRunning);
         }
+
+        yield return new("Admin Panel", _adminPanel.IsRunning);
     }
 
     public async Task StartAsync()
@@ -142,10 +158,14 @@ internal sealed class Starter : IAsyncDisposable
         {
             await _tileRenderer.StartAsync();
         }
+
+        await _adminPanel.StartAsync();
     }
 
     public async Task StopAsync()
     {
+        await _adminPanel.StopAsync();
+
         if (_tileRenderer is not null)
         {
             await _tileRenderer.StopAsync();
@@ -168,6 +188,8 @@ internal sealed class Starter : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await _adminPanel.DisposeAsync();
+
         if (_tileRenderer is not null)
         {
             await _tileRenderer.DisposeAsync();

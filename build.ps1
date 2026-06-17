@@ -17,3 +17,4 @@ dotnet publish src/Solace.ApiServer -c $configuration --arch $architecture --os 
 dotnet publish src/Solace.Locator -c $configuration --arch $architecture --os $os -o publish/components/locator -p:$componentProperties
 dotnet publish src/Solace.TappablesGenerator -c $configuration --arch $architecture --os $os -o publish/components/tappable-generator -p:$componentProperties
 dotnet publish src/Solace.TileRenderer -c $configuration --arch $architecture --os $os -o publish/components/tile-renderer -p:$componentProperties
+dotnet publish src/Solace.AdminPanel -c $configuration --arch $architecture --os $os -o publish/components/admin-panel -p:$componentProperties

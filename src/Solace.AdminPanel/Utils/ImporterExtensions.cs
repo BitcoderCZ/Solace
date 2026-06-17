@@ -20,7 +20,7 @@ internal static class ImporterExtensions
 {
     extension(Importer importer)
     {
-        public async Task<ArraySegment<byte>?> GetTemplateLauncherPreviewAsync(Guid templateId, ApplicationDbContext appDbContext, ResourcePackManager resourcePackManager, bool getFromCache = true, CancellationToken cancellationToken = default)
+        public async Task<ArraySegment<byte>?> GetTemplateAdminPanelPreviewAsync(Guid templateId, ApplicationDbContext appDbContext, ResourcePackManager resourcePackManager, bool getFromCache = true, CancellationToken cancellationToken = default)
         {
             var dbBuildplatePreview = await appDbContext.BuildplatePreviews
                 .AsNoTracking()
@@ -93,7 +93,7 @@ internal static class ImporterExtensions
             return await SaveBuildplatePreviewAsync(appDbContext, dbBuildplatePreview, cancellationToken);
         }
 
-        public async Task<ArraySegment<byte>?> GetPlayerBuildplateLauncherPreviewAsync(Guid accountId, Guid buildplateId, ApplicationDbContext appDbContext, ResourcePackManager resourcePackManager, bool getFromCache = true, CancellationToken cancellationToken = default)
+        public async Task<ArraySegment<byte>?> GetPlayerBuildplateAdminPanelPreviewAsync(Guid accountId, Guid buildplateId, ApplicationDbContext appDbContext, ResourcePackManager resourcePackManager, bool getFromCache = true, CancellationToken cancellationToken = default)
         {
             var dbBuildplatePreview = await appDbContext.BuildplatePreviews
                 .AsNoTracking()

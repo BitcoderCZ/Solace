@@ -744,7 +744,7 @@ BuildplateLauncher.ExeName))
 
             if (!await importer.RegeneratePlayerBuildplatePreviewAsync(AccountId, bp.Id, default))
             {
-                bp.ErrorMessage = "Failed to regenerate preview, check Launcher logs for details.";
+                bp.ErrorMessage = "Failed to regenerate preview, check AdminPanel logs for details.";
                 return;
             }
 
