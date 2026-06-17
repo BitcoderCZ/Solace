@@ -31,7 +31,7 @@ internal sealed class Starter : IAsyncDisposable
 
         var earthDbUseSqlite = _configuration.GetValue<bool>("Database:Earth:UseSqlite");
         string earthDbConnectionString;
-        if (!earthDbUseSqlite)
+        if (earthDbUseSqlite)
         {
             earthDbConnectionString = $"Data Source={Path.GetFullPath(Path.Combine(_configuration.GetValue("Database:Earth:SqliteDirectory", "data"), _configuration.GetValue("Database:Earth:SqliteFileName", "earth.db")))}";
         }
