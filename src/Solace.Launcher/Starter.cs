@@ -11,6 +11,7 @@ internal sealed class Starter : IAsyncDisposable
     private readonly Component _eventBusServer;
     private readonly Component _objectStoreServer;
     private readonly Component _apiServer;
+    private readonly Component _buildplateLauncher;
 
     public Starter(IConfiguration configuration)
     {
@@ -61,6 +62,13 @@ internal sealed class Starter : IAsyncDisposable
             .WithEnvironmentFromSection(_configuration, "ApiServer:Authentication", "ApiServer:")
             .WithOtel("api-server", otlpEndpoint, otlpApiKey)
             .Build();
+
+        _buildplateLauncher = Component.Builder.Executable(new FileInfo($"{PathToComponents}/buildplate-launcher/BuildplateLauncher"), [])
+            .WithEndpointReference("event-bus", "raw-tcp", "tcp", 5532)
+            .WithEnvironmentFromSection(_configuration, "BuildplateLauncher", "BuildplateLauncher:")
+            .WithEnvironmentVariable("StaticDataPath", staticDataPath)
+            .WithOtel("buildplate-launcher", otlpEndpoint, otlpApiKey)
+            .Build();
     }
 
     public IEnumerable<KeyValuePair<string, bool>> ComponentStatus =>
@@ -69,25 +77,32 @@ internal sealed class Starter : IAsyncDisposable
         new ("Event Bus", _eventBusServer.IsRunning),
         new ("Object Store", _objectStoreServer.IsRunning),
         new ("Api Server", _apiServer.IsRunning),
+        new ("Buildplate Launcher", _buildplateLauncher.IsRunning),
     ];
 
     public async Task StartAsync()
     {
         await _aspireDashboard.StartAsync();
 
-        await Task.Delay(1000);
+        await Task.Delay(800);
 
         await _eventBusServer.StartAsync();
 
         await _objectStoreServer.StartAsync();
 
-        await Task.Delay(1500);
+        await Task.Delay(800);
+
+        await _buildplateLauncher.StartAsync();
+
+        await Task.Delay(800);
 
         await _apiServer.StartAsync();
     }
 
     public async Task StopAsync()
     {
+        await _buildplateLauncher.StopAsync();
+
         await _apiServer.StopAsync();
 
         await _eventBusServer.StopAsync();
@@ -99,6 +114,8 @@ internal sealed class Starter : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await _buildplateLauncher.DisposeAsync();
+
         await _apiServer.DisposeAsync();
 
         await _eventBusServer.DisposeAsync();

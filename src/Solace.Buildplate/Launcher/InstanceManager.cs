@@ -216,7 +216,7 @@ internal sealed partial class InstanceManager
 
                     LogGeneratingBuildplatePreview();
 
-                    string? preview = PreviewGenerator.GeneratePreview(serverData, previewRequest.Night, Program.StaticDataPath, _logger);
+                    string? preview = PreviewGenerator.GeneratePreview(serverData, previewRequest.Night, App.StaticDataPath, _logger);
                     if (preview is null)
                     {
                         LogCouldNotGeneratePreviewForBuildplate();

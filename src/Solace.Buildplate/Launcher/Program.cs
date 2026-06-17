@@ -7,17 +7,41 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using System.Runtime.Loader;
 
 namespace Solace.Buildplate.Launcher;
 
-internal static partial class Program
+internal static class Program
+{
+    private static Task<int> Main(string[] args)
+    {
+#if USE_SHARED_LIBS
+        AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
+        {
+            string sharedDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "shared_libs"));
+            string assemblyPath = Path.Combine(sharedDir, $"{assemblyName.Name}.dll");
+
+            if (File.Exists(assemblyPath))
+            {
+                return context.LoadFromAssemblyPath(assemblyPath);
+            }
+
+            return null;
+        };
+#endif
+
+        return App.RunAsync(args);
+    }
+}
+
+internal static partial class App
 {
     internal static string StaticDataPath = "./staticdata";
 
     public static readonly Version MinimumFountainBridgeVersion = new Version(0, 0, 2);
     public static readonly Version MinimumBuildplateConnectorPluginVersion = new Version(0, 0, 1);
 
-    private static async Task<int> Main(string[] args)
+    public static async Task<int> RunAsync(string[] args)
     {
         if (!Debugger.IsAttached)
         {
