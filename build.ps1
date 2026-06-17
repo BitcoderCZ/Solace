@@ -10,6 +10,8 @@ $CurrentArch = $RuntimeInfo::ProcessArchitecture.ToString().ToLower()
 
 $configuration = "Debug"
 
+git submodule update --init --recursive
+
 Write-Host "Building for $CurrentOS-$CurrentArch ($configuration)..." -ForegroundColor Cyan
 
 if (Test-Path "build") { Remove-Item -Path "build" -Recurse -Force }

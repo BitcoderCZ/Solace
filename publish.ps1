@@ -6,6 +6,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+git submodule update --init --recursive
+
 foreach ($PublishProfile in $Profiles) {
     if ($PublishProfile -notmatch '^(win|linux|osx)-(x64|x86|arm64|arm)$') {
         Write-Warning "Skipping invalid profile: $PublishProfile. Format should be os-arch (e.g., win-x64)."
