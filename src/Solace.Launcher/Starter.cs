@@ -10,8 +10,10 @@ internal sealed class Starter : IAsyncDisposable
     private readonly Component _aspireDashboard;
     private readonly Component _eventBusServer;
     private readonly Component _objectStoreServer;
-    private readonly Component _apiServer;
     private readonly Component _buildplateLauncher;
+    private readonly Component _apiServer;
+    private readonly Component _locator;
+    private readonly Component _tappableGenerator;
 
     public Starter(IConfiguration configuration)
     {
@@ -22,7 +24,7 @@ internal sealed class Starter : IAsyncDisposable
         var dashboardOtlpPort = _configuration.GetValue<int>("AspireDashboard:OtlpPort", 4317);
         var dashboardUiPort = _configuration.GetValue<int>("AspireDashboard:UiPort", 18888);
         var otlpEndpoint = $"http://localhost:{dashboardOtlpPort}";
-    
+
         var otlpApiKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
 
         var earthDbUseSqlite = _configuration.GetValue<bool>("Database:Earth:UseSqlite");
@@ -49,8 +51,16 @@ internal sealed class Starter : IAsyncDisposable
             .WithOtel("object-store", otlpEndpoint, otlpApiKey)
             .Build();
 
-        var apiPort = _configuration.GetValue<int>("ApiServer:Port", 8088);
         var staticDataPath = Path.GetFullPath(_configuration["Shared:StaticDataPath"]!);
+
+        _buildplateLauncher = Component.Builder.Executable(new FileInfo($"{PathToComponents}/buildplate-launcher/BuildplateLauncher"), [])
+            .WithEndpointReference("event-bus", "raw-tcp", "tcp", 5532)
+            .WithEnvironmentFromSection(_configuration, "BuildplateLauncher", "BuildplateLauncher:")
+            .WithEnvironmentVariable("StaticDataPath", staticDataPath)
+            .WithOtel("buildplate-launcher", otlpEndpoint, otlpApiKey)
+            .Build();
+
+        var apiPort = _configuration.GetValue<int>("ApiServer:Port", 8088);
 
         _apiServer = Component.Builder.Executable(new FileInfo($"{PathToComponents}/api-server/ApiServer"), [])
             .WithHttpEndpoint(apiPort)
@@ -63,11 +73,18 @@ internal sealed class Starter : IAsyncDisposable
             .WithOtel("api-server", otlpEndpoint, otlpApiKey)
             .Build();
 
-        _buildplateLauncher = Component.Builder.Executable(new FileInfo($"{PathToComponents}/buildplate-launcher/BuildplateLauncher"), [])
+        var locatorPort = _configuration.GetValue<int>("Locator:Port", 8088);
+
+        _locator = Component.Builder.Executable(new FileInfo($"{PathToComponents}/locator/Locator"), [])
+            .WithHttpEndpoint(locatorPort)
+            .WithEndpointReference("api-server", "http", "http", apiPort)
+            .WithOtel("locator", otlpEndpoint, otlpApiKey)
+            .Build();
+
+        _tappableGenerator= Component.Builder.Executable(new FileInfo($"{PathToComponents}/tappable-generator/TappablesGenerator"), [])
             .WithEndpointReference("event-bus", "raw-tcp", "tcp", 5532)
-            .WithEnvironmentFromSection(_configuration, "BuildplateLauncher", "BuildplateLauncher:")
             .WithEnvironmentVariable("StaticDataPath", staticDataPath)
-            .WithOtel("buildplate-launcher", otlpEndpoint, otlpApiKey)
+            .WithOtel("tappable-generator", otlpEndpoint, otlpApiKey)
             .Build();
     }
 
@@ -76,8 +93,10 @@ internal sealed class Starter : IAsyncDisposable
         new ("Dashboard", _aspireDashboard.IsRunning),
         new ("Event Bus", _eventBusServer.IsRunning),
         new ("Object Store", _objectStoreServer.IsRunning),
-        new ("Api Server", _apiServer.IsRunning),
         new ("Buildplate Launcher", _buildplateLauncher.IsRunning),
+        new ("Api Server", _apiServer.IsRunning),
+        new ("Locator", _locator.IsRunning),
+        new ("Tappables Generator", _tappableGenerator.IsRunning),
     ];
 
     public async Task StartAsync()
@@ -97,10 +116,18 @@ internal sealed class Starter : IAsyncDisposable
         await Task.Delay(800);
 
         await _apiServer.StartAsync();
+
+        await _locator.StartAsync();
+
+        await _tappableGenerator.StartAsync();
     }
 
     public async Task StopAsync()
     {
+        await _tappableGenerator.StopAsync();
+
+        await _locator.StopAsync();
+
         await _buildplateLauncher.StopAsync();
 
         await _apiServer.StopAsync();
@@ -114,6 +141,10 @@ internal sealed class Starter : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await _tappableGenerator.DisposeAsync();
+
+        await _locator.DisposeAsync();
+
         await _buildplateLauncher.DisposeAsync();
 
         await _apiServer.DisposeAsync();
