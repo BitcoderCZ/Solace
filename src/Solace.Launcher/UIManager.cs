@@ -56,7 +56,7 @@ internal sealed class UIManager
                 {
                     table.Rows.Clear();
 
-                    foreach (var (name, online) in _starter.ComponentStatus)
+                    foreach (var (name, online) in _starter.GetComponentStatus())
                     {
                         table.AddRow(
                             name,

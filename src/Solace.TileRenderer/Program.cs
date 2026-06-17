@@ -8,12 +8,36 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
 using Solace.Common;
 using Microsoft.Extensions.DependencyInjection;
+using System.Runtime.Loader;
 
 namespace Solace.TileRenderer;
 
-internal static partial class Program
+internal static class Program
 {
-    private static async Task<int> Main(string[] args)
+    private static Task<int> Main(string[] args)
+    {
+#if USE_SHARED_LIBS
+        AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
+        {
+            string sharedDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "shared_libs"));
+            string assemblyPath = Path.Combine(sharedDir, $"{assemblyName.Name}.dll");
+
+            if (File.Exists(assemblyPath))
+            {
+                return context.LoadFromAssemblyPath(assemblyPath);
+            }
+
+            return null;
+        };
+#endif
+
+        return App.RunAsync(args);
+    }
+}
+
+internal static partial class App
+{
+    public static async Task<int> RunAsync(string[] args)
     {
         if (!Debugger.IsAttached)
         {
@@ -23,7 +47,7 @@ internal static partial class Program
 
                 try
                 {
-                    var logger = GlobalLoggerFactory.CreateLogger(nameof(Program));
+                    var logger = GlobalLoggerFactory.CreateLogger(nameof(App));
                     LogUnhandledException(logger, e.ExceptionObject as Exception);
                 }
                 catch
@@ -53,7 +77,7 @@ internal static partial class Program
         var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
         GlobalLoggerFactory.Initialize(loggerFactory);
 
-        var programLogger = loggerFactory.CreateLogger(nameof(Program));
+        var programLogger = loggerFactory.CreateLogger(nameof(App));
 
         ITileDataSource tileDataSource;
         if (!string.IsNullOrWhiteSpace(builder.Configuration["TileSource:MapTilerApiKey"]))

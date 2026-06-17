@@ -14,6 +14,7 @@ internal sealed class Starter : IAsyncDisposable
     private readonly Component _apiServer;
     private readonly Component _locator;
     private readonly Component _tappableGenerator;
+    private readonly Component? _tileRenderer;
 
     public Starter(IConfiguration configuration)
     {
@@ -81,23 +82,39 @@ internal sealed class Starter : IAsyncDisposable
             .WithOtel("locator", otlpEndpoint, otlpApiKey)
             .Build();
 
-        _tappableGenerator= Component.Builder.Executable(new FileInfo($"{PathToComponents}/tappable-generator/TappablesGenerator"), [])
+        _tappableGenerator = Component.Builder.Executable(new FileInfo($"{PathToComponents}/tappable-generator/TappablesGenerator"), [])
             .WithEndpointReference("event-bus", "raw-tcp", "tcp", 5532)
             .WithEnvironmentVariable("StaticDataPath", staticDataPath)
             .WithOtel("tappable-generator", otlpEndpoint, otlpApiKey)
             .Build();
+
+        var anyTileDataSources = _configuration.GetSection("TileRenderer:TileSource").AsEnumerable().Any(item => !string.IsNullOrWhiteSpace(item.Value));
+
+        if (anyTileDataSources)
+        {
+            _tileRenderer = Component.Builder.Executable(new FileInfo($"{PathToComponents}/tile-renderer/TileRenderer"), [])
+                .WithEndpointReference("event-bus", "raw-tcp", "tcp", 5532)
+                .WithEnvironmentVariable("StaticDataPath", staticDataPath)
+                .WithEnvironmentFromSection(_configuration, "TileRenderer:TileSource", "TileRenderer:")
+                .WithOtel("tile-renderer", otlpEndpoint, otlpApiKey)
+                .Build();
+        }
     }
 
-    public IEnumerable<KeyValuePair<string, bool>> ComponentStatus =>
-    [
-        new ("Dashboard", _aspireDashboard.IsRunning),
-        new ("Event Bus", _eventBusServer.IsRunning),
-        new ("Object Store", _objectStoreServer.IsRunning),
-        new ("Buildplate Launcher", _buildplateLauncher.IsRunning),
-        new ("Api Server", _apiServer.IsRunning),
-        new ("Locator", _locator.IsRunning),
-        new ("Tappables Generator", _tappableGenerator.IsRunning),
-    ];
+    public IEnumerable<KeyValuePair<string, bool>> GetComponentStatus()
+    {
+        yield return new("Dashboard", _aspireDashboard.IsRunning);
+        yield return new("Event Bus", _eventBusServer.IsRunning);
+        yield return new("Object Store", _objectStoreServer.IsRunning);
+        yield return new("Buildplate Launcher", _buildplateLauncher.IsRunning);
+        yield return new("Api Server", _apiServer.IsRunning);
+        yield return new("Locator", _locator.IsRunning);
+        yield return new("Tappables Generator", _tappableGenerator.IsRunning);
+        if (_tileRenderer is not null)
+        {
+            yield return new("Tile Renderer", _tileRenderer.IsRunning);
+        }
+    }
 
     public async Task StartAsync()
     {
@@ -120,10 +137,20 @@ internal sealed class Starter : IAsyncDisposable
         await _locator.StartAsync();
 
         await _tappableGenerator.StartAsync();
+
+        if (_tileRenderer is not null)
+        {
+            await _tileRenderer.StartAsync();
+        }
     }
 
     public async Task StopAsync()
     {
+        if (_tileRenderer is not null)
+        {
+            await _tileRenderer.StopAsync();
+        }
+
         await _tappableGenerator.StopAsync();
 
         await _locator.StopAsync();
@@ -141,6 +168,11 @@ internal sealed class Starter : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_tileRenderer is not null)
+        {
+            await _tileRenderer.DisposeAsync();
+        }
+
         await _tappableGenerator.DisposeAsync();
 
         await _locator.DisposeAsync();
