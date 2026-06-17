@@ -8,7 +8,7 @@ var earthDbUseSqlite = builder.Configuration.GetValue<bool>("Database:Earth:UseS
 IResourceBuilder<IResourceWithConnectionString> db;
 if (earthDbUseSqlite)
 {
-    db = builder.AddSqlite("EarthDb", "data", "earth.db");
+    db = builder.AddSqlite("EarthDb", builder.Configuration.GetValue("Database:Earth:SqliteDirectory", "data"), builder.Configuration.GetValue("Database:Earth:SqliteFileName", "earth.db"));
 }
 else
 {
@@ -27,11 +27,13 @@ var objectStore = builder.AddProject<Projects.Solace_ObjectStore_Server>("object
     .WithEndpoint(scheme: "tcp", name: "raw-tcp", env: "TCP_PORT")
     .WithEnvironment("DataDirectory", objectStoreDataDirectory);
 
+var staticDataPath = Path.GetFullPath(builder.Configuration["Shared:StaticDataPath"]!);
+
 var buildplateLauncher = builder.AddProject<Projects.Solace_Buildplate>("buildplate-launcher")
     .WithReference(eventBus)
     .WaitFor(eventBus)
     .WithEnvironmentFromSection(builder.Configuration, "BuildplateLauncher", "BuildplateLauncher:")
-    .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"]);
+    .WithEnvironment("StaticDataPath", staticDataPath);
 
 var apiPort = builder.Configuration.GetValue<int>("ApiServer:Port", 8088);
 
@@ -48,7 +50,7 @@ var apiServer = builder.AddProject<Projects.Solace_ApiServer>("api-server")
     .WithReference(objectStore)
     .WaitFor(objectStore)
     .WithEnvironmentFromSection(builder.Configuration, "ApiServer:Authentication", "ApiServer:")
-    .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"]);
+    .WithEnvironment("StaticDataPath", staticDataPath);
 
 if (earthDbUseSqlite)
 {
@@ -73,7 +75,7 @@ var locator = builder.AddProject<Projects.Solace_Locator>("locator")
 var tappableGenerator = builder.AddProject<Projects.Solace_TappablesGenerator>("tappable-generator")
     .WithReference(eventBus)
     .WaitFor(eventBus)
-    .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"]);
+    .WithEnvironment("StaticDataPath", staticDataPath);
 
 var anyTileDataSources = builder.Configuration.GetSection("TileRenderer:TileSource").AsEnumerable().Any(item => !string.IsNullOrWhiteSpace(item.Value));
 
@@ -82,7 +84,7 @@ if (anyTileDataSources)
     var tileRenderer = builder.AddProject<Projects.Solace_TileRenderer>("tile-renderer")
         .WithReference(eventBus)
         .WaitFor(eventBus)
-        .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"])
+        .WithEnvironment("StaticDataPath", staticDataPath)
         .WithEnvironmentFromSection(builder.Configuration, "TileRenderer:TileSource", "TileRenderer:");
 }
 
@@ -100,7 +102,7 @@ var adminPanel = builder.AddProject<Projects.Solace_AdminPanel>("admin-panel")
     .WaitFor(eventBus)
     .WithReference(objectStore)
     .WaitFor(objectStore)
-    .WithEnvironment("StaticDataPath", builder.Configuration["Shared:StaticDataPath"])
+    .WithEnvironment("StaticDataPath", staticDataPath)
     .WithEnvironment("EnableAdminPanelBuildplatePreview", builder.Configuration["AdminPanel:EnableAdminPanelBuildplatePreview"]);
 
 if (earthDbUseSqlite)

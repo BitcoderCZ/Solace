@@ -30,7 +30,12 @@ internal sealed class Starter : IAsyncDisposable
         var otlpApiKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
 
         var earthDbUseSqlite = _configuration.GetValue<bool>("Database:Earth:UseSqlite");
+        string earthDbConnectionString;
         if (!earthDbUseSqlite)
+        {
+            earthDbConnectionString = $"Data Source={Path.GetFullPath(Path.Combine(_configuration.GetValue("Database:Earth:SqliteDirectory", "data"), _configuration.GetValue("Database:Earth:SqliteFileName", "earth.db")))}";
+        }
+        else
         {
             throw new NotImplementedException();
         }
@@ -69,7 +74,7 @@ internal sealed class Starter : IAsyncDisposable
             .WithEndpointReference("event-bus", "raw-tcp", "tcp", 5532)
             .WithEndpointReference("object-store", "raw-tcp", "tcp", 5396)
             .WithEnvironmentVariable("DatabaseProvider", "Sqlite")
-            .WithEnvironmentVariable("ConnectionStrings__EarthDb", $"Data Source={Path.GetFullPath("../data/earth.db")}")
+            .WithEnvironmentVariable("ConnectionStrings__EarthDb", earthDbConnectionString)
             .WithEnvironmentVariable("StaticDataPath", staticDataPath)
             .WithEnvironmentFromSection(_configuration, "ApiServer:Authentication", "ApiServer:")
             .WithOtel("api-server", otlpEndpoint, otlpApiKey)
@@ -108,7 +113,7 @@ internal sealed class Starter : IAsyncDisposable
             .WithEndpointReference("event-bus", "raw-tcp", "tcp", 5532)
             .WithEndpointReference("object-store", "raw-tcp", "tcp", 5396)
             .WithEnvironmentVariable("DatabaseProvider", "Sqlite")
-            .WithEnvironmentVariable("ConnectionStrings__EarthDb", $"Data Source={Path.GetFullPath("../data/earth.db")}")
+            .WithEnvironmentVariable("ConnectionStrings__EarthDb", earthDbConnectionString)
             .WithEnvironmentVariable("StaticDataPath", staticDataPath)
             .WithEnvironmentVariable("EnableAdminPanelBuildplatePreview", _configuration["AdminPanel:EnableAdminPanelBuildplatePreview"]!)
             .WithOtel("admin-panel", otlpEndpoint, otlpApiKey)
