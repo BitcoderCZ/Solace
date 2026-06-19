@@ -57,7 +57,7 @@ ok()   { echo -e "${GRN}[OK] $1${RST}"; }
 skip() { echo -e "${YLW}[SKIP] $1${RST}"; }
 err()  { echo -e "${RED}[ERROR] $1${RST}"; exit 1; }
 
-GITHUB_REPO="Earth-Restored/Solace"
+GITHUB_REPO="BitcoderCZ/Solace"
 GITHUB_URL="https://github.com/$GITHUB_REPO.git"
 
 banner
@@ -321,13 +321,85 @@ if [ "$INSTALL_MODE" = "prebuilt" ]; then
     read -r BRANCH_CHOICE < /dev/tty
     BRANCH_CHOICE="$(echo "$BRANCH_CHOICE" | tr -d '\r\n')"
 
-    INSTALL_BRANCH="main"
+   INSTALL_BRANCH="main"
+    ARTIFACT_PREFIX="Solace"
     case "$BRANCH_CHOICE" in
-        2|dev|Dev) INSTALL_BRANCH="dev" ;;
+        2|dev|Dev) 
+            INSTALL_BRANCH="dev"
+            ARTIFACT_PREFIX="Solace-Dev"
+            ;;
     esac
 
-    echo "Override aspire"
-    INSTALL_BRANCH="aspire"
+    if [ "$INSTALL_BRANCH" = "main" ]; then
+        print_sub "Fetching available releases..."
+        RELEASE_JSON=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest")
+        SELECTED_TAG=$(echo "$RELEASE_JSON" | grep -o '"tag_name": *"[^"]*"' | sed 's/"tag_name": *"//;s/"//')
+
+        if [ -z "$SELECTED_TAG" ]; then
+            RELEASE_JSON=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases?per_page=100")
+            SELECTED_TAG=$(echo "$RELEASE_JSON" | grep -o '"tag_name": *"[^"]*"' | sed 's/"tag_name": *"//;s/"//' | grep -v "^dev-build$" | head -n1)
+        fi
+
+        if [ -z "$SELECTED_TAG" ]; then
+            err "No releases found."
+        fi
+        echo -e "${GRN}Latest version: $SELECTED_TAG${RST}"
+    else
+        SELECTED_TAG="dev-build"
+        echo -e "${YLW}[INFO] Using Dev build${RST}"
+    fi
+
+    if [ "$OS" = "Darwin" ]; then
+        OS_NAME="macos"
+    else
+        OS_NAME="linux"
+    fi
+
+    ZIP_NAME="${ARTIFACT_PREFIX}-${OS_NAME}-${ARCH_PROFILE}.zip"
+    URL="https://github.com/$GITHUB_REPO/releases/download/${SELECTED_TAG}/${ZIP_NAME}"
+
+    echo "[INFO] Downloading $SELECTED_TAG ($ZIP_NAME)..."
+
+    TMP_DIR=$(mktemp -d "/tmp/solace_install_XXXXXX")
+    cd "$TMP_DIR"
+
+    if ! curl -L --progress-bar -o server.zip "$URL"; then
+        err "Download failed — check your internet or the release URL ($URL)"
+    fi
+    echo -e "  ${GRN}✔${RST} Download complete"
+
+    print_sub "Extracting..."
+    if ! command -v unzip &>/dev/null; then
+        err "unzip is not installed — run the installer again to auto-install it"
+    fi
+    
+    mkdir -p "$SERVER_DIR"
+    if ! unzip -o server.zip -d "$SERVER_DIR" >/dev/null 2>&1; then
+        err "Extraction failed — downloaded file may be corrupted"
+    fi
+
+    EXTRACTED_FOLDER="${ARTIFACT_PREFIX}-${MATRIX_OS}-${MATRIX_ARCH}"
+    if [ -d "$SERVER_DIR/$EXTRACTED_FOLDER" ]; then
+        mv "$SERVER_DIR/$EXTRACTED_FOLDER/"* "$SERVER_DIR/" 2>/dev/null
+        rm -rf "$SERVER_DIR/$EXTRACTED_FOLDER"
+    fi
+
+    chmod -R +x "$SERVER_DIR/components/" 2>/dev/null || true
+
+    echo "$SELECTED_TAG" > "$VERSION_FILE"
+    
+    cat > "$SETTINGS_FILE" << JSONEOF
+{
+  "installMode": "prebuilt",
+  "branch": "$INSTALL_BRANCH",
+  "version": "$SELECTED_TAG",
+  "updatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+JSONEOF
+
+    cd /
+    rm -rf "$TMP_DIR"
+    ok "Solace $SELECTED_TAG downloaded and extracted to $SERVER_DIR"
 
 fi
 
@@ -338,7 +410,7 @@ if [ "$INSTALL_MODE" = "source" ]; then
     echo -e "${CYN}Select branch:${RST}"
     echo ""
     echo -e "  ${GRN}[1] Main (stable - recommended)${RST}"
-    echo -e "  ${YLW}[2] Dev (not recommended - may break)${RST}"
+    echo -e "  ${YLW}[2] Dev (unstable - may break)${RST}"
     echo ""
     printf "Choice [1/2] > "
     read -r BRANCH_CHOICE < /dev/tty
@@ -348,9 +420,6 @@ if [ "$INSTALL_MODE" = "source" ]; then
     case "$BRANCH_CHOICE" in
         2|dev|Dev) INSTALL_BRANCH="dev" ;;
     esac
-
-    echo "Override aspire"
-    INSTALL_BRANCH="aspire"
 
     command -v git >/dev/null 2>&1 || pkg_install git
 
