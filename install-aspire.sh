@@ -288,7 +288,7 @@ echo ""
 echo -e "${CYN}How would you like to install Solace?${RST}"
 echo ""
 echo -e "  ${GRN}[1] Prebuilt${RST} - Download a pre-compiled binary"
-echo -e "  ${YLW}[2] Source${RST}   - Clone and run source code"
+echo -e "  ${YLW}[2] Source${RST}   - Clone and run source code, no auto update"
 echo ""
 printf "Choice [1/2] > "
 read -r METHOD_CHOICE < /dev/tty

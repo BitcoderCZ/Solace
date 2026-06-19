@@ -1,3 +1,4 @@
+using System.Reflection;
 using Spectre.Console;
 
 namespace Solace.Launcher;
@@ -5,20 +6,35 @@ namespace Solace.Launcher;
 internal sealed class UIManager
 {
     private readonly Starter _starter;
+    private readonly Updater _updater;
 
-    public UIManager(Starter starter)
+    public UIManager(Starter starter, Updater updater)
     {
         _starter = starter;
+        _updater = updater;
     }
 
     public async Task RunAsync()
     {
+        AnsiConsole.MarkupLine("""
+            [blue]
+                 _____       __
+                / ___/____  / /___ __________
+                \__ \/ __ \/ / __ \`/ ___/ _ \
+               ___/ / /_/ / / /_/ / /__/  __/
+              /____/\____/_/\__,_/\___/\___/
+            [/]
+            """);
+
+        AnsiConsole.WriteLine($"v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}");
+        AnsiConsole.WriteLine();
+
         while (true)
         {
             var choice = await AnsiConsole.PromptAsync(
                 new SelectionPrompt<string>()
-                    .Title("Solace")
-                    .AddChoices("Start", "Stop", "Status", "Exit")
+                    // .Title("Select option")
+                    .AddChoices("Start", "Stop", "Status", "Update", "Exit")
             );
 
             AnsiConsole.MarkupLine($"Selected: [yellow]{choice}[/]");
@@ -33,6 +49,14 @@ internal sealed class UIManager
                     break;
                 case "Status":
                     await ShowStatus();
+                    break;
+                case "Update":
+                    var updateSuccessful = await _updater.UpdateAsync();
+                    if (updateSuccessful)
+                    {
+                        return; // restart needed
+                    }
+                    
                     break;
                 case "Exit":
                     return;

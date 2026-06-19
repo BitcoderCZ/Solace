@@ -19,6 +19,7 @@ if (!Debugger.IsAttached)
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddSingleton<Starter>();
+builder.Services.AddSingleton<Updater>();
 builder.Services.AddSingleton<UIManager>();
 
 using var host = builder.Build();

@@ -33,14 +33,14 @@ foreach ($PublishProfile in $Profiles) {
     Copy-Item -Path "$outDir/launcher/appsettings.json" -Destination "$outDir/launcher/DO_NOT_MODIFY_default_apps_settings.json" -Recurse -Force
 
     $projects = @{
-        "src/Solace.EventBus.Server"    = "components/event-bus"
-        "src/Solace.ObjectStore.Server" = "components/object-store"
-        "src/Solace.Buildplate"         = "components/buildplate-launcher"
-        "src/Solace.ApiServer"          = "components/api-server"
-        "src/Solace.Locator"            = "components/locator"
-        "src/Solace.TappablesGenerator" = "components/tappable-generator"
-        "src/Solace.TileRenderer"       = "components/tile-renderer"
-        "src/Solace.AdminPanel"         = "components/admin-panel"
+        # "src/Solace.EventBus.Server"    = "components/event-bus"
+        # "src/Solace.ObjectStore.Server" = "components/object-store"
+        # "src/Solace.Buildplate"         = "components/buildplate-launcher"
+        # "src/Solace.ApiServer"          = "components/api-server"
+        # "src/Solace.Locator"            = "components/locator"
+        # "src/Solace.TappablesGenerator" = "components/tappable-generator"
+        # "src/Solace.TileRenderer"       = "components/tile-renderer"
+        # "src/Solace.AdminPanel"         = "components/admin-panel"
     }
 
     foreach ($projectPath in $projects.Keys) {
