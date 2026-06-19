@@ -22,23 +22,11 @@ foreach ($PublishProfile in $Profiles) {
     New-Item -ItemType Directory -Path "$outDir/staticdata" -Force | Out-Null
     Copy-Item -Path "staticdata/*" -Destination "$outDir/staticdata" -Recurse -Force
 
-    Write-Host "Publishing Launcher (Native AOT)..." -ForegroundColor Yellow
+    Write-Host "Publishing Launcher..." -ForegroundColor Yellow
     dotnet publish src/Solace.Launcher `
         -c Release `
         --os $os --arch $arch `
-        -o "$outDir/launcher" `
-        -p:PublishAot=true `
-        -p:StripSymbols=true `
-        -p:PublishTrimmed=true `
-        -p:TrimmerRemoveSymbols=true `
-        -p:DebuggerSupport=false `
-        -p:EnableUnsafeBinaryFormatterSerialization=false `
-        -p:EnableUnsafeUTF7Encoding=false `
-        -p:EventSourceSupport=false `
-        -p:Http3Support=false `
-        -p:InvariantGlobalization=true `
-        -p:DebugType=none `
-        -p:DebugSymbols=false
+        -o "$outDir/launcher"
         
     Get-ChildItem -Path "$outDir/launcher" -Include *.dbg, *.pdb -Recurse | Remove-Item -Force
 
