@@ -37,8 +37,6 @@ try
 
             if (currentSettingsVersion != actualVersion)
             {
-                Console.WriteLine($"Version mismatch detected ({currentSettingsVersion} -> {actualVersion}). Updating...");
-
                 settingsObject["version"] = actualVersion;
                 settingsObject["updatedAt"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
 
@@ -46,13 +44,8 @@ try
                 {
                     WriteIndented = true
                 };
-                File.WriteAllText(InstallationSettingsPath, settingsObject.ToJsonString(options));
 
-                Console.WriteLine("Settings updated successfully.");
-            }
-            else
-            {
-                Console.WriteLine("Version is up to date.");
+                File.WriteAllText(InstallationSettingsPath, settingsObject.ToJsonString(options));
             }
         }
     }

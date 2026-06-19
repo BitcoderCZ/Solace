@@ -276,6 +276,8 @@ internal sealed partial class Updater
         }
 
         var currentProcessPath = Environment.ProcessPath ?? Environment.GetCommandLineArgs()[0];
+        var appDir = Path.GetDirectoryName(currentProcessPath);
+        Debug.Assert(appDir is not null);
         var currentPid = Environment.ProcessId;
         var extractPath = Path.GetFullPath("../");
 
@@ -287,7 +289,7 @@ internal sealed partial class Updater
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 scriptPath = Path.Combine(Path.GetTempPath(), $"solace_update_{Guid.NewGuid()}.bat");
-                
+
                 var scriptContent = $"""
                     @echo off
                     :loop
@@ -303,7 +305,10 @@ internal sealed partial class Updater
                     )
                     echo {release.TagName}>"{installationVersionPath}"
                     del "{tempZipPath}"
-                    start "" "{currentProcessPath}"
+
+                    cd "{appDir}"
+                    echo "run '.\Launcher'"
+
                     del "%~f0"
                     """;
                 await File.WriteAllTextAsync(scriptPath, scriptContent);
@@ -318,28 +323,41 @@ internal sealed partial class Updater
             else
             {
                 scriptPath = Path.Combine(Path.GetTempPath(), $"solace_update_{Guid.NewGuid()}.sh");
-                
+
                 var scriptContent = $"""
-                    #!/bin/sh
+                    #!/bin/bash
+                    
                     while kill -0 {currentPid} 2>/dev/null; do
-                        sleep 1
+                        sleep 0.25
                     done
+                    sleep 0.1
+
+                    rm -f "{currentProcessPath}"
                     unzip -o "{tempZipPath}" -d "{extractPath}"
+                    
                     if [ -f "{newSettingsPath.FullName}" ]; then
                         cp -f "{newSettingsPath.FullName}" "{currentSettingsPath.FullName}"
                         rm "{newSettingsPath.FullName}"
                     fi
+                    
                     echo "{release.TagName}" > "{installationVersionPath}"
                     rm "{tempZipPath}"
-                    nohup "{currentProcessPath}" </dev/null >/dev/null 2>&1 &
-                    rm "$0"
+
+                    cd "{appDir}"
+                    echo "run './Launcher'"
+
+                    rm -- "$0"
                     """;
+
+                scriptContent = scriptContent.Replace("\r\n", "\n");
+
                 await File.WriteAllTextAsync(scriptPath, scriptContent);
+
                 psi = new ProcessStartInfo()
                 {
-                    FileName = "sh",
+                    FileName = "/bin/bash",
                     Arguments = $"\"{scriptPath}\"",
-                    CreateNoWindow = true,
+                    CreateNoWindow = false,
                     UseShellExecute = true,
                 };
             }
