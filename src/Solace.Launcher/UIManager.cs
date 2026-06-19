@@ -19,8 +19,8 @@ internal sealed class UIManager
         AnsiConsole.MarkupLine("""
             [blue]
                  _____       __
-                / ___/____  / /___ __________
-                \__ \/ __ \/ / __ \`/ ___/ _ \
+                / ___/____  / /___ _________
+                \__ \/ __ \/ / __ \/ ___/ _ \
                ___/ / /_/ / / /_/ / /__/  __/
               /____/\____/_/\__,_/\___/\___/
             [/]
@@ -56,7 +56,7 @@ internal sealed class UIManager
                     {
                         return; // restart needed
                     }
-                    
+
                     break;
                 case "Exit":
                     return;

@@ -35,6 +35,7 @@ internal sealed partial class Updater
         }
 
         var installationSettingsPath = Path.GetFullPath("../../settings.json");
+        var installationVersionPath = Path.GetFullPath("../../version.txt");
 
         string? currentVersionString = null;
         Version? currentVersion = null;
@@ -278,8 +279,6 @@ internal sealed partial class Updater
         var currentPid = Environment.ProcessId;
         var extractPath = Path.GetFullPath("../");
 
-        // todo: update version in settings and version txt before launching the script if needed
-
         try
         {
             string scriptPath;
@@ -302,17 +301,18 @@ internal sealed partial class Updater
                         copy /y "{newSettingsPath.FullName}" "{currentSettingsPath.FullName}"
                         del "{newSettingsPath.FullName}"
                     )
+                    echo {release.TagName}>"{installationVersionPath}"
                     del "{tempZipPath}"
                     start "" "{currentProcessPath}"
                     del "%~f0"
                     """;
                 await File.WriteAllTextAsync(scriptPath, scriptContent);
-                psi = new ProcessStartInfo
+                psi = new ProcessStartInfo()
                 {
                     FileName = "cmd.exe",
                     Arguments = $"/c \"{scriptPath}\"",
                     CreateNoWindow = true,
-                    UseShellExecute = false
+                    UseShellExecute = true,
                 };
             }
             else
@@ -329,17 +329,18 @@ internal sealed partial class Updater
                         cp -f "{newSettingsPath.FullName}" "{currentSettingsPath.FullName}"
                         rm "{newSettingsPath.FullName}"
                     fi
+                    echo "{release.TagName}" > "{installationVersionPath}"
                     rm "{tempZipPath}"
-                    "{currentProcessPath}" &
+                    nohup "{currentProcessPath}" </dev/null >/dev/null 2>&1 &
                     rm "$0"
                     """;
                 await File.WriteAllTextAsync(scriptPath, scriptContent);
-                psi = new ProcessStartInfo
+                psi = new ProcessStartInfo()
                 {
                     FileName = "sh",
                     Arguments = $"\"{scriptPath}\"",
                     CreateNoWindow = true,
-                    UseShellExecute = false
+                    UseShellExecute = true,
                 };
             }
 
