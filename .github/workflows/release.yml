@@ -62,11 +62,19 @@ jobs:
           path: ./artifacts
           merge-multiple: true
 
+      - name: Prepare Configuration Files
+        run: |
+          cp src/Solace.AppHost/appsettings.Development.json ./artifacts/appsettings-AppHost.json
+          cp src/Solace.Launcher/appsettings.json ./artifacts/appsettings-Launcher.json
+
       - name: Publish Release to GitHub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.event.inputs.version }}" ./artifacts/Solace-*.zip \
+          gh release create "${{ github.event.inputs.version }}" \
+            ./artifacts/Solace-*.zip \
+            ./artifacts/appsettings-AppHost.json \
+            ./artifacts/appsettings-Launcher.json \
             --title "${{ github.event.inputs.version }}" \
             --generate-notes \
             --latest
