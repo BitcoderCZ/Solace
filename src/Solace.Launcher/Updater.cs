@@ -190,6 +190,7 @@ internal sealed partial class Updater
         }
 
         var currentOsArch = GetOsArch();
+        var tempZipPath = Path.Combine(Path.GetTempPath(), $"SolaceUpdate_{Guid.NewGuid()}.zip");
 
         try
         {
@@ -211,9 +212,6 @@ internal sealed partial class Updater
             }
             else
             {
-                var extractPath = Path.GetFullPath("../");
-                AnsiConsole.MarkupLine($"Downloading and extracting release to [green]{Markup.Escape(extractPath)}[/]");
-
                 await AnsiConsole.Progress()
                     .Columns(
                     [
@@ -232,46 +230,34 @@ internal sealed partial class Updater
 
                         var totalBytes = response.Content.Headers.ContentLength ?? -1;
                         using var downloadStream = await response.Content.ReadAsStreamAsync();
-                        using var memoryStream = new MemoryStream();
 
                         if (totalBytes is -1)
                         {
                             downloadTask.IsIndeterminate(true);
                         }
 
-                        var buffer = new byte[8192];
-                        long totalReadBytes = 0;
-                        int readBytes;
-
-                        while ((readBytes = await downloadStream.ReadAsync(buffer)) > 0)
+                        using (var fileStream = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None))
                         {
-                            await memoryStream.WriteAsync(buffer.AsMemory(0, readBytes));
-                            totalReadBytes += readBytes;
+                            var buffer = new byte[8192];
+                            long totalReadBytes = 0;
+                            int readBytes;
 
-                            if (totalBytes != -1)
+                            while ((readBytes = await downloadStream.ReadAsync(buffer)) > 0)
                             {
-                                var percentage = (double)totalReadBytes / totalBytes * 100;
-                                downloadTask.Value = percentage;
+                                await fileStream.WriteAsync(buffer.AsMemory(0, readBytes));
+                                totalReadBytes += readBytes;
+
+                                if (totalBytes != -1)
+                                {
+                                    var percentage = (double)totalReadBytes / totalBytes * 100;
+                                    downloadTask.Value = percentage;
+                                }
                             }
                         }
 
                         downloadTask.IsIndeterminate(false);
                         downloadTask.Value = 100;
                         downloadTask.StopTask();
-
-                        var extractTask = ctx.AddTask("Extracting files", autoStart: true)
-                            .IsIndeterminate(true);
-
-                        memoryStream.Position = 0;
-                        using (var zip = new ZipArchive(memoryStream, ZipArchiveMode.Read))
-                        {
-                            await Task.Run(() => zip.ExtractToDirectory(extractPath, overwriteFiles: true));
-                        }
-
-                        extractTask.IsIndeterminate(false);
-                        extractTask.MaxValue = 100;
-                        extractTask.Value = 100;
-                        extractTask.StopTask();
                     });
             }
         }
@@ -279,21 +265,101 @@ internal sealed partial class Updater
         {
             AnsiConsole.MarkupLine("[red]Error: Failed to download new release[/]");
             AnsiConsole.WriteException(exception);
+            if (File.Exists(tempZipPath))
+            {
+                File.Delete(tempZipPath);
+            }
+
             PressAnyKeyToContinue();
             return false;
         }
 
-        newSettingsPath.Refresh();
-        if (newSettingsPath.Exists)
+        var currentProcessPath = Environment.ProcessPath ?? Environment.GetCommandLineArgs()[0];
+        var currentPid = Environment.ProcessId;
+        var extractPath = Path.GetFullPath("../");
+
+        // todo: update version in settings and version txt before launching the script if needed
+
+        try
         {
-            newSettingsPath.CopyTo(currentSettingsPath.FullName, overwrite: true);
-            newSettingsPath.Delete();
+            string scriptPath;
+            ProcessStartInfo psi;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                scriptPath = Path.Combine(Path.GetTempPath(), $"solace_update_{Guid.NewGuid()}.bat");
+                
+                var scriptContent = $"""
+                    @echo off
+                    :loop
+                    tasklist /fi "PID eq {currentPid}" | find "{currentPid}" >nul
+                    if %errorlevel% equ 0 (
+                        timeout /t 1 /nobreak >nul
+                        goto loop
+                    )
+                    powershell -NoProfile -Command "Expand-Archive -Path '{tempZipPath}' -DestinationPath '{extractPath}' -Force"
+                    if exist "{newSettingsPath.FullName}" (
+                        copy /y "{newSettingsPath.FullName}" "{currentSettingsPath.FullName}"
+                        del "{newSettingsPath.FullName}"
+                    )
+                    del "{tempZipPath}"
+                    start "" "{currentProcessPath}"
+                    del "%~f0"
+                    """;
+                await File.WriteAllTextAsync(scriptPath, scriptContent);
+                psi = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c \"{scriptPath}\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+            }
+            else
+            {
+                scriptPath = Path.Combine(Path.GetTempPath(), $"solace_update_{Guid.NewGuid()}.sh");
+                
+                var scriptContent = $"""
+                    #!/bin/sh
+                    while kill -0 {currentPid} 2>/dev/null; do
+                        sleep 1
+                    done
+                    unzip -o "{tempZipPath}" -d "{extractPath}"
+                    if [ -f "{newSettingsPath.FullName}" ]; then
+                        cp -f "{newSettingsPath.FullName}" "{currentSettingsPath.FullName}"
+                        rm "{newSettingsPath.FullName}"
+                    fi
+                    rm "{tempZipPath}"
+                    "{currentProcessPath}" &
+                    rm "$0"
+                    """;
+                await File.WriteAllTextAsync(scriptPath, scriptContent);
+                psi = new ProcessStartInfo
+                {
+                    FileName = "sh",
+                    Arguments = $"\"{scriptPath}\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+            }
+
+            Process.Start(psi);
+        }
+        catch (Exception exception)
+        {
+            AnsiConsole.MarkupLine("[red]Error: Failed to launch external updater script[/]");
+            AnsiConsole.WriteException(exception);
+            if (File.Exists(tempZipPath))
+            {
+                File.Delete(tempZipPath);
+            }
+
+            PressAnyKeyToContinue();
+            return false;
         }
 
-        // todo: update version in settings and version txt
-
-        AnsiConsole.MarkupLine("[bold green]Update finished successfully![/]");
-        AnsiConsole.WriteLine("Program restart is required");
+        AnsiConsole.MarkupLine("[bold green]Update script created successfully![/]");
+        AnsiConsole.WriteLine("The application will now shut down to apply updates.");
         PressAnyKeyToContinue();
 
         return true;
