@@ -1,4 +1,5 @@
-﻿using Npgsql;
+﻿using Microsoft.Extensions.Logging;
+using Npgsql;
 using Solace.TileRenderer.Wkb;
 
 namespace Solace.TileRenderer;
@@ -15,7 +16,7 @@ internal sealed class DatabaseTileDataSource : ITileDataSource
     public string GetTagMapJson(StaticData.TileRenderer tileRenderer)
         => tileRenderer.TagMap1Json;
 
-    public async Task<List<List<IWKBObject>>> GetTileAsync(RenderContext ctx, int zoom, int tileX, int tileY, CancellationToken cancellationToken = default)
+    public async Task<List<List<IWKBObject>>> GetTileAsync(RenderContext ctx, int zoom, int tileX, int tileY, ILogger logger, CancellationToken cancellationToken = default)
     {
         const string Sql = @"
             SELECT aeroway, amenity, barrier, building, highway, landuse, leisure, military, ""natural"", railway, waterway, ST_AsBinary(way)
@@ -49,17 +50,19 @@ internal sealed class DatabaseTileDataSource : ITileDataSource
             {
                 rowCount++;
 
-                if (reader.IsDBNull(11)) // ST_AsBinary index
+                if (await reader.IsDBNullAsync(11, cancellationToken)) // ST_AsBinary index
                 {
                     continue;
                 }
 
                 RenderLayer targetLayer = RenderLayer.LAYER_NONE;
 
-                foreach (string tagName in ctx.Tags)
+                for (int i = 0; i < ctx.Tags.Length; i++)
                 {
+                    var tagName = ctx.Tags[i];
+
                     int ord = reader.GetOrdinal(tagName);
-                    if (reader.IsDBNull(ord))
+                    if (await reader.IsDBNullAsync(ord, cancellationToken))
                     {
                         continue;
                     }

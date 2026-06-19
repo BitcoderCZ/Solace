@@ -1,5 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
 using Solace.Common;
@@ -38,7 +39,7 @@ public sealed class Catalog
     {
         public readonly ImmutableArray<Item> Items;
 
-        private readonly Dictionary<string, Item> itemsById = [];
+        private readonly Dictionary<Guid, Item> itemsById = [];
 
         internal ItemsCatalogR(string file)
         {
@@ -51,7 +52,7 @@ public sealed class Catalog
                 Items = ImmutableCollectionsMarshal.AsImmutableArray(items);
             }
 
-            HashSet<string> ids = [];
+            HashSet<Guid> ids = [];
             HashSet<string> names = [];
             foreach (Item item in Items)
             {
@@ -72,11 +73,14 @@ public sealed class Catalog
             }
         }
 
-        public Item? GetItem(string id)
+        public Item? GetItem(Guid id)
             => itemsById.GetValueOrDefault(id);
 
-        public record Item(
-            string Id,
+        public bool TryGetItem(Guid id, [MaybeNullWhen(false)] out Item item)
+            => itemsById.TryGetValue(id, out item);
+
+        public sealed record Item(
+            Guid Id,
             string Name,
             int Aux,
             bool Stackable,
@@ -106,7 +110,7 @@ public sealed class Catalog
                 MOB,
                 ENVIRONMENT_BLOCK,
                 BOOST,
-                ADVENTURE_SCROLL
+                ADVENTURE_SCROLL,
 #pragma warning restore CA1707 // Identifiers should not contain underscores
             }
 
@@ -130,7 +134,7 @@ public sealed class Catalog
                 BOOST_RETENTION,
                 BOOST_SMELTING,
                 BOOST_STRENGTH,
-                BOOST_TAPPABLE_RADIUS
+                BOOST_TAPPABLE_RADIUS,
 #pragma warning restore CA1707 // Identifiers should not contain underscores
             }
 
@@ -142,7 +146,7 @@ public sealed class Catalog
                 RARE,
                 EPIC,
                 LEGENDARY,
-                OOBE
+                OOBE,
             }
 
             [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -156,7 +160,7 @@ public sealed class Catalog
                 INTERACT_AND_BUILD,
                 DESTROY,
                 USE,
-                CONSUME
+                CONSUME,
 #pragma warning restore CA1707 // Identifiers should not contain underscores
             }
 
@@ -174,13 +178,13 @@ public sealed class Catalog
 
             public sealed record ConsumeInfoR(
                 int Heal,
-                string? ReturnItemId
+                Guid? ReturnItemId
             );
 
             public sealed record FuelInfoR(
                 int BurnTime,
                 int HeatPerSecond,
-                string? ReturnItemId
+                Guid? ReturnItemId
             );
 
             public sealed record ProjectileInfoR(
@@ -213,7 +217,7 @@ public sealed class Catalog
                 public record Effect(
                     Effect.TypeE Type,
                     int Value,
-                    string[] ApplicableItemIds,
+                    Guid[] ApplicableItemIds,
                     Effect.ActivationE Activation
                 )
                 {
@@ -401,8 +405,8 @@ public sealed class Catalog
         public readonly ImmutableArray<CraftingRecipe> Crafting;
         public readonly ImmutableArray<SmeltingRecipe> Smelting;
 
-        private readonly Dictionary<string, CraftingRecipe> craftingRecipesById = [];
-        private readonly Dictionary<string, SmeltingRecipe> smeltingRecipesById = [];
+        private readonly Dictionary<Guid, CraftingRecipe> craftingRecipesById = [];
+        private readonly Dictionary<Guid, SmeltingRecipe> smeltingRecipesById = [];
 
         private sealed record RecipesCatalogFile(
             CraftingRecipe[] Crafting,
@@ -422,8 +426,8 @@ public sealed class Catalog
             Crafting = ImmutableCollectionsMarshal.AsImmutableArray(recipesCatalogFile.Crafting);
             Smelting = ImmutableCollectionsMarshal.AsImmutableArray(recipesCatalogFile.Smelting);
 
-            HashSet<string> craftingIds = [];
-            HashSet<string> smeltingIds = [];
+            HashSet<Guid> craftingIds = [];
+            HashSet<Guid> smeltingIds = [];
             foreach (CraftingRecipe craftingRecipe in Crafting)
             {
                 if (!craftingIds.Add(craftingRecipe.Id))
@@ -451,14 +455,14 @@ public sealed class Catalog
             }
         }
 
-        public CraftingRecipe? GetCraftingRecipe(string id)
+        public CraftingRecipe? GetCraftingRecipe(Guid id)
             => craftingRecipesById.GetValueOrDefault(id);
 
-        public SmeltingRecipe? GetSmeltingRecipe(string id)
+        public SmeltingRecipe? GetSmeltingRecipe(Guid id)
             => smeltingRecipesById.GetValueOrDefault(id);
 
         public sealed record CraftingRecipe(
-            string Id,
+            Guid Id,
             int Duration,
             CraftingRecipe.CategoryE Category,
             CraftingRecipe.Ingredient[] Ingredients,
@@ -477,34 +481,36 @@ public sealed class Catalog
 
             public sealed record Ingredient(
                 int Count,
-                string[] PossibleItemIds
+                Guid[] PossibleItemIds
             );
 
             public record OutputR(
-                string ItemId,
+                Guid ItemId,
                 int Count
             );
 
             public record ReturnItem(
-                string ItemId,
+                Guid ItemId,
                 int Count
             );
         }
 
         public sealed record SmeltingRecipe(
-            string Id,
+            Guid Id,
             int HeatRequired,
-            string Input,
-            string Output,
-            string ReturnItemId
+            Guid Input,
+            Guid Output,
+            Guid? ReturnItemId
         );
     }
 
     public sealed class NFCBoostsCatalogR
     {
         private sealed record NFCBoostsCatalogFile(
-        // TODO
+            NFCBoost[] MiniFigs
         );
+
+        public readonly NFCBoost[] MiniFigs;
 
         internal NFCBoostsCatalogR(string file)
         {
@@ -514,12 +520,64 @@ public sealed class Catalog
                 nfcBoostsCatalogFile = Json.Deserialize<NFCBoostsCatalogFile>(stream);
             }
 
-            // TODO
+            MiniFigs = nfcBoostsCatalogFile?.MiniFigs ?? [];
         }
 
-        public sealed record BoostInfo
-        {
+        public sealed record NFCBoost(
+            string Id,
+            BoostInfo BoostMetadata,
+            string Name,
+            bool Deprecated,
+            string ToolsVersion,
+            Rewards Rewards
+        );
 
+        public sealed record BoostInfo(
+            string Name,
+            string Attribute,
+            bool CanBeDeactivated,
+            bool CanBeRemoved,
+            string? ActiveDuration,
+            bool Additive,
+            int? Level,
+            Effect[] Effects,
+            string? Scenario,
+            string? Cooldown
+        );
+
+        public sealed record Effect(
+            string Type,
+            string? Duration,
+            double? Value,
+            string? Unit,
+            string Targets,
+            Guid[] Items,
+            string[] ItemScenarios,
+            string Activation,
+            string? ModifiesType
+        );
+
+        public sealed record Rewards(
+            int? Rubies,
+            int? ExperiencePoints,
+            int? Level,
+            Rewards.RewardItem[] Inventory,
+            Guid[] Buildplates,
+            Rewards.RewardChallenge[] Challenges,
+            string[] PersonaItems,
+            Rewards.RewardUtilityBlock[] UtilityBlocks
+        )
+        {
+            public sealed record RewardItem(
+                Guid Id,
+                int Amount
+            );
+
+            public sealed record RewardChallenge(
+                string Id
+            );
+
+            public sealed record RewardUtilityBlock();
         }
     }
 }

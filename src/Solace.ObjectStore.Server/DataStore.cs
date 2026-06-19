@@ -1,8 +1,6 @@
-﻿using Solace.Common.Utils;
+﻿namespace Solace.ObjectStore.Server;
 
-namespace Solace.ObjectStore.Server;
-
-public class DataStore
+internal sealed class DataStore
 {
     private readonly DirectoryInfo _rootDirectory;
 
@@ -18,7 +16,7 @@ public class DataStore
 
     public async Task<string> StoreAsync(byte[] data)
     {
-        string id = U.RandomUuid().ToString();
+        string id = Guid.NewGuid().ToString();
 
         var dir = new DirectoryInfo(Path.Combine(_rootDirectory.FullName, id[..2]));
         if (!dir.Exists)
@@ -65,15 +63,24 @@ public class DataStore
         file.Delete();
     }
 
-    public class DataStoreException : Exception
+    internal sealed class DataStoreException : Exception
     {
+        public DataStoreException()
+        {
+        }
+
         public DataStoreException(string? message)
             : base(message)
         {
         }
 
-        public DataStoreException(Exception? cause)
-            : base(null, cause)
+        public DataStoreException(Exception? innerException)
+            : base(null, innerException)
+        {
+        }
+
+        public DataStoreException(string? message, Exception? innerException)
+            : base(message, innerException)
         {
         }
     }

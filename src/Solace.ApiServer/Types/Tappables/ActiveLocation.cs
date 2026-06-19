@@ -3,8 +3,8 @@ using Solace.ApiServer.Types.Common;
 
 namespace Solace.ApiServer.Types.Tappables;
 
-public record ActiveLocation(
-    string Id,
+internal sealed record ActiveLocation(
+    Guid Id,
     string TileId,
     Coordinate Coordinate,
     string SpawnTime,
@@ -17,7 +17,7 @@ public record ActiveLocation(
 )
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum TypeE
+    internal enum TypeE
     {
 #pragma warning disable CA1707 // Identifiers should not contain underscores
         [JsonStringEnumMemberName("Tappable")] TAPPABLE,
@@ -26,19 +26,19 @@ public record ActiveLocation(
 #pragma warning restore CA1707 // Identifiers should not contain underscores
     }
 
-    public sealed record MetadataR(
-        string RewardId,
+    internal sealed record MetadataR(
+        Guid RewardId,
         Rarity Rarity
     );
 
-    public sealed record TappableMetadataR(
+    internal sealed record TappableMetadataR(
         Rarity Rarity
     );
 
-    public sealed record EncounterMetadataR(
+    internal sealed record EncounterMetadataR(
         EncounterMetadataR.EncounterTypeE EncounterType,
-        string LocationId,
-        string WorldId,
+        Guid LocationId,
+        Guid WorldId,
         EncounterMetadataR.AnchorStateE AnchorState,
         string AnchorId,
         string AugmentedImageSetId
@@ -46,7 +46,7 @@ public record ActiveLocation(
     {
         // TODO: what do these actually do?
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public enum EncounterTypeE
+        internal enum EncounterTypeE
         {
             [JsonStringEnumMemberName("None")] NONE,
 #pragma warning disable CA1707 // Identifiers should not contain underscores
@@ -66,7 +66,7 @@ public record ActiveLocation(
         }
 
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public enum AnchorStateE
+        internal enum AnchorStateE
         {
             [JsonStringEnumMemberName("Off")] OFF,
         }

@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace Solace.ApiServer;
 
-public sealed class UtcDateTimeConverter : JsonConverter<DateTime>
+internal sealed class UtcDateTimeConverter : JsonConverter<DateTime>
 {
     [StringSyntax(StringSyntaxAttribute.DateTimeFormat)]
     private const string Format = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";

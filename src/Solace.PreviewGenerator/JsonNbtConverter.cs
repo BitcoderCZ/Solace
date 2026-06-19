@@ -1,5 +1,5 @@
 ﻿using System.Text.Json.Serialization;
-using Solace.Common.Excceptions;
+using Solace.Common.Exceptions;
 using Solace.PreviewGenerator.NBT;
 
 namespace Solace.PreviewGenerator;
@@ -18,17 +18,9 @@ internal sealed class JsonNbtConverter
     }
 
     public static JsonNbtTag Convert(NbtList tag)
-    {
-        LinkedList<JsonNbtTag> value = new();
-        foreach (object item in tag)
-        {
-            value.AddLast(Convert(item));
-        }
+        => new ListJsonNbtTag([.. tag.Select(Convert)]);
 
-        return new ListJsonNbtTag([.. value]);
-    }
-
-    private static JsonNbtTag Convert(object tag)
+    private static JsonNbtTag Convert(object? tag)
     {
         if (tag is NbtMap map)
         {
@@ -56,7 +48,7 @@ internal sealed class JsonNbtConverter
         }
         else
         {
-            throw new UnsupportedOperationException($"Cannot convert tag of type {tag.GetType().Name}");
+            throw new UnsupportedOperationException($"Cannot convert tag of type {tag?.GetType()?.Name ?? "[null]"}");
         }
     }
 

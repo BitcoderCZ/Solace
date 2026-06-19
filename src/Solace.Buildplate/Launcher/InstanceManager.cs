@@ -1,5 +1,6 @@
-﻿using System.Text.Json.Serialization;
-using Serilog;
+﻿using System.Diagnostics;
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using Solace.Buildplate.Connector.Model;
 using Solace.Buildplate.Model;
 using Solace.Common;
@@ -8,14 +9,17 @@ using Solace.EventBus.Client;
 
 namespace Solace.Buildplate.Launcher;
 
-public sealed class InstanceManager
+internal sealed partial class InstanceManager
 {
     private readonly Starter _starter;
 
-    private readonly Publisher _publisher;
-    private RequestHandler _requestHandler = null!;
+    private Publisher? _publisher;
+    private RequestHandler? _requestHandler;
     private int _runningInstanceCount;
     private bool _shuttingDown;
+
+    private readonly ILogger<InstanceManager> _logger;
+
     private readonly Lock _lock = new Lock();
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -29,51 +33,49 @@ public sealed class InstanceManager
     }
 
     private sealed record StartRequest(
-        string? PlayerId,
-        string? EncounterId,
-        string BuildplateId,
+        Guid? PlayerId,
+        Guid? EncounterId,
+        Guid BuildplateId,
         bool Night,
         InstanceType Type,
         long ShutdownTime
     );
 
     private sealed record StartNotification(
-        string InstanceId,
-        string? PlayerId,
-        string? EncounterId,
-        string BuildplateId,
+        Guid InstanceId,
+        Guid? PlayerId,
+        Guid? EncounterId,
+        Guid BuildplateId,
         string Address,
         int Port,
         InstanceType Type
     );
 
-    public InstanceManager(Starter starter, Publisher publisher)
+    public InstanceManager(Starter starter, ILogger<InstanceManager> logger)
     {
         _starter = starter;
 
-        _publisher = publisher;
+        _logger = logger;
     }
 
-    public static async Task<InstanceManager> CreateAsync(EventBusClient eventBusClient, Starter starter)
+    public async Task InitializeAsync(EventBusClient eventBusClient)
     {
-        var publisher = await eventBusClient.AddPublisherAsync();
+        _publisher = await eventBusClient.AddPublisherAsync();
 
-        var instanceManager = new InstanceManager(starter, publisher);
-
-        instanceManager._requestHandler = await eventBusClient.AddRequestHandlerAsync("buildplates", new RequestHandlerLister(
+        _requestHandler = await eventBusClient.AddRequestHandlerAsync("buildplates", new RequestHandlerLister(
             async request =>
             {
                 if (request.Type is "start")
                 {
-                    instanceManager._lock.Enter();
-                    if (instanceManager._shuttingDown)
+                    _lock.Enter();
+                    if (_shuttingDown)
                     {
-                        instanceManager._lock.Exit();
+                        _lock.Exit();
                         return null;
                     }
 
-                    instanceManager._runningInstanceCount += 1;
-                    instanceManager._lock.Exit();
+                    _runningInstanceCount += 1;
+                    _lock.Exit();
 
                     StartRequest startRequest;
                     try
@@ -82,7 +84,7 @@ public sealed class InstanceManager
                     }
                     catch (Exception exception)
                     {
-                        Log.Warning(exception, "Bad start request");
+                        LogBadStartRequest(exception);
                         return null;
                     }
 
@@ -145,29 +147,29 @@ public sealed class InstanceManager
                             break;
                         default:
                             {
-                                Log.Warning("Bad start request");
+                                LogBadStartRequest();
                                 return null;
                             }
                     }
 
                     if (buildplateSource == Instance.BuildplateSource.PLAYER && startRequest.PlayerId is null)
                     {
-                        Log.Warning("Bad start request");
+                        LogBadStartRequest();
                         return null;
                     }
 
-                    string instanceId = U.RandomUuid().ToString();
+                    var instanceId = Guid.CreateVersion7();
 
-                    Log.Information($"Starting buildplate instance {instanceId}");
+                    LogStartingBuildplateInstance(instanceId);
 
-                    Instance? instance = instanceManager._starter.StartInstance(instanceId, startRequest.PlayerId, startRequest.BuildplateId, buildplateSource, survival, startRequest.Night, saveEnabled, inventoryType, shutdownTime);
+                    var instance = _starter.StartInstance(instanceId, startRequest.PlayerId, startRequest.BuildplateId, buildplateSource, survival, startRequest.Night, saveEnabled, inventoryType, shutdownTime);
                     if (instance is null)
                     {
-                        Log.Error($"Error starting buildplate instance {instanceId}");
+                        LogErrorStartingBuildplateInstance(instanceId);
                         return null;
                     }
 
-                    instanceManager.SendEventBusMessage("started", Json.Serialize(new StartNotification(
+                    SendEventBusMessage("started", Json.Serialize(new StartNotification(
                         instanceId,
                         startRequest.PlayerId,
                         startRequest.EncounterId,
@@ -183,19 +185,19 @@ public sealed class InstanceManager
                         {
                             await instance.WaitForShutdownAsync();
 
-                            instanceManager.SendEventBusMessage("stopped", instance.InstanceId);
+                            SendEventBusMessage("stopped", instance.InstanceId.ToString());
                         }
-                        catch (Exception ex)
+                        catch (Exception exception)
                         {
-                            Log.Error(ex, "Failed to send stopped message");
+                            LogFailedToSendStoppedMessage(exception);
                         }
 
-                        instanceManager._lock.Enter();
-                        instanceManager._runningInstanceCount -= 1;
-                        instanceManager._lock.Exit();
+                        _lock.Enter();
+                        _runningInstanceCount -= 1;
+                        _lock.Exit();
                     }).Forget();
 
-                    return instanceId;
+                    return instanceId.ToString();
                 }
                 else if (request.Type is "preview")
                 {
@@ -206,18 +208,18 @@ public sealed class InstanceManager
                         previewRequest = Json.Deserialize<PreviewRequest>(request.Data)!;
                         serverData = Convert.FromBase64String(previewRequest.ServerDataBase64);
                     }
-                    catch (Exception ex)
+                    catch (Exception exception)
                     {
-                        Log.Warning($"Bad preview request: {ex}");
+                        LogBadPreviewRequest(exception);
                         return null;
                     }
 
-                    Log.Information("Generating buildplate preview");
+                    LogGeneratingBuildplatePreview();
 
-                    string? preview = PreviewGenerator.GeneratePreview(serverData, previewRequest.Night, Program.StaticDataPath);
+                    string? preview = PreviewGenerator.GeneratePreview(serverData, previewRequest.Night, App.StaticDataPath, _logger);
                     if (preview is null)
                     {
-                        Log.Warning("Could not generate preview for buildplate");
+                        LogCouldNotGeneratePreviewForBuildplate();
                     }
 
                     return preview;
@@ -229,29 +231,34 @@ public sealed class InstanceManager
             },
             async () =>
             {
-                Log.Error("Event bus request handler error");
+                LogEventBusRequestHandlerError();
             }
         ));
-
-        return instanceManager;
     }
 
     private void SendEventBusMessage(string type, string message)
-        => _publisher.PublishAsync("buildplates", type, message).ContinueWith(task =>
-        {
-            if (!task.Result)
+    {
+        Debug.Assert(_publisher is not null);
+
+        _publisher.PublishAsync("buildplates", type, message).ContinueWith(task =>
             {
-                Log.Error("Event bus publisher error");
-            }
-        });
+                if (!task.Result)
+                {
+                    LogEventBusPublisherError();
+                }
+            });
+    }
 
     public async Task ShutdownAsync()
     {
-        await _requestHandler.CloseAsync();
+        if (_requestHandler is not null)
+        {
+            await _requestHandler.CloseAsync();
+        }
 
         _lock.Enter();
         _shuttingDown = true;
-        Log.Information($"Shutdown signal received, no new buildplate instances will be started, waiting for {_runningInstanceCount} instances to finish");
+        LogShutdownSignalReceived(_runningInstanceCount);
         while (_runningInstanceCount > 0)
         {
             int runningInstanceCount = _runningInstanceCount;
@@ -262,13 +269,51 @@ public sealed class InstanceManager
             _lock.Enter();
             if (_runningInstanceCount != runningInstanceCount)
             {
-                Log.Information($"Waiting for {runningInstanceCount} instances to finish");
+                LogWaitingForInstancesToFinish(runningInstanceCount);
             }
         }
 
         _lock.Exit();
 
-        await _publisher.FlushAsync();
-        await _publisher.CloseAsync();
+        if (_publisher is not null)
+        {
+            await _publisher.DisposeAsync();
+        }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Bad start request")]
+    private partial void LogBadStartRequest();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Bad start request")]
+    private partial void LogBadStartRequest(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Starting buildplate instance '{InstanceId}'")]
+    private partial void LogStartingBuildplateInstance(Guid InstanceId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error starting buildplate instance '{InstanceId}'")]
+    private partial void LogErrorStartingBuildplateInstance(Guid InstanceId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to send stopped message")]
+    private partial void LogFailedToSendStoppedMessage(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Bad preview request")]
+    private  partial void LogBadPreviewRequest(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Generating buildplate preview")]
+    private partial void LogGeneratingBuildplatePreview();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not generate preview for buildplate")]
+    private partial void LogCouldNotGeneratePreviewForBuildplate();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus request handler error")]
+    private partial void LogEventBusRequestHandlerError();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus publisher error")]
+    private partial void LogEventBusPublisherError();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Shutdown signal received, no new buildplate instances will be started, waiting for {RunningInstanceCount} instances to finish")]
+    private partial void LogShutdownSignalReceived(int RunningInstanceCount);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Waiting for {RunningInstanceCount} instances to finish")]
+    private partial void LogWaitingForInstancesToFinish(int RunningInstanceCount);
 }

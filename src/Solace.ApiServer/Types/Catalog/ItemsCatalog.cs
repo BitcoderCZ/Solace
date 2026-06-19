@@ -7,13 +7,13 @@ using static Solace.ApiServer.Types.Catalog.ItemsCatalog.ItemR.ItemData;
 
 namespace Solace.ApiServer.Types.Catalog;
 
-public sealed record ItemsCatalog(
+internal sealed record ItemsCatalog(
     ItemR[] Items,
     Dictionary<string, EfficiencyCategory> EfficiencyCategories
 )
 {
-    public sealed record ItemR(
-        string Id,
+    internal sealed record ItemR(
+        Guid Id,
         ItemData Item,
         string Category,
         Rarity Rarity,
@@ -27,7 +27,7 @@ public sealed record ItemsCatalog(
         bool Deprecated
     )
     {
-        public sealed record ItemData(
+        internal sealed record ItemData(
             string Name,
             int? Aux,
             string Type,
@@ -46,12 +46,12 @@ public sealed record ItemsCatalog(
             IDictionary ClientProperties
         )
         {
-            public sealed record BlockMetadataR(
+            internal sealed record BlockMetadataR(
                 double? Health,
                 string? EfficiencyCategory
             );
 
-            public sealed record ItemMetadataR(
+            internal sealed record ItemMetadataR(
                 string UseType,
                 string AlternativeUseType,
                 double? MobDamage,
@@ -63,7 +63,7 @@ public sealed record ItemsCatalog(
                 double? MaxHealth
             );
 
-            public sealed record JournalMetadataR(
+            internal sealed record JournalMetadataR(
                 string GroupKey,
                 int Experience,
                 int Order,
@@ -71,23 +71,23 @@ public sealed record ItemsCatalog(
                 string Biome
             );
 
-            public sealed record AudioMetadataR(
+            internal sealed record AudioMetadataR(
                 Dictionary<string, string> Sounds,
                 string DefaultSound
             );
         }
 
-        public sealed record ReturnItem(
-            string Id,
+        internal sealed record ReturnItem(
+            Guid Id,
             int Amount
         );
     }
 
-    public sealed record EfficiencyCategory(
+    internal sealed record EfficiencyCategory(
         EfficiencyMapR EfficiencyMap
     )
     {
-        public sealed record EfficiencyMapR(
+        internal sealed record EfficiencyMapR(
             float Hand,
             float Hoe,
             float Axe,

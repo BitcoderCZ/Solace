@@ -11,29 +11,47 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <Target Name="MoveDependenciesToShared" AfterTargets="Publish" Condition="'$(UseSharedLibs)' == 'true'">
+
+    <PropertyGroup>
+      <SharedLibsDir>$([System.IO.Path]::GetFullPath('$(PublishDir)..\shared_libs'))\</SharedLibsDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <FilesToMove Include="$(PublishDir)*.dll;$(PublishDir)*.pdb" Exclude="$(PublishDir)$(TargetName).dll;$(PublishDir)$(TargetName).pdb" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(SharedLibsDir)" />
+
+    <Copy SourceFiles="@(FilesToMove)" DestinationFolder="$(SharedLibsDir)" SkipUnchangedFiles="true" Retries="5" RetryDelayMilliseconds="500" />
+
+    <Delete Files="@(FilesToMove)" />
+
+  </Target>
+
+  <PropertyGroup Condition="'$(UseSharedLibs)' == 'true'">
+    <DefineConstants>$(DefineConstants);USE_SHARED_LIBS</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Asp.Versioning.Mvc" Version="10.0.0" />
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
-    <PackageReference Include="CommandLineParser" Version="2.9.1" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.7" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.7" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
       <!--<PrivateAssets>all</PrivateAssets>-->
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.7" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
     <PackageReference Include="Nager.PublicSuffix" Version="3.8.0" />
     <PackageReference Include="OData2Linq" Version="2.2.1" />
-    <PackageReference Include="Serilog" Version="4.3.1" />
-    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
-    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
-    <PackageReference Include="Serilog.Sinks.Http" Version="9.2.1" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.17.0" />
-    <PackageReference Include="Uma.Uuid" Version="0.1.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.19.1" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Solace.DB.Postgres/Solace.DB.Postgres.csproj" />
+    <ProjectReference Include="../Solace.DB.Sqlite/Solace.DB.Sqlite.csproj" />
+    <ProjectReference Include="../Solace.ServiceDefaults/Solace.ServiceDefaults.csproj" />
     <ProjectReference Include="..\Solace.BuildplateImporter\Solace.BuildplateImporter.csproj" />
     <ProjectReference Include="..\Solace.Common\Solace.Common.csproj" />
     <ProjectReference Include="..\Solace.DB\Solace.DB.csproj" />

@@ -1,4 +1,4 @@
-﻿using Serilog;
+﻿using System.Diagnostics;
 using System.Text.Json.Serialization;
 using Solace.Common;
 using Solace.Common.Utils;
@@ -6,41 +6,37 @@ using Solace.EventBus.Client;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed class BuildplateInstancesManager
+internal sealed partial class BuildplateInstancesManager : IAsyncDisposable
 {
-    private readonly EventBusClient _eventBusClient;
-    private Subscriber _subscriber = null!;
-    private RequestSender _requestSender = null!;
+    private Subscriber? _subscriber;
+    private RequestSender? _requestSender;
 
-    private readonly Dictionary<string, TaskCompletionSource<bool>?> _pendingInstances = [];
-    private readonly Dictionary<string, InstanceInfo> _instances = [];
-    private readonly Dictionary<string, HashSet<string>> _instancesByBuildplateId = [];
+    private readonly ILogger<BuildplateInstancesManager> _logger;
 
-    private BuildplateInstancesManager(EventBusClient eventBusClient)
+    private readonly Dictionary<Guid, TaskCompletionSource<bool>?> _pendingInstances = [];
+    private readonly Dictionary<Guid, InstanceInfo> _instances = [];
+    private readonly Dictionary<Guid, HashSet<Guid>> _instancesByBuildplateId = [];
+
+    public BuildplateInstancesManager(ILogger<BuildplateInstancesManager> logger)
     {
-        _eventBusClient = eventBusClient;
+        _logger = logger;
     }
 
-    public static async Task<BuildplateInstancesManager> CreateAsync(EventBusClient eventBusClient)
+    internal async Task InitializeAsync(EventBusClient eventBusClient)
     {
-        var buildplateInstancesManager = new BuildplateInstancesManager(eventBusClient);
-
-        buildplateInstancesManager._subscriber = await eventBusClient.AddSubscriberAsync("buildplates", new SubscriberListener(
-           buildplateInstancesManager.HandleEvent,
+        _subscriber = await eventBusClient.AddSubscriberAsync("buildplates", new SubscriberListener(
+           HandleEvent,
            async () =>
            {
-               Log.Fatal("Buildplates event bus subscriber error");
-               Log.CloseAndFlush();
+               LogBuildplatesEventBusSubscriberError();
                Environment.Exit(1);
            }
        ));
 
-        buildplateInstancesManager._requestSender = await eventBusClient.AddRequestSenderAsync();
-
-        return buildplateInstancesManager;
+        _requestSender = await eventBusClient.AddRequestSenderAsync();
     }
 
-    public async Task<string?> RequestBuildplateInstance(string? playerId, string? encounterId, string buildplateId, InstanceType type, long shutdownTime, bool night)
+    public async Task<Guid?> RequestBuildplateInstance(Guid? playerId, Guid? encounterId, Guid buildplateId, InstanceType type, long shutdownTime, bool night)
     {
         if (playerId is null && type is not InstanceType.ENCOUNTER)
         {
@@ -54,29 +50,29 @@ public sealed class BuildplateInstancesManager
 
         if (playerId is not null && encounterId is not null)
         {
-            Log.Information($"Finding buildplate instance for buildplate {buildplateId} type {type} encounter {encounterId} player {playerId}");
+            LogFindingBuildplateInstanceForBuildplateEncounterPlayer(buildplateId, type, encounterId.Value, playerId.Value);
         }
         else if (playerId is not null)
         {
-            Log.Information($"Finding buildplate instance for buildplate {buildplateId} type {type} player {playerId}");
+            LogFindingBuildplateInstanceForBuildplatePlayer(buildplateId, type, playerId.Value);
         }
         else if (encounterId is not null)
         {
-            Log.Information($"Finding buildplate instance for buildplate {buildplateId} type {type} encounter {encounterId}");
+            LogFindingBuildplateInstanceForBuildplateEncounter(buildplateId, type, encounterId.Value);
         }
         else
         {
-            Log.Information($"Finding buildplate instance for buildplate {buildplateId} type {type}");
+            LogFindingBuildplateInstanceForBuildplate(buildplateId, type);
         }
 
         lock (_instances)
         {
-            HashSet<string>? instanceIds = _instancesByBuildplateId.GetOrDefault(buildplateId);
+            var instanceIds = _instancesByBuildplateId.GetValueOrDefault(buildplateId);
             if (instanceIds is not null)
             {
-                foreach (string loopInstanceId in instanceIds)
+                foreach (var loopInstanceId in instanceIds)
                 {
-                    InstanceInfo? instanceInfo = _instances.GetOrDefault(loopInstanceId);
+                    var instanceInfo = _instances.GetValueOrDefault(loopInstanceId);
                     if (instanceInfo is not null && !instanceInfo.ShuttingDown)
                     {
                         if (instanceInfo.Type == type &&
@@ -84,7 +80,7 @@ public sealed class BuildplateInstancesManager
                             instanceInfo.EncounterId == encounterId
                         )
                         {
-                            Log.Information($"Found existing buildplate instance {loopInstanceId}");
+                            LogFoundExistingBuildplateInstance(loopInstanceId);
                             return loopInstanceId;
                         }
                     }
@@ -92,11 +88,14 @@ public sealed class BuildplateInstancesManager
             }
         }
 
-        Log.Information("Did not find existing instance, starting new instance");
-        string? instanceId = await _requestSender.RequestAsync("buildplates", "start", Json.Serialize(new StartRequest(playerId, encounterId, buildplateId, night, type, shutdownTime)));
-        if (instanceId is null)
+        LogStartingNewInstance();
+
+        Debug.Assert(_requestSender is not null);
+
+        string? instanceIdString = await _requestSender.RequestAsync("buildplates", "start", Json.Serialize(new StartRequest(playerId, encounterId, buildplateId, night, type, shutdownTime)));
+        if (!Guid.TryParse(instanceIdString, out var instanceId))
         {
-            Log.Error("Buildplate start request was rejected/ignored");
+            LogBuildplateStartRequestWasRejectedIgnored();
             return null;
         }
 
@@ -118,32 +117,47 @@ public sealed class BuildplateInstancesManager
 
         if (!await completableFuture.Task)
         {
-            Log.Warning($"Could not start buildplate instance {instanceId}");
+            LogCouldNotStartBuildplateInstance(instanceId);
             return null;
         }
 
         return instanceId;
     }
 
-    public InstanceInfo? GetInstanceInfo(string instanceId)
+    public InstanceInfo? GetInstanceInfo(Guid instanceId)
     {
         lock (_instances)
         {
-            return _instances.GetOrDefault(instanceId, null);
+            return _instances.GetValueOrDefault(instanceId);
         }
     }
 
     public async Task<string?> GetBuildplatePreviewAsync(byte[] serverData, bool night)
     {
-        Log.Information("Requesting buildplate preview");
+        LogRequestingBuildplatePreview();
+
+        Debug.Assert(_requestSender is not null);
 
         string? preview = await _requestSender.RequestAsync("buildplates", "preview", Json.Serialize(new PreviewRequest(Convert.ToBase64String(serverData), night)));
         if (preview is null)
         {
-            Log.Error("Preview request was rejected/ignored");
+            LogPreviewRequestWasRejectedIgnored();
         }
 
         return preview;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_subscriber is not null)
+        {
+            await _subscriber.CloseAsync();
+        }
+
+        if (_requestSender is not null)
+        {
+            await _requestSender.DisposeAsync();
+        }
     }
 
     private Task HandleEvent(SubscriberEvent @event)
@@ -158,13 +172,13 @@ public sealed class BuildplateInstancesManager
                         startNotification = Json.Deserialize<StartNotification>(@event.Data)!;
                         if (startNotification.PlayerId is null && startNotification.Type is not InstanceType.ENCOUNTER)
                         {
-                            Log.Warning("Bad start notification");
+                            // Log.Warning("Bad start notification");
                             return Task.CompletedTask;
                         }
 
                         lock (_instances)
                         {
-                            Log.Information($"Buildplate instance {startNotification.InstanceId} has started");
+                            LogBuildplateInstanceHasStarted(startNotification.InstanceId);
                             _instances[startNotification.InstanceId] = new InstanceInfo(
                                 startNotification.Type,
                                 startNotification.InstanceId,
@@ -182,26 +196,33 @@ public sealed class BuildplateInstancesManager
 
                         lock (_pendingInstances)
                         {
-                            TaskCompletionSource<bool>? completableFuture = _pendingInstances.JavaRemove(startNotification.InstanceId);
-                            completableFuture?.SetResult(true);
+                            if (_pendingInstances.Remove(startNotification.InstanceId, out var completableFuture))
+                            {
+                                completableFuture?.SetResult(true);
+                            }
                         }
                     }
                     catch (Exception ex)
                     {
-                        Log.Warning($"Bad start notification: {ex}");
+                        LogBadStartNotification(ex);
                     }
                 }
 
                 break;
             case "ready":
                 {
-                    string instanceId = @event.Data;
+                    if (!Guid.TryParse(@event.Data, out var instanceId))
+                    {
+                        // Log.Warning($"Failed to parse instance guid for 'ready': '{@event.Data}'");
+                        break;
+                    }
+
                     lock (_instances)
                     {
-                        InstanceInfo? instanceInfo = _instances.GetOrDefault(instanceId, null);
+                        InstanceInfo? instanceInfo = _instances.GetValueOrDefault(instanceId);
                         if (instanceInfo is not null)
                         {
-                            Log.Information($"Buildplate instance {instanceId} is ready");
+                            LogBuildplateInstanceIsReady(instanceId);
                             _instances[instanceId] = new InstanceInfo(
                                 instanceInfo.Type,
                                 instanceInfo.InstanceId,
@@ -220,13 +241,18 @@ public sealed class BuildplateInstancesManager
                 break;
             case "shuttingDown":
                 {
-                    string instanceId = @event.Data;
+                    if (!Guid.TryParse(@event.Data, out var instanceId))
+                    {
+                        // Log.Warning($"Failed to parse instance guid for 'shuttingDown': '{@event.Data}'");
+                        break;
+                    }
+
                     lock (_instances)
                     {
                         InstanceInfo? instanceInfo = _instances.GetValueOrDefault(instanceId);
                         if (instanceInfo is not null)
                         {
-                            Log.Information($"Buildplate instance {instanceId} is shutting down");
+                            LogBuildplateInstanceIsShuttingDown(instanceId);
                             _instances[instanceId] = new InstanceInfo(
                                 instanceInfo.Type,
                                 instanceInfo.InstanceId,
@@ -245,15 +271,19 @@ public sealed class BuildplateInstancesManager
                 break;
             case "stopped":
                 {
-                    string instanceId = @event.Data;
+                    if (!Guid.TryParse(@event.Data, out var instanceId))
+                    {
+                        // Log.Warning($"Failed to parse instance guid for 'stopped': '{@event.Data}'");
+                        break;
+                    }
+
                     lock (_instances)
                     {
-                        var instanceInfo = _instances.JavaRemove(instanceId);
-                        if (instanceInfo is not null)
+                        if (_instances.Remove(instanceId, out var instanceInfo))
                         {
-                            Log.Information($"Buildplate instance {instanceId} has stopped");
+                            LogBuildplateInstancHasStopped(instanceId);
 
-                            var instanceIds = _instancesByBuildplateId.GetOrDefault(instanceInfo.BuildplateId);
+                            var instanceIds = _instancesByBuildplateId.GetValueOrDefault(instanceInfo.BuildplateId);
                             instanceIds?.Remove(instanceInfo.InstanceId);
                         }
                     }
@@ -268,9 +298,9 @@ public sealed class BuildplateInstancesManager
     }
 
     private sealed record StartRequest(
-        string? PlayerId,
-        string? EncounterId,
-        string BuildplateId,
+        Guid? PlayerId,
+        Guid? EncounterId,
+        Guid BuildplateId,
         bool Night,
         InstanceType Type,
         long ShutdownTime
@@ -282,17 +312,17 @@ public sealed class BuildplateInstancesManager
     );
 
     private sealed record StartNotification(
-        string InstanceId,
-        string? PlayerId,
-        string? EncounterId,
-        string BuildplateId,
+        Guid InstanceId,
+        Guid? PlayerId,
+        Guid? EncounterId,
+        Guid BuildplateId,
         string Address,
         int Port,
         InstanceType Type
     );
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum InstanceType
+    internal enum InstanceType
     {
 #pragma warning disable CA1707 // Identifiers should not contain underscores
         BUILD,
@@ -303,14 +333,14 @@ public sealed class BuildplateInstancesManager
 #pragma warning restore CA1707 // Identifiers should not contain underscores
     }
 
-    public sealed record InstanceInfo(
+    internal sealed record InstanceInfo(
         InstanceType Type,
 
-        string InstanceId,
+        Guid InstanceId,
 
-        string? PlayerId,
-        string? EncounterId,
-        string BuildplateId,
+        Guid? PlayerId,
+        Guid? EncounterId,
+        Guid BuildplateId,
 
         string Address,
         int Port,
@@ -318,4 +348,52 @@ public sealed class BuildplateInstancesManager
         bool Ready,
         bool ShuttingDown
     );
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Buildplates event bus subscriber error")]
+    private partial void LogBuildplatesEventBusSubscriberError();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Finding buildplate instance for buildplate {BuildplateId} type {Type} encounter {EncounterId} player {AccountId}")]
+    private partial void LogFindingBuildplateInstanceForBuildplateEncounterPlayer(Guid BuildplateId, InstanceType Type, Guid EncounterId, Guid AccountId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Finding buildplate instance for buildplate {BuildplateId} type {Type} player {AccountId}")]
+    private partial void LogFindingBuildplateInstanceForBuildplatePlayer(Guid BuildplateId, InstanceType Type, Guid AccountId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Finding buildplate instance for buildplate {BuildplateId} type {Type} encounter {EncounterId}")]
+    private partial void LogFindingBuildplateInstanceForBuildplateEncounter(Guid BuildplateId, InstanceType Type, Guid EncounterId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Finding buildplate instance for buildplate {BuildplateId} type {Type}")]
+    private partial void LogFindingBuildplateInstanceForBuildplate(Guid BuildplateId, InstanceType Type);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Found existing buildplate instance {InstanceId}")]
+    private partial void LogFoundExistingBuildplateInstance(Guid InstanceId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Did not find existing instance, starting new instance")]
+    private partial void LogStartingNewInstance();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Buildplate start request was rejected/ignored")]
+    private partial void LogBuildplateStartRequestWasRejectedIgnored();
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not start buildplate instance {InstanceId}")]
+    private partial void LogCouldNotStartBuildplateInstance(Guid InstanceId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Requesting buildplate preview")]
+    private partial void LogRequestingBuildplatePreview();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Preview request was rejected/ignored")]
+    private partial void LogPreviewRequestWasRejectedIgnored();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Buildplate instance {InstanceId} has started")]
+    private partial void LogBuildplateInstanceHasStarted(Guid InstanceId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Bad start notification")]
+    private partial void LogBadStartNotification(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Buildplate instance {InstanceId} is ready")]
+    private partial void LogBuildplateInstanceIsReady(Guid InstanceId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Buildplate instance {InstanceId} is shutting down")]
+    private partial void LogBuildplateInstanceIsShuttingDown(Guid InstanceId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Buildplate instance {InstanceId} has stopped")]
+    private partial void LogBuildplateInstancHasStopped(Guid InstanceId);
 }

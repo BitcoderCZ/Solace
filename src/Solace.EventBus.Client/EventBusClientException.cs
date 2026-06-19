@@ -2,6 +2,11 @@
 
 public class EventBusClientException : Exception
 {
+    public EventBusClientException()
+        : base()
+    {
+    }
+
     public EventBusClientException(string? message)
         : base(message)
     {

@@ -1,128 +1,177 @@
-﻿using CommandLine;
-using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Solace.EventBus.Client;
 using Solace.StaticData;
-using System.Globalization;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Solace.Common;
+using System.Runtime.Loader;
 
 namespace Solace.TappablesGenerator;
 
 internal static class Program
 {
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    private sealed class Options
+    private static Task<int> Main(string[] args)
     {
-        [Option("dir", Default = "./staticdata", Required = false, HelpText = "Static data path")]
-        public string StaticDataPath { get; set; }
+#if USE_SHARED_LIBS
+        AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
+        {
+            string sharedDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "shared_libs"));
+            string assemblyPath = Path.Combine(sharedDir, $"{assemblyName.Name}.dll");
 
-        [Option("eventbus", Default = "localhost:5532", Required = false, HelpText = "Event bus address")]
-        public string EventBusConnectionString { get; set; }
+            if (File.Exists(assemblyPath))
+            {
+                return context.LoadFromAssemblyPath(assemblyPath);
+            }
 
-        [Option("logger-url", Default = null, Required = false, HelpText = "Url to send logs to")]
-        public string? LoggerUrl { get; set; }
+            return null;
+        };
+#endif
+
+        return App.RunAsync(args);
     }
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+}
 
-    private static async Task<int> Main(string[] args)
+internal static partial class App
+{
+    public static async Task<int> RunAsync(string[] args)
     {
         if (!Debugger.IsAttached)
         {
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
-                Log.Fatal($"Unhandled exception: {e.ExceptionObject}");
-                Log.CloseAndFlush();
-                Environment.Exit(1);
+                Console.Error.WriteLine($"Unhandled exception: {e.ExceptionObject}");
+
+                try
+                {
+                    var logger = GlobalLoggerFactory.CreateLogger(nameof(Program));
+                    LogUnhandledException(logger, e.ExceptionObject as Exception);
+                }
+                catch
+                {
+                    Console.Error.WriteLine($"Unhandled exception before logger initialization");
+                }
+
+                Console.Out.Flush();
+                Console.Error.Flush();
+
+                Environment.Exit(2);
             };
         }
 
-        ParserResult<Options> res = Parser.Default.ParseArguments<Options>(args);
+        var builder = Host.CreateApplicationBuilder(args);
 
-        Options options;
-        if (res is Parsed<Options> parsed)
-        {
-            options = parsed.Value;
-        }
-        else if (res is NotParsed<Options> notParsed)
-        {
-            if (res.Errors.Any(error => error is HelpRequestedError))
-            {
-                return 0;
-            }
-            else if (res.Errors.Any(error => error is VersionRequestedError))
-            {
-                return 0;
-            }
-            else
-            {
-                return 1;
-            }
-        }
-        else
-        {
-            return 1;
-        }
+        builder.AddServiceDefaults();
 
-        var loggerConfig = new LoggerConfiguration()
-            .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
-            .WriteTo.File("logs/tappable_generator/log.txt", rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true, fileSizeLimitBytes: 8338607, outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}", formatProvider: CultureInfo.InvariantCulture)
-            .Enrich.WithProperty("ComponentName", "TappableGenerator");
+        builder.Services.AddSingleton<StartupDependencies>();
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().EventBus);
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<StartupDependencies>().StaticData);
+        builder.Services.AddSingleton<TappableGenerator>();
+        builder.Services.AddSingleton<EncounterGenerator>();
+        builder.Services.AddSingleton<ActiveTiles>();
+        builder.Services.AddSingleton<Spawner>();
 
-        if (!string.IsNullOrWhiteSpace(options.LoggerUrl))
-        {
-            loggerConfig.WriteTo.Http(options.LoggerUrl, 10 * 1024 * 1024);
-        }
+        var app = builder.Build();
 
-        loggerConfig.MinimumLevel.Debug();
-        var log = loggerConfig.CreateLogger();
+        var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+        GlobalLoggerFactory.Initialize(loggerFactory);
 
-        Log.Logger = log;
+        var programLogger = loggerFactory.CreateLogger(nameof(Program));
 
-        Log.Information("Loading static data");
+        LogLoadingStaticData(programLogger);
         StaticData.StaticData staticData;
         try
         {
-            staticData = new StaticData.StaticData(options.StaticDataPath);
+            staticData = new StaticData.StaticData(builder.Configuration["StaticDataPath"]!);
         }
-        catch (StaticDataException staticDataException)
+        catch (StaticDataException exception)
         {
-            Log.Fatal($"Failed to load static data: {staticDataException}");
-            Log.CloseAndFlush();
-            return 1;
+            LogLoadStaticDataError(programLogger, exception);
+            loggerFactory.Dispose();
+            return 3;
         }
 
-        Log.Information("Loaded static data");
+        LogLoadedStaticData(programLogger);
 
-        Log.Information("Connecting to event bus");
+        var eventBusConnectionString = builder.Configuration["services:event-bus:raw-tcp:0"];
+        Debug.Assert(eventBusConnectionString is not null);
+        var eventBusUri = new Uri(eventBusConnectionString);
+
+        LogConnectingToEventBus(programLogger);
         EventBusClient eventBusClient;
         try
         {
-            eventBusClient = await EventBusClient.ConnectAsync(options.EventBusConnectionString);
+            eventBusClient = await EventBusClient.ConnectAsync($"{eventBusUri.Host}:{eventBusUri.Port}");
         }
-        catch (EventBusClientException ex)
+        catch (EventBusClientException exception)
         {
-            Log.Fatal($"Could not connect to event bus: {ex}");
-            Log.CloseAndFlush();
-            return 1;
+            LogConnectToEventBusError(programLogger, exception);
+            loggerFactory.Dispose();
+            return 4;
         }
 
-        Log.Information("Connected to event bus");
+        LogConnectedToEventBus(programLogger);
 
-        var tappableGenerator = new TappableGenerator(staticData);
-        var encounterGenerator = new EncounterGenerator(staticData);
-        var spawner = new Spawner[1];
-        ActiveTiles activeTiles = await ActiveTiles.CreateAsync(eventBusClient, new ActiveTiles.ActiveTileListener(
+        // init stuff that requires logger but needs to be injected
+        var startupDeps = app.Services.GetRequiredService<StartupDependencies>();
+        startupDeps.StaticData = staticData;
+        startupDeps.EventBus = eventBusClient;
+
+        // init stuff that needs async initialization
+        var spawner = app.Services.GetRequiredService<Spawner>();
+        await app.Services.GetRequiredService<ActiveTiles>().InitializeAsync(eventBusClient, new ActiveTiles.ActiveTileListener(
             async activeTiles =>
             {
-                await spawner[0].SpawnTiles(activeTiles);
+                await spawner.SpawnTiles(activeTiles);
             },
             async activeTile =>
             {
                 // empty
             }
         ));
-        spawner[0] = await Spawner.CreateAsync(eventBusClient, activeTiles, tappableGenerator, encounterGenerator);
-        await spawner[0].Run();
+        await spawner.InitializeAsync(eventBusClient);
+
+        try
+        {
+            await spawner.RunAsync();
+        }
+        catch (IOException exception)
+        {
+            LogFatalErrorDuringServerStartup(programLogger, exception);
+            loggerFactory.Dispose();
+            return 1;
+        }
 
         return 0;
     }
+
+    internal sealed class StartupDependencies
+    {
+        public EventBusClient EventBus { get; set; } = null!;
+        public StaticData.StaticData StaticData { get; set; } = null!;
+    }
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Unhandled exception")]
+    private static partial void LogUnhandledException(ILogger logger, Exception? exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loading static data")]
+    private static partial void LogLoadingStaticData(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Failed to load static data")]
+    private static partial void LogLoadStaticDataError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loaded static data")]
+    private static partial void LogLoadedStaticData(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connecting to event bus")]
+    private static partial void LogConnectingToEventBus(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Could not connect to event bus")]
+    private static partial void LogConnectToEventBusError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connected to event bus")]
+    private static partial void LogConnectedToEventBus(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Fatal error during server startup")]
+    private static partial void LogFatalErrorDuringServerStartup(ILogger logger, Exception exception);
 }

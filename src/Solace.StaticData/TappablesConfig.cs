@@ -12,7 +12,7 @@ public sealed class TappablesConfig
     {
         try
         {
-            LinkedList<TappableConfig> tappables = [];
+            var tappables = ImmutableArray.CreateBuilder<TappableConfig>();
             foreach (string file in Directory.EnumerateFiles(dir))
             {
                 if (Path.GetExtension(file) != ".json")
@@ -26,18 +26,18 @@ public sealed class TappablesConfig
 
                     Debug.Assert(tappable is not null);
 
-                    tappables.AddLast(tappable);
+                    tappables.Add(tappable);
                 }
             }
 
-            Tappables = [.. tappables];
+            Tappables = tappables.DrainToImmutable();
 
             foreach (TappableConfig tappableConfig in Tappables)
 
             {
                 foreach (TappableConfig.DropSetR dropSet in tappableConfig.DropSets)
                 {
-                    foreach (string itemId in dropSet.Items)
+                    foreach (var itemId in dropSet.Items)
                     {
                         if (!tappableConfig.ItemCounts.ContainsKey(itemId))
                         {
@@ -60,11 +60,11 @@ public sealed class TappablesConfig
     public record TappableConfig(
         string Icon,
         TappableConfig.DropSetR[] DropSets,
-        Dictionary<string, TappableConfig.ItemCount> ItemCounts
+        Dictionary<Guid, TappableConfig.ItemCount> ItemCounts
     )
     {
         public record DropSetR(
-            string[] Items,
+            Guid[] Items,
             int Chance
         );
 

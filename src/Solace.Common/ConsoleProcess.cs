@@ -1,14 +1,15 @@
-﻿using System.Diagnostics;
+﻿//#define KEEP_WINDOW_OPEN
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using Serilog;
+using Microsoft.Extensions.Logging;
 using Solace.Common.Utils;
 
 namespace Solace.Common;
 
 // from https://stackoverflow.com/a/50311340/15878562
-public sealed class ConsoleProcess : IDisposable
+public sealed partial class ConsoleProcess : IDisposable
 {
     private readonly string _filePath;
     public readonly Process Process = new Process();
@@ -53,6 +54,8 @@ public sealed class ConsoleProcess : IDisposable
     private int? _actualAppPid;
     private Process? _cachedActualProcess;
 
+    private readonly ILogger _logger;
+
     private static string? _cachedLinuxTerminal;
     private static string? _cachedLinuxTerminalExecArg;
     private static bool _linuxTerminalDiscoveryAttempted;
@@ -95,7 +98,7 @@ public sealed class ConsoleProcess : IDisposable
         }
     }
 
-    public ConsoleProcess(string appName, bool useShellExecute, bool redirect, bool openInNewWindow = false)
+    public ConsoleProcess(string appName, ILogger logger, bool useShellExecute, bool redirect, bool openInNewWindow = false)
     {
         if (openInNewWindow && redirect)
         {
@@ -114,7 +117,7 @@ public sealed class ConsoleProcess : IDisposable
 
             if (!hasDisplay || !IsLinuxTerminalAvailable())
             {
-                Log.Debug("No terminal emulator is available, launching without a new window");
+                LogNotTerminalEmulatorAvailableNoNewWindow();
                 openInNewWindow = false;
             }
         }
@@ -122,6 +125,8 @@ public sealed class ConsoleProcess : IDisposable
         _filePath = appName;
         IORedirected = redirect;
         OpenInNewWindow = openInNewWindow;
+
+        _logger = logger;
 
         Process.StartInfo = new ProcessStartInfo(appName)
         {
@@ -149,9 +154,29 @@ public sealed class ConsoleProcess : IDisposable
             Process.StartInfo.WorkingDirectory = workingDir;
         }
 
-        if (OpenInNewWindow && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (OpenInNewWindow)
         {
-            ApplyTerminalWrapper(args);
+#if KEEP_WINDOW_OPEN
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Process.StartInfo.UseShellExecute = true;
+                Process.StartInfo.FileName = "cmd.exe";
+                Process.StartInfo.Arguments = $"/k \"\"{_filePath}\" {FormatStandardArguments(args)}\"";
+            }
+            else
+            {
+                ApplyTerminalWrapper(args);
+            }
+#else
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                ApplyTerminalWrapper(args);
+            }
+            else
+            {
+                Process.StartInfo.Arguments = FormatStandardArguments(args);
+            }
+#endif
         }
         else
         {
@@ -201,9 +226,9 @@ public sealed class ConsoleProcess : IDisposable
                 return "\"\"";
             }
 
-            if (a.Contains(' ') || a.Contains('{') || a.Contains('"'))
+            if (a.Contains(' ', StringComparison.Ordinal) || a.Contains('{', StringComparison.Ordinal) || a.Contains('"', StringComparison.Ordinal))
             {
-                return $"\"{a.Replace("\"", "\\\"")}\"";
+                return $"\"{a.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
             }
 
             return a;
@@ -221,11 +246,11 @@ public sealed class ConsoleProcess : IDisposable
     public async Task WaitForExitAsync(CancellationToken cancellationToken = default)
         => await ActualProcess.WaitForExitAsync(cancellationToken);
 
-    public async Task StopNoWaitAsync(int timeout = 15 * 1000, CancellationToken cancellationToken = default)
-        => await ActualProcess.StopGracefullyOrKillAsync(timeout, cancellationToken);
+    public async Task StopNoWaitAsync(ILogger logger, int timeout = 15 * 1000, CancellationToken cancellationToken = default)
+        => await ActualProcess.StopGracefullyOrKillAsync(timeout, logger, cancellationToken);
 
-    public async Task StopAndWaitAsync(int timeout = 15 * 1000, CancellationToken cancellationToken = default)
-        => await ActualProcess.StopGracefullyOrKillAndWaitAsync(timeout, cancellationToken);
+    public async Task StopAndWaitAsync(ILogger logger, int timeout = 15 * 1000, CancellationToken cancellationToken = default)
+        => await ActualProcess.StopGracefullyOrKillAndWaitAsync(timeout, logger, cancellationToken);
 
     private void ApplyTerminalWrapper(IEnumerable<string> args)
     {
@@ -240,25 +265,34 @@ public sealed class ConsoleProcess : IDisposable
 
             Process.StartInfo.FileName = _cachedLinuxTerminal;
 
-            var linuxArgs = args.Select(a => $"'{a.Replace("'", "'\\''")}'");
+            var linuxArgs = args.Select(a => $"'{a.Replace("'", "'\\''", StringComparison.Ordinal)}'");
 
-            string innerCommand = $"'{_filePath.Replace("'", "'\\''")}' {string.Join(" ", linuxArgs)}";
+            string innerCommand = $"'{_filePath.Replace("'", "'\\''", StringComparison.Ordinal)}' {string.Join(" ", linuxArgs)}";
 
             innerCommand = innerCommand
-                .Replace("\\", "\\\\")
-                .Replace("$", "\\$")
-                .Replace("\"", "\\\"");
+                .Replace("\\", "\\\\", StringComparison.Ordinal)
+                .Replace("$", "\\$", StringComparison.Ordinal)
+                .Replace("\"", "\\\"", StringComparison.Ordinal);
 
             _pidFilePath = Path.GetTempFileName();
 
+#if KEEP_WINDOW_OPEN
+            Process.StartInfo.Arguments = $"{_cachedLinuxTerminalExecArg} bash -c \"{innerCommand} & app_pid=$!; echo $app_pid > '{_pidFilePath}'; wait $app_pid; echo; echo '[Process completed - Press Enter to close]'; read\"";
+#else
             Process.StartInfo.Arguments = $"{_cachedLinuxTerminalExecArg} bash -c \"echo $$ > '{_pidFilePath}'; exec {innerCommand}\"";
+#endif
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
             // todo: currently not tested
             string arguments = FormatStandardArguments(args);
             string command = $"'{_filePath}' {arguments}";
-            string appleScript = $"tell application \"Terminal\" to do script \"{command.Replace("\"", "\\\"")}; exit\"";
+
+#if KEEP_WINDOW_OPEN
+            string appleScript = $"tell application \"Terminal\" to do script \"{command.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
+#else
+            string appleScript = $"tell application \"Terminal\" to do script \"{command.Replace("\"", "\\\"", StringComparison.Ordinal)}; exit\"";
+#endif
 
             Process.StartInfo.FileName = "osascript";
             Process.StartInfo.Arguments = $"-e \"{appleScript}\"";
@@ -302,7 +336,8 @@ public sealed class ConsoleProcess : IDisposable
 
                     if (process.ExitCode == 0)
                     {
-                        Log.Information($"Using '{name}' to launch new terminal windows.");
+                        var logger = GlobalLoggerFactory.CreateLogger<ConsoleProcess>();
+                        LogUsingTerminalEmulator(logger, name);
                         _cachedLinuxTerminal = name;
                         _cachedLinuxTerminalExecArg = executionArg;
                         return true;
@@ -317,7 +352,7 @@ public sealed class ConsoleProcess : IDisposable
         }
     }
 
-    private static async Task<int?> ResolveActualPidAsync(string pidFile, int timeout = 5000)
+    private async Task<int?> ResolveActualPidAsync(string pidFile, int timeout = 5000)
     {
         using var cts = new CancellationTokenSource(timeout);
 
@@ -346,7 +381,7 @@ public sealed class ConsoleProcess : IDisposable
         }
         catch (OperationCanceledException)
         {
-            Log.Warning("Timed out waiting for terminal emulator to report its PID.");
+            LogTerminalEmulatorStartTimeout();
         }
         finally
         {
@@ -364,4 +399,13 @@ public sealed class ConsoleProcess : IDisposable
         Process.Dispose();
         _cachedActualProcess?.Dispose();
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "No terminal emulator is available, launching without a new window")]
+    private partial void LogNotTerminalEmulatorAvailableNoNewWindow();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Using '{TerminalEmulatorName}' to launch new terminal windows")]
+    private static partial void LogUsingTerminalEmulator(ILogger logger, string TerminalEmulatorName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Timed out waiting for terminal emulator to report its PID")]
+    private partial void LogTerminalEmulatorStartTimeout();
 }

@@ -8,9 +8,9 @@ using CICIBIEType = Solace.StaticData.Catalog.ItemsCatalogR.Item.BoostInfoR.Effe
 
 namespace Solace.ApiServer.Utils;
 
-public static class BoostUtils
+internal static class BoostUtils
 {
-    public static Catalog.ItemsCatalogR.Item.BoostInfoR.Effect[] GetActiveEffects(Boosts boosts, long currentTime, Catalog.ItemsCatalogR itemsCatalog)
+    public static IEnumerable<Catalog.ItemsCatalogR.Item.BoostInfoR.Effect> GetActiveEffects(BoostsEF boosts, long currentTime, Catalog.ItemsCatalogR itemsCatalog)
     {
         Dictionary<string, Catalog.ItemsCatalogR.Item.BoostInfoR> activeBoostsInfo = [];
         foreach (var activeBoost in boosts.ActiveBoosts)
@@ -40,7 +40,6 @@ public static class BoostUtils
             activeBoostsInfo[item.BoostInfo.Name] = item.BoostInfo;
         }
 
-        LinkedList<Catalog.ItemsCatalogR.Item.BoostInfoR.Effect> effects = [];
         foreach (Catalog.ItemsCatalogR.Item.BoostInfoR boostInfo in activeBoostsInfo.Values)
         {
             foreach (var effect in boostInfo.Effects
@@ -52,14 +51,12 @@ public static class BoostUtils
                     _ => throw new UnreachableException(),
                 }))
             {
-                effects.AddLast(effect);
+                yield return effect;
             }
         }
-
-        return [.. effects];
     }
 
-    public sealed record StatModiferValues(
+    internal sealed record StatModiferValues(
         int MaxPlayerHealthMultiplier,
         int AttackMultiplier,
         int DefenseMultiplier,
@@ -73,7 +70,7 @@ public static class BoostUtils
         bool KeepXp
     );
 
-    public static StatModiferValues GetActiveStatModifiers(Boosts boosts, long currentTime, Catalog.ItemsCatalogR itemsCatalog)
+    public static StatModiferValues GetActiveStatModifiers(BoostsEF boosts, long currentTime, Catalog.ItemsCatalogR itemsCatalog)
     {
         int maxPlayerHealth = 0;
         int attackMultiplier = 0;
@@ -142,7 +139,7 @@ public static class BoostUtils
         );
     }
 
-    public static int GetMaxPlayerHealth(Boosts boosts, long currentTime, Catalog.ItemsCatalogR itemsCatalog)
+    public static int GetMaxPlayerHealth(BoostsEF boosts, long currentTime, Catalog.ItemsCatalogR itemsCatalog)
         => 20 + (20 * BoostUtils.GetActiveStatModifiers(boosts, currentTime, itemsCatalog).MaxPlayerHealthMultiplier) / 100;
 
     public static Effect BoostEffectToApiResponse(Catalog.ItemsCatalogR.Item.BoostInfoR.Effect effect, long boostDuration)
@@ -187,7 +184,6 @@ public static class BoostUtils
             },
             effect.Type == CICIBIEType.CRAFTING || effect.Type == CICIBIEType.SMELTING ? "UtilityBlock" : "Player",
             effect.ApplicableItemIds,
-
             effect.Type switch
             {
                 CICIBIEType.ITEM_XP => ["Tappable"],

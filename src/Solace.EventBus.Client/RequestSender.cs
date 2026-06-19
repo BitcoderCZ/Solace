@@ -2,7 +2,7 @@
 
 namespace Solace.EventBus.Client;
 
-public sealed class RequestSender : IAsyncDisposable
+public sealed partial class RequestSender : IAsyncDisposable
 {
     private readonly EventBusClient _client;
     private readonly int _channelId;
@@ -24,6 +24,8 @@ public sealed class RequestSender : IAsyncDisposable
         _client.RemoveRequestSender(_channelId);
         await _client.SendMessageAsync(_channelId, "CLOSE");
         await ClosedAsync();
+
+        _lock.Dispose();
     }
 
     public async Task<string?> RequestAsync(string queueName, string type, string data)
@@ -195,15 +197,21 @@ public sealed class RequestSender : IAsyncDisposable
     private static bool ValidateQueueName(string queueName)
         => !string.IsNullOrEmpty(queueName) &&
             !queueName.Any(c => c < 32 || c >= 127) &&
-            !Regex.IsMatch(queueName, "^[^A-Za-z0-9_\\-]$") &&
-            !Regex.IsMatch(queueName, "^[^A-Za-z0-9]$");
+            !GetValidationRegex1().IsMatch(queueName) &&
+            !GetValidationRegex2().IsMatch(queueName);
 
     private static bool ValidateType(string type)
         => !string.IsNullOrEmpty(type) &&
             !type.Any(c => c < 32 || c >= 127) &&
-            !Regex.IsMatch(type, "^[^A-Za-z0-9_\\-]$") &&
-            !Regex.IsMatch(type, "^[^A-Za-z0-9]$");
+            !GetValidationRegex1().IsMatch(type) &&
+            !GetValidationRegex2().IsMatch(type);
 
     private static bool ValidateData(string data)
         => !data.Any(c => c < 32 || c >= 127);
+
+    [GeneratedRegex("^[^A-Za-z0-9_\\-]$")]
+    private static partial Regex GetValidationRegex1();
+
+    [GeneratedRegex("^[^A-Za-z0-9]$")]
+    private static partial Regex GetValidationRegex2();
 }

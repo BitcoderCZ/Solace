@@ -1,33 +1,33 @@
-﻿using Serilog;
+﻿using Microsoft.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.PreviewGenerator.Registry;
 
 namespace Solace.PreviewGenerator;
 
-public static class Generator
+public static partial class Generator
 {
-    private static readonly int CHUNK_RADIUS = 2;
+    private const int CHUNK_RADIUS = 2;
 
-    public static string Generate(Stream stream)
+    public static string Generate(Stream stream, ILogger logger)
     {
-        //try
-        //{
         var serverDataZip = ServerDataZip.Read(stream);
 
-        LinkedList<Chunk> chunks = new();
+        int sideLength = (CHUNK_RADIUS * 2) + 1;
+        var chunks = new List<Chunk>(sideLength * sideLength);
+
         for (int chunkX = -CHUNK_RADIUS; chunkX < CHUNK_RADIUS; chunkX++)
         {
             for (int chunkZ = -CHUNK_RADIUS; chunkZ < CHUNK_RADIUS; chunkZ++)
             {
-                var chunk = Chunk.Read(serverDataZip.GetChunkNBT(chunkX, chunkZ));
+                var chunk = Chunk.Read(serverDataZip.GetChunkNBT(chunkX, chunkZ), logger);
                 if (chunk is null)
                 {
-                    Log.Error($"Could not convert chunk {chunkX}, {chunkZ}");
+                    LogCouldNotConvertChunk(logger, chunkX, chunkZ);
                 }
                 else
                 {
-                    chunks.AddLast(chunk);
+                    chunks.Add(chunk);
                 }
             }
         }
@@ -126,6 +126,8 @@ public static class Generator
         );
 
         return Json.Serialize(previewModel);
-        //} catch (Exception ex) { }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not convert chunk at ({PosX}, {PosZ})")]
+    private static partial void LogCouldNotConvertChunk(ILogger logger, int PosX, int PosZ);
 }

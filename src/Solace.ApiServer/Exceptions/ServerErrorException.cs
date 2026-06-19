@@ -1,6 +1,6 @@
 ﻿namespace Solace.ApiServer.Exceptions;
 
-public class ServerErrorException : Exception
+internal sealed class ServerErrorException : Exception
 {
     public ServerErrorException()
         : base()

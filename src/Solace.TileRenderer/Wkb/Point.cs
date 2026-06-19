@@ -2,7 +2,7 @@
 
 namespace Solace.TileRenderer.Wkb;
 
-public struct Point
+internal struct Point
 {
     public double X;
     public double Y;

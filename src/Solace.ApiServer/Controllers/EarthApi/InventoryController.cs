@@ -13,76 +13,77 @@ using Solace.DB;
 using Solace.DB.Models.Common;
 using Solace.DB.Models.Player;
 using Solace.StaticData;
+using Microsoft.EntityFrameworkCore;
+using Solace.DB.Utils;
 
 namespace Solace.ApiServer.Controllers.EarthApi;
 
 [Authorize]
 [ApiVersion("1.1")]
 [Route("1/api/v{version:apiVersion}/inventory/survival")]
-internal sealed class InventoryController : ControllerBase
+internal sealed class InventoryController : SolaceControllerBase
 {
-    private static EarthDB earthDB => Program.DB;
-    private static Catalog catalog => Program.staticData.Catalog;
+    private readonly EarthDbContext _earthDB;
+    private readonly Catalog _catalog;
+    private readonly ILogger<InventoryController> _logger;
+
+    public InventoryController(EarthDbContext earthDB, StaticData.StaticData staticData, ILogger<InventoryController> logger)
+    {
+        _earthDB = earthDB;
+        _catalog = staticData.Catalog;
+        _logger = logger;
+    }
 
     [HttpGet]
     public async Task<Results<ContentHttpResult, BadRequest>> GetInventory(CancellationToken cancellationToken)
     {
-        string? playerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrEmpty(playerId))
+        if (!TryGetAccountId(out var accountId))
         {
             return TypedResults.BadRequest();
         }
 
-        DB.Models.Player.Inventory inventoryModel;
-        Hotbar hotbarModel;
-        Journal journalModel;
-        try
-        {
-            EarthDB.Results results = await new EarthDB.Query(false)
-                .Get("inventory", playerId, typeof(DB.Models.Player.Inventory))
-                .Get("hotbar", playerId, typeof(Hotbar))
-                .Get("journal", playerId, typeof(Journal))
-                .ExecuteAsync(earthDB, cancellationToken);
+        var inventory = await _earthDB.Inventories
+            .AsNoTracking()
+            .FirstOrNewAsync(inventory => inventory.Id == accountId, trackNew: false, cancellationToken: cancellationToken);
 
-            inventoryModel = results.Get<DB.Models.Player.Inventory>("inventory");
-            hotbarModel = results.Get<Hotbar>("hotbar");
-            journalModel = results.Get<Journal>("journal");
-        }
-        catch (EarthDB.DatabaseException ex)
-        {
-            throw new ServerErrorException(ex);
-        }
+        var hotbar = await _earthDB.Hotbars
+            .AsNoTracking()
+            .FirstOrNewAsync(hotbar => hotbar.Id == accountId, trackNew: false, cancellationToken: cancellationToken);
 
-        Dictionary<string, int?> hotbarItemCounts = [];
-        foreach (var item in hotbarModel.Items)
+        var journal = await _earthDB.Journals
+            .AsNoTracking()
+            .FirstOrNewAsync(journal => journal.Id == accountId, trackNew: false, cancellationToken: cancellationToken);
+
+        Dictionary<Guid, int> hotbarItemCounts = [];
+        foreach (var item in hotbar.Items)
         {
             if (item is not null)
             {
-                hotbarItemCounts[item.Uuid] = hotbarItemCounts.GetOrDefault(item.Uuid, 0) + item.Count;
+                hotbarItemCounts[item.Uuid] = hotbarItemCounts.GetValueOrDefault(item.Uuid, 0) + item.Count;
             }
         }
 
-        HashSet<string> hotbarItemInstances = [];
-        foreach (var item in hotbarModel.Items)
+        HashSet<Guid> hotbarItemInstances = [];
+        foreach (var item in hotbar.Items)
         {
             if (item is not null && item.InstanceId is not null)
             {
-                hotbarItemInstances.Add(item.InstanceId);
+                hotbarItemInstances.Add(item.InstanceId.Value);
             }
         }
 
-        var inventory = new Types.Inventory.Inventory(
-            [.. hotbarModel.Items.Select(item => item is not null ? new HotbarItem(
+        var inventoryResponse = new Types.Inventory.Inventory(
+            [.. hotbar.Items.Select(item => item is not null ? new HotbarItem(
                 item.Uuid,
                 item.Count,
                 item.InstanceId,
-                item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventoryModel.GetItemInstance(item.Uuid, item.InstanceId)?.Wear ?? 0, catalog.ItemsCatalog) : 0.0f
+                item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId.Value)?.Wear ?? 0, _catalog.ItemsCatalog, _logger) : 0.0f
                     ) : null)],
-            [.. inventoryModel.StackableItems.Select(item =>
+            [.. inventory.StackableItems.Select(item =>
             {
-                string uuid = item.Id;
-                int count = item.Count - hotbarItemCounts.GetOrDefault(uuid, 0) ?? 0;
-                Journal.ItemJournalEntry itemJournalEntry = journalModel.GetItem(uuid)!;
+                var uuid = item.Id;
+                int count = item.Count - hotbarItemCounts.GetValueOrDefault(uuid);
+                JournalEF.ItemJournalEntry itemJournalEntry = journal.GetItem(uuid)!;
                 string firstSeen = TimeFormatter.FormatTime(itemJournalEntry.FirstSeen);
                 string lastSeen = TimeFormatter.FormatTime(itemJournalEntry.LastSeen);
 
@@ -94,15 +95,15 @@ internal sealed class InventoryController : ControllerBase
                     new StackableInventoryItem.OnR(lastSeen)
                 );
             })],
-            [.. inventoryModel.NonStackableItems.Select(item =>
+            [.. inventory.NonStackableItems.Select(item =>
             {
-                string uuid = item.Id;
-                Journal.ItemJournalEntry itemJournalEntry = journalModel.GetItem(uuid)!;
+                var uuid = item.Id;
+                JournalEF.ItemJournalEntry itemJournalEntry = journal.GetItem(uuid)!;
                 string firstSeen = TimeFormatter.FormatTime(itemJournalEntry.FirstSeen);
                 string lastSeen = TimeFormatter.FormatTime(itemJournalEntry.LastSeen);
                 return new NonStackableInventoryItem(
                     uuid,
-                    [.. item.Instances.Where(instance => !hotbarItemInstances.Contains(instance.InstanceId)).Select(instance => new NonStackableInventoryItem.Instance(instance.InstanceId, ItemWear.WearToHealth(item.Id, instance.Wear, catalog.ItemsCatalog)))],
+                    [.. item.Instances.Where(instance => !hotbarItemInstances.Contains(instance.InstanceId)).Select(instance => new NonStackableInventoryItem.Instance(instance.InstanceId, ItemWear.WearToHealth(item.Id, instance.Wear, _catalog.ItemsCatalog, _logger)))],
                     1,
                     new NonStackableInventoryItem.OnR(firstSeen),
                     new NonStackableInventoryItem.OnR(lastSeen)
@@ -110,15 +111,14 @@ internal sealed class InventoryController : ControllerBase
             })]
         );
 
-        string resp = Json.Serialize(new EarthApiResponse(inventory));
+        string resp = Json.Serialize(new EarthApiResponse(inventoryResponse));
         return TypedResults.Content(resp, "application/json");
     }
 
     [HttpPut("hotbar")]
     public async Task<Results<BadRequest, ContentHttpResult>> SetHotbar(CancellationToken cancellationToken)
     {
-        string? playerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrEmpty(playerId))
+        if (!TryGetAccountId(out var accountId))
         {
             return TypedResults.BadRequest();
         }
@@ -129,42 +129,29 @@ internal sealed class InventoryController : ControllerBase
             return TypedResults.BadRequest();
         }
 
-        DB.Models.Player.Inventory inventoryModel;
-        Hotbar hotbarModel;
-        try
-        {
-            EarthDB.Results results = await new EarthDB.Query(true)
-                .Get("inventory", playerId, typeof(DB.Models.Player.Inventory))
-                .Then(results1 =>
-                {
-                    var hotbar = new Hotbar();
-                    for (int index = 0; index < hotbar.Items.Length; index++)
-                    {
-                        SetHotbarRequestItem item = setHotbarRequestItems[index];
-                        hotbar.Items[index] = item is not null ? new Hotbar.Item(item.Id, item.Count, item.InstanceId) : null;
-                    }
+        var inventory = await _earthDB.Inventories
+            .AsNoTracking()
+            .FirstOrNewAsync(inventory => inventory.Id == accountId, trackNew: false, cancellationToken: cancellationToken);
 
-                    hotbar.LimitToInventory(results1.Get<DB.Models.Player.Inventory>("inventory"));
-                    return new EarthDB.Query(true)
-                        .Update("hotbar", playerId, hotbar)
-                        .Get("inventory", playerId, typeof(DB.Models.Player.Inventory))
-                        .Get("hotbar", playerId, typeof(Hotbar));
-                })
-                .ExecuteAsync(earthDB, cancellationToken);
+        var hotbar = await _earthDB.Hotbars
+            .AsTracking()
+            .FirstOrNewAsync(hotbar => hotbar.Id == accountId, cancellationToken: cancellationToken);
 
-            inventoryModel = results.Get<DB.Models.Player.Inventory>("inventory");
-            hotbarModel = results.Get<Hotbar>("hotbar");
-        }
-        catch (EarthDB.DatabaseException ex)
+        for (int index = 0; index < hotbar.Items.Length; index++)
         {
-            throw new ServerErrorException(ex);
+            SetHotbarRequestItem item = setHotbarRequestItems[index];
+            hotbar.Items[index] = item is not null ? new HotbarEF.Item(item.Id, item.Count, item.InstanceId) : null;
         }
 
-        HotbarItem?[] hotbarItems = [.. hotbarModel.Items.Select(item => item is not null ? new HotbarItem(
+        hotbar.LimitToInventory(inventory);
+
+        await _earthDB.SaveChangesAsync(cancellationToken);
+
+        HotbarItem?[] hotbarItems = [.. hotbar.Items.Select(item => item is not null ? new HotbarItem(
             item.Uuid,
             item.Count,
             item.InstanceId,
-            item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventoryModel.GetItemInstance(item.Uuid, item.InstanceId)!.Wear, catalog.ItemsCatalog) : 0.0f
+            item.InstanceId is not null ? ItemWear.WearToHealth(item.Uuid, inventory.GetItemInstance(item.Uuid, item.InstanceId.Value)!.Wear, _catalog.ItemsCatalog, _logger) : 0.0f
         ) : null)];
 
         string resp = Json.Serialize(hotbarItems);
@@ -172,10 +159,9 @@ internal sealed class InventoryController : ControllerBase
     }
 
     [HttpPost("{itemId}/consume")]
-    public async Task<Results<ContentHttpResult, BadRequest>> ConsumeItem(string itemId, CancellationToken cancellationToken)
+    public async Task<Results<ContentHttpResult, BadRequest>> ConsumeItem(Guid itemId, CancellationToken cancellationToken)
     {
-        string? playerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrEmpty(playerId))
+        if (!TryGetAccountId(out var accountId))
         {
             return TypedResults.BadRequest();
         }
@@ -183,91 +169,88 @@ internal sealed class InventoryController : ControllerBase
         // request.timestamp
         long requestStartedOn = HttpContext.GetTimestamp();
 
-        Catalog.ItemsCatalogR.Item? item = catalog.ItemsCatalog.GetItem(itemId);
+        Catalog.ItemsCatalogR.Item? item = _catalog.ItemsCatalog.GetItem(itemId);
 
         if (item is null || item.ConsumeInfo is null)
         {
             return TypedResults.BadRequest();
         }
 
-        try
+        var inventory = await _earthDB.Inventories
+           .AsTracking()
+           .FirstOrNewAsync(inventory => inventory.Id == accountId, cancellationToken: cancellationToken);
+
+        var journal = await _earthDB.Journals
+            .AsTracking()
+            .FirstOrNewAsync(journal => journal.Id == accountId, cancellationToken: cancellationToken);
+
+        var profile = await _earthDB.Profiles
+            .AsTracking()
+            .FirstOrNewAsync(profile => profile.Id == accountId, cancellationToken: cancellationToken);
+
+        var boosts = await _earthDB.Boosts
+            .AsNoTracking()
+            .FirstOrNewAsync(boosts => boosts.Id == accountId, trackNew: false, cancellationToken: cancellationToken);
+
+        if (!inventory.TakeItems(itemId, 1))
         {
-            EarthDB.Results results = await new EarthDB.Query(true)
-                .Get("inventory", playerId, typeof(DB.Models.Player.Inventory))
-                .Get("journal", playerId, typeof(Journal))
-                .Get("profile", playerId, typeof(Profile))
-                .Get("boosts", playerId, typeof(Boosts))
-                .Then(results1 =>
+            return TypedResults.Content(Json.Serialize(new EarthApiResponse(null, null)), "application/json");
+        }
+
+        var results = new EarthDbContext.Results(_earthDB);
+
+        var returnItemIdNullable = item.ConsumeInfo.ReturnItemId;
+        if (returnItemIdNullable is { } returnItemId)
+        {
+            Catalog.ItemsCatalogR.Item? returnItem = _catalog.ItemsCatalog.GetItem(returnItemId);
+            Debug.Assert(returnItem is not null);
+
+            if (returnItem.Stackable)
+            {
+                inventory.AddItems(returnItemId, 1);
+            }
+            else
+            {
+                inventory.AddItems(returnItemId, [new NonStackableItemInstance(Guid.NewGuid(), 0)]);
+            }
+
+            if (journal.AddCollectedItem(returnItemId, requestStartedOn, 1) == 0)
+            {
+                if (returnItem.JournalEntry is not null)
                 {
-                    DB.Models.Player.Inventory inventory = results1.Get<DB.Models.Player.Inventory>("inventory");
-                    Journal journal = results1.Get<Journal>("journal");
-                    Profile profile = results1.Get<Profile>("profile");
-                    Boosts boosts = results1.Get<Boosts>("boosts");
-
-                    var query = new EarthDB.Query(true);
-
-                    if (!inventory.TakeItems(itemId, 1))
-                    {
-                        return new EarthDB.Query(false);
-                    }
-
-                    string? returnItemId = item.ConsumeInfo.ReturnItemId;
-                    if (returnItemId is not null)
-                    {
-                        Catalog.ItemsCatalogR.Item? returnItem = catalog.ItemsCatalog.GetItem(returnItemId);
-                        Debug.Assert(returnItem is not null);
-
-                        if (returnItem.Stackable)
-                        {
-                            inventory.AddItems(returnItemId, 1);
-                        }
-                        else
-                        {
-                            inventory.AddItems(returnItemId, [new NonStackableItemInstance(U.RandomUuid().ToString(), 0)]);
-                        }
-
-                        if (journal.AddCollectedItem(returnItemId, requestStartedOn, 1) == 0)
-                        {
-                            if (returnItem.JournalEntry is not null)
-                            {
-                                query.Then(TokenUtils.AddToken(playerId, new Tokens.JournalItemUnlockedToken(returnItemId)));
-                            }
-                        }
-                    }
-
-                    int healing = item.ConsumeInfo.Heal;
-
-                    int healingMultiplier = BoostUtils.GetActiveStatModifiers(boosts, requestStartedOn, catalog.ItemsCatalog).FoodMultiplier;
-                    if (healingMultiplier > 0)
-                    {
-                        healing = healing * (healingMultiplier + 100) / 100;
-                    }
-
-                    int maxPlayerHealth = BoostUtils.GetMaxPlayerHealth(boosts, requestStartedOn, catalog.ItemsCatalog);
-                    profile.Health += healing;
-                    if (profile.Health > maxPlayerHealth)
-                    {
-                        profile.Health = maxPlayerHealth;
-                    }
-
-                    query.Update("inventory", playerId, inventory).Update("journal", playerId, journal).Update("profile", playerId, profile);
-
-                    return query;
-                })
-                .ExecuteAsync(earthDB, cancellationToken);
-
-            string resp = Json.Serialize(new EarthApiResponse(null, new EarthApiResponse.UpdatesResponse(results)));
-            return TypedResults.Content(resp, "application/json");
+                    await TokenUtils.AddTokenAsync(results, accountId, new TokensEF.JournalItemUnlockedToken(returnItemId));
+                }
+            }
         }
-        catch (EarthDB.DatabaseException exception)
+
+        int healing = item.ConsumeInfo.Heal;
+
+        int healingMultiplier = BoostUtils.GetActiveStatModifiers(boosts, requestStartedOn, _catalog.ItemsCatalog).FoodMultiplier;
+        if (healingMultiplier > 0)
         {
-            throw new ServerErrorException(exception);
+            healing = healing * (healingMultiplier + 100) / 100;
         }
+
+        int maxPlayerHealth = BoostUtils.GetMaxPlayerHealth(boosts, requestStartedOn, _catalog.ItemsCatalog);
+        profile.Health += healing;
+        if (profile.Health > maxPlayerHealth)
+        {
+            profile.Health = maxPlayerHealth;
+        }
+
+        await _earthDB.SaveChangesAsync(cancellationToken);
+
+        results.Inventory = inventory.Version;
+        results.Journal = journal.Version;
+        results.Profile = profile.Version;
+
+        string resp = Json.Serialize(new EarthApiResponse(null, new EarthApiResponse.UpdatesResponse(results)));
+        return TypedResults.Content(resp, "application/json");
     }
 
     private sealed record SetHotbarRequestItem(
-        string Id,
+        Guid Id,
         int Count,
-        string? InstanceId
+        Guid? InstanceId
     );
 }

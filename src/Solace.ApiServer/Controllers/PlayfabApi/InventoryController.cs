@@ -9,6 +9,7 @@ namespace Solace.ApiServer.Controllers.PlayfabApi;
 internal sealed class InventoryController : SolaceControllerBase
 {
     [HttpPost("GetVirtualCurrencies")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult GetVirtualCurrencies()
         => JsonPascalCase(new PlayfabOkResponse(
             200,
@@ -25,6 +26,7 @@ internal sealed class InventoryController : SolaceControllerBase
         ));
 
     [HttpPost("redeem")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult Redeem()
         => JsonPascalCase(new PlayfabOkResponse(
             200,
@@ -37,6 +39,7 @@ internal sealed class InventoryController : SolaceControllerBase
         ));
 
     [HttpPost("GetInventoryItems")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult GetInventoryItems()
         => JsonPascalCase(new PlayfabOkResponse(
             200,

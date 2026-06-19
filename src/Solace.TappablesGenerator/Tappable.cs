@@ -1,9 +1,10 @@
-﻿using static Solace.TappablesGenerator.Tappable;
+﻿using System.ComponentModel;
+using static Solace.TappablesGenerator.Tappable;
 
 namespace Solace.TappablesGenerator;
 
-public record Tappable(
-    string Id,
+internal sealed record Tappable(
+    Guid Id,
     float Lat,
     float Lon,
     long SpawnTime,
@@ -13,7 +14,7 @@ public record Tappable(
     Item[] Items
 )
 {
-    public enum RarityE
+    internal enum RarityE
     {
         COMMON,
         UNCOMMON,
@@ -22,8 +23,25 @@ public record Tappable(
         LEGENDARY
     }
 
-    public sealed record Item(
-        string Id,
+    internal sealed record Item(
+        Guid Id,
         int Count
     );
+}
+
+internal static class TappableRarityExtensions
+{
+    extension(Tappable.RarityE)
+    {
+        public static Tappable.RarityE FromStaticData(StaticData.Catalog.ItemsCatalogR.Item.RarityE rarity)
+            => rarity switch
+            {
+                StaticData.Catalog.ItemsCatalogR.Item.RarityE.COMMON => Tappable.RarityE.COMMON,
+                StaticData.Catalog.ItemsCatalogR.Item.RarityE.UNCOMMON => Tappable.RarityE.UNCOMMON,
+                StaticData.Catalog.ItemsCatalogR.Item.RarityE.RARE => Tappable.RarityE.RARE,
+                StaticData.Catalog.ItemsCatalogR.Item.RarityE.EPIC => Tappable.RarityE.EPIC,
+                StaticData.Catalog.ItemsCatalogR.Item.RarityE.LEGENDARY => Tappable.RarityE.LEGENDARY,
+                _ => throw new InvalidEnumArgumentException(nameof(rarity), (int)rarity, typeof(StaticData.Catalog.ItemsCatalogR.Item.RarityE)),
+            };
+    }
 }

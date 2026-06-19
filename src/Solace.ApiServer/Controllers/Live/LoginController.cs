@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Serilog;
 using System.Buffers;
 using System.Diagnostics;
 using System.Security.Cryptography;
@@ -12,6 +11,11 @@ using System.Xml;
 using Solace.ApiServer.Models;
 using Solace.ApiServer.Utils;
 using Solace.Common.Utils;
+using Solace.DB.Models;
+using Solace.DB;
+using System.Runtime.InteropServices;
+using static Solace.Common.Constants.AccountConstants;
+using Solace.DB.Utils;
 
 namespace Solace.ApiServer.Controllers.Live;
 
@@ -21,9 +25,15 @@ internal sealed partial class LoginController : SolaceControllerBase
 {
     private static readonly RandomNumberGenerator _rng = RandomNumberGenerator.Create();
 
-    private static Config config => Program.config;
+    private readonly EarthDbContext _earthDb;
+    private readonly CryptoSecrets _cryptoSecrets;
 
-    private readonly LiveDbContext _dbContext;
+    private readonly int _loginSoapHeaderValidityMinutes;
+    private readonly int _loginDeviceTokenValidityMinutes;
+    private readonly int _loginUserTokenValidityMinutes;
+    private readonly int _loginXboxTokenValidityMinutes;
+
+    private readonly ILogger<LoginController> _logger;
 
     private static readonly (string, string)[] namespaces =
     [
@@ -41,21 +51,31 @@ internal sealed partial class LoginController : SolaceControllerBase
         ("ns1", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"),
     ];
 
-    public LoginController(LiveDbContext context)
+    public LoginController(EarthDbContext earthDb, CryptoSecrets cryptoSecrets, IConfiguration configuration, ILogger<LoginController> logger)
     {
-        _dbContext = context;
+        _earthDb = earthDb;
+        _cryptoSecrets = cryptoSecrets;
+
+        _loginSoapHeaderValidityMinutes = configuration.GetValue<int>("Authentication:Login:SoapHeaderValidityMinutes");
+        _loginDeviceTokenValidityMinutes = configuration.GetValue<int>("Authentication:Login:DeviceTokenValidityMinutes");
+        _loginUserTokenValidityMinutes = configuration.GetValue<int>("Authentication:Login:UserTokenValidityMinutes");
+        _loginXboxTokenValidityMinutes = configuration.GetValue<int>("Authentication:Login:XboxTokenValidityMinutes");
+
+        _logger = logger;
     }
 
     [HttpGet("ppsecure/InlineConnect.srf")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public VirtualFileHttpResult GetLoginPage()
         => TypedResults.VirtualFile("/login.html", "text/html");
 
     [HttpGet("ppsecure/reauthenticateStart")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public VirtualFileHttpResult GetReauthenticatePage()
         => TypedResults.VirtualFile("/reauthenticate.html", "text/html");
 
     private sealed record LoginResponse(
-        string UserId,
+        Guid UserId,
         string Username,
         string FirstName,
         string LastName,
@@ -71,9 +91,9 @@ internal sealed partial class LoginController : SolaceControllerBase
         username = username.Trim();
         password = password.Trim();
 
-        Log.Debug($"Login attempt: Username: {username}");
+        LogLoginAttempt(username);
 
-        var account = await _dbContext.Accounts
+        var account = await _earthDb.Accounts
             .FirstOrDefaultAsync(account => account.Username == username, cancellationToken);
 
         if (account is null)
@@ -109,73 +129,110 @@ internal sealed partial class LoginController : SolaceControllerBase
             lastName = null;
         }
 
-        Log.Debug($"Register attempt: Username: {username}, First name: {firstName}, Last name: {lastName}");
+        LogRegisterAttempt(username, firstName, lastName);
 
-        if (string.IsNullOrWhiteSpace(username) || username.Length < 3 || username.Length > 16)
+        if (string.IsNullOrWhiteSpace(username) || username.Length < UsernameLengthMin || username.Length > UsernameLengthMax)
         {
-            return TypedResults.BadRequest("Username must be 3-16 characters long");
+            return TypedResults.BadRequest($"Username must be {UsernameLengthMin}-{UsernameLengthMax} characters long");
         }
 
-        if (string.IsNullOrWhiteSpace(password) || password.Length < 4 || password.Length > 32)
+        if (string.IsNullOrWhiteSpace(password) || password.Length < PasswordLengthMin || password.Length > PasswordLengthMax)
         {
-            return TypedResults.BadRequest("Password must be 4-32 characters long");
+            return TypedResults.BadRequest($"Password must be {PasswordLengthMin}-{PasswordLengthMax} characters long");
         }
 
-        if (!string.IsNullOrWhiteSpace(firstName) && (firstName.Length < 2 || firstName.Length > 100))
+        if (!string.IsNullOrWhiteSpace(firstName) && (firstName.Length < NameLengthMin || firstName.Length > NameLengthMax))
         {
-            return TypedResults.BadRequest("First name must be 2-100 characters long");
+            return TypedResults.BadRequest($"First name must be {NameLengthMin}-{NameLengthMax} characters long");
         }
 
-        if (!string.IsNullOrWhiteSpace(lastName) && (lastName.Length < 2 || lastName.Length > 100))
+        if (!string.IsNullOrWhiteSpace(lastName) && (lastName.Length < NameLengthMin || lastName.Length > NameLengthMax))
         {
-            return TypedResults.BadRequest("Last name must be 2-100 characters long");
+            return TypedResults.BadRequest($"Last name must be {NameLengthMin}-{NameLengthMax} characters long");
         }
 
         if (!GetUsernameRegex().IsMatch(username))
         {
-            return TypedResults.BadRequest("Username must contain only: lowercase letters, numbers, underscore and colon");
+            return TypedResults.BadRequest($"Username must contain only: {UsernameAllowedCharacters}"); // keep in sync with GetUsernameRegex
         }
 
-        var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(account => account.Username == username, cancellationToken);
-
-        if (account is not null)
+        if (await _earthDb.Accounts
+            .AnyAsync(account => account.Username == username, cancellationToken))
         {
             return TypedResults.BadRequest("Account with the specified username already exists");
         }
 
-        string userId = GenerateUserId(username);
+        var accountId = GenerateAccountId(username); // todo: could we use Guid.CreateVersion7 instead?
 
         byte[] passwordSalt = new byte[16];
         _rng.GetBytes(passwordSalt);
 
         byte[] paswordHash = HashPassword(password, passwordSalt);
 
-        account = new Account()
+        var account = await _earthDb.GetOrCreateAccount(accountId, query => query);
+
+        account.Id = accountId;
+        account.CreatedDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        account.Username = username;
+        account.ProfilePictureUrl = Account.DefaultPictureUrl; // TODO
+        account.FirstName = firstName;
+        account.LastName = lastName;
+        account.PasswordSalt = passwordSalt;
+        account.PasswordHash = paswordHash;
+
+        try
         {
-            Id = userId,
-            CreatedDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            Username = username,
-            ProfilePictureUrl = $"images/default_pfp.png", // TODO
-            FirstName = firstName,
-            LastName = lastName,
-            PasswordSalt = passwordSalt,
-            PasswordHash = paswordHash,
-        };
+            await _earthDb.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.IsUniqueConstraintViolation)
+        {
+            LogConcurrencyConflictHitForUsername(username);
+            return TypedResults.BadRequest("Account with the specified username already exists");
+        }
 
-        _dbContext.Accounts.Add(account);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        Log.Information($"Account created: {username} ({userId})");
+        LogAccountCreated(accountId, username);
 
         return JsonCamelCase(CreateLoginResponse(account));
     }
 
     [HttpPost("ppsecure/reauthenticate")]
-    public async Task<IActionResult> Reauthenticate([FromForm] string userToken, [FromForm] string password, CancellationToken cancellationToken)
-        => throw new NotImplementedException(); // TODO
+    public async Task<Results<ContentHttpResult, NotFound<string>, BadRequest<string>, ForbidHttpResult>> Reauthenticate([FromForm] string userToken, [FromForm] string password, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(userToken) || string.IsNullOrEmpty(password))
+        {
+            return TypedResults.BadRequest("Invalid user or password");
+        }
+
+        var existingToken = JwtUtils.Verify<Tokens.Live.UserToken>(userToken, _cryptoSecrets.LoginUserTokenSecret, _logger, allowExpired: true);
+        if (existingToken is null)
+        {
+            return TypedResults.Forbid();
+        }
+
+        byte[] passwordBytes = Encoding.UTF8.GetBytes(password);
+        byte[] saltBytes = Convert.FromBase64String(existingToken.Data.PasswordSalt);
+
+        byte[] passwordCheckHash = Org.BouncyCastle.Crypto.Generators.SCrypt.Generate(passwordBytes, saltBytes, 16384, 8, 1, 64);
+
+        string passwordCheckHashBase64 = Convert.ToBase64String(passwordCheckHash);
+        if (passwordCheckHashBase64 != existingToken.Data.PasswordHash)
+        {
+            return TypedResults.Forbid();
+        }
+
+        var account = await _earthDb.Accounts
+            .FirstOrDefaultAsync(account => account.Id == existingToken.Data.UserId, cancellationToken);
+
+        if (account is null)
+        {
+            return TypedResults.NotFound("Account not found");
+        }
+
+        return JsonCamelCase(CreateLoginResponse(account));
+    }
 
     [HttpPost("ppsecure/deviceaddcredential.srf")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult DeviceAddCredential()
         => TypedResults.Content("""
             <DeviceAddResponse Success="true"><success>true</success><puid>0</puid></DeviceAddResponse>
@@ -220,11 +277,11 @@ internal sealed partial class LoginController : SolaceControllerBase
                 return TypedResults.BadRequest();
             }
 
-            var headerValidity = ValidityDatePair.Create(config.Login.SoapHeaderValidityMinutes);
+            var headerValidity = ValidityDatePair.Create(_loginSoapHeaderValidityMinutes);
 
-            var deviceTokenValidity = ValidityDatePair.Create(config.Login.DeviceTokenValidityMinutes);
+            var deviceTokenValidity = ValidityDatePair.Create(_loginDeviceTokenValidityMinutes);
             var deviceToken = new Tokens.Live.DeviceToken();
-            string deviceTokenString = JwtUtils.Sign(deviceToken, config.Login.DeviceTokenSecretBytes, deviceTokenValidity);
+            string deviceTokenString = JwtUtils.Sign(deviceToken, _cryptoSecrets.LoginDeviceTokenSecret, deviceTokenValidity);
 
             var response = new XmlDocument();
 
@@ -300,18 +357,6 @@ internal sealed partial class LoginController : SolaceControllerBase
 
                     var requestedSecurityToken = CreateElement(response, "wst", "RequestedSecurityToken");
                     {
-                        /*var encryptedData = CreateElement(response, "e", "EncryptedData");
-                        encryptedData.SetAttribute("Id", "BinaryDAToken0");
-                        {
-                            var cipherData = CreateElement(response, "e", "CipherData");
-                            {
-                                var cipherValue = CreateElement(response, "e", "CipherValue");
-                                cipherValue.InnerText = deviceTokenString;
-                                cipherData.AppendChild(cipherValue);
-                            }
-
-                            encryptedData.AppendChild(cipherData);
-                        }*/
                         var encryptedData = response.CreateElement("EncryptedData");
                         encryptedData.SetAttribute("Id", "BinaryDAToken0");
                         {
@@ -376,10 +421,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             {
                 var deviceTokenXml = new XmlDocument();
                 deviceTokenXml.LoadXml(deviceDATokenXMLString);
-                if (deviceTokenXml is not null)
-                {
-                    deviceTokenString = deviceTokenXml.SelectSingleNode("/EncryptedData/CipherData/CipherValue")?.InnerText ?? string.Empty;
-                }
+                deviceTokenString = deviceTokenXml.SelectSingleNode("/EncryptedData/CipherData/CipherValue")?.InnerText ?? string.Empty;
             }
 
             double requestCount = EvaluateNumber(request, "count(/S:Envelope/S:Body/ps:RequestMultipleSecurityTokens/*)", nsmgr);
@@ -394,30 +436,174 @@ internal sealed partial class LoginController : SolaceControllerBase
                 return TypedResults.BadRequest();
             }
 
-            var userToken = JwtUtils.Verify<Tokens.Live.UserToken>(userTokenString, config.Login.UserTokenSecretBytes, allowExpired: true);
+            var userToken = JwtUtils.Verify<Tokens.Live.UserToken>(userTokenString, _cryptoSecrets.LoginUserTokenSecret, _logger, allowExpired: true);
 #pragma warning disable IDE0059 // Unnecessary assignment of a value
-            var deviceToken = JwtUtils.Verify<Tokens.Live.DeviceToken>(deviceTokenString, config.Login.DeviceTokenSecretBytes, allowExpired: true);
+            var deviceToken = JwtUtils.Verify<Tokens.Live.DeviceToken>(deviceTokenString, _cryptoSecrets.LoginDeviceTokenSecret, _logger, allowExpired: true);
 #pragma warning restore IDE0059 // Unnecessary assignment of a value
 
             if (userToken is null || userToken.Expired is true)
             {
-                // TODO
-                throw new NotImplementedException();
+                var headerValidity = ValidityDatePair.Create(_loginSoapHeaderValidityMinutes);
+                string nonce = GenerateNonce();
+
+                string scheme = Request.IsHttps ? "https" : "http";
+                string host = Request.Host.Value!;
+                string path = Request.Path.Value ?? "";
+
+                if (path.EndsWith("RST2.srf", StringComparison.OrdinalIgnoreCase))
+                {
+                    path = path[..^"RST2.srf".Length];
+                }
+
+                if (!path.EndsWith('/'))
+                {
+                    path += "/";
+                }
+
+                string reauthenticateURL = userToken != null
+                    ? $"{scheme}://{host}{path}ppsecure/reauthenticateStart?username={HttpUtility.UrlEncode(userToken.Data.Username)}&userToken={HttpUtility.UrlEncode(userTokenString)}"
+                    : $"{scheme}://{host}{path}ppsecure/InlineConnect.srf";
+
+                var reauthenticateURLDocument = new XmlDocument();
+                var ppEle = CreateElement(reauthenticateURLDocument, "psf", "pp");
+                var inlineauthurlEle = CreateElement(reauthenticateURLDocument, "psf", "inlineauthurl");
+                inlineauthurlEle.InnerText = reauthenticateURL;
+                ppEle.AppendChild(inlineauthurlEle);
+                reauthenticateURLDocument.AppendChild(ppEle);
+
+                string reauthenticateURLDocumentCipherText = DoAESEncryption(
+                    ImmutableCollectionsMarshal.AsArray(_cryptoSecrets.LoginUserTokenSessionKey)!,
+                    nonce,
+                    reauthenticateURLDocument.OuterXml
+                );
+
+                var response = new XmlDocument();
+                var envelope = CreateElement(response, "S", "Envelope");
+                {
+                    var header = CreateElement(response, "S", "Header");
+                    {
+                        var security = CreateElement(response, "wsse", "Security");
+                        {
+                            var timestamp = CreateElement(response, "wsu", "Timestamp");
+                            {
+                                var created = CreateElement(response, "wsu", "Created");
+                                created.InnerText = headerValidity.IssuedStr;
+                                timestamp.AppendChild(created);
+
+                                var expires = CreateElement(response, "wsu", "Expires");
+                                expires.InnerText = headerValidity.ExpiresStr;
+                                timestamp.AppendChild(expires);
+                            }
+
+                            security.AppendChild(timestamp);
+
+                            XmlElement derivedKeyToken = response.CreateElement("wssc", "DerivedKeyToken", "http://schemas.xmlsoap.org/ws/2005/02/sc");
+                            derivedKeyToken.SetAttribute("xmlns:wssc", "http://schemas.xmlsoap.org/ws/2005/02/sc");
+                            derivedKeyToken.SetAttribute("xmlns:ns1", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd");
+
+                            XmlAttribute idAttr = response.CreateAttribute("ns1", "Id", "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd");
+                            idAttr.Value = "EncKey";
+                            derivedKeyToken.Attributes.Append(idAttr);
+                            derivedKeyToken.SetAttribute("Algorithm", "urn:liveid:SP800-108CTR-HMAC-SHA256");
+                            {
+                                XmlElement nonceEle = response.CreateElement("wssc", "Nonce", "http://schemas.xmlsoap.org/ws/2005/02/sc");
+                                nonceEle.InnerText = nonce;
+                                derivedKeyToken.AppendChild(nonceEle);
+                            }
+
+                            security.AppendChild(derivedKeyToken);
+                        }
+
+                        header.AppendChild(security);
+
+                        var encryptedPP = CreateElement(response, "psf", "EncryptedPP");
+                        {
+                            var encryptedData = CreateElement(response, "e", "EncryptedData");
+                            encryptedData.SetAttribute("Id", "EncPsf");
+                            encryptedData.SetAttribute("Type", "http://www.w3.org/2001/04/xmlenc#Element");
+
+                            var encryptionMethod = CreateElement(response, "e", "EncryptionMethod");
+                            encryptionMethod.SetAttribute("Algorithm", "http://www.w3.org/2001/04/xmlenc#aes256-cbc");
+                            encryptedData.AppendChild(encryptionMethod);
+
+                            var keyInfo = CreateElement(response, "ds", "KeyInfo");
+                            {
+                                var str = CreateElement(response, "wsse", "SecurityTokenReference");
+                                var reference = CreateElement(response, "wsse", "Reference");
+                                reference.SetAttribute("URI", "#EncKey");
+                                str.AppendChild(reference);
+                                keyInfo.AppendChild(str);
+                            }
+
+                            encryptedData.AppendChild(keyInfo);
+
+                            var cipherData = CreateElement(response, "e", "CipherData");
+                            {
+                                var cipherValue = CreateElement(response, "e", "CipherValue");
+                                cipherValue.InnerText = reauthenticateURLDocumentCipherText;
+                                cipherData.AppendChild(cipherValue);
+                            }
+
+                            encryptedData.AppendChild(cipherData);
+                        }
+
+                        header.AppendChild(encryptedPP);
+                    }
+
+                    envelope.AppendChild(header);
+
+                    var body = CreateElement(response, "S", "Body");
+                    {
+                        var fault = CreateElement(response, "S", "Fault");
+                        {
+                            var detail = CreateElement(response, "S", "Detail");
+                            {
+                                var error = CreateElement(response, "psf", "error");
+                                {
+                                    var value = CreateElement(response, "psf", "value");
+                                    value.InnerText = "0";
+                                    error.AppendChild(value);
+
+                                    var internalerror = CreateElement(response, "psf", "internalerror");
+                                    {
+                                        var code = CreateElement(response, "psf", "code");
+                                        code.InnerText = "0";
+                                        internalerror.AppendChild(code);
+                                    }
+
+                                    error.AppendChild(internalerror);
+                                }
+
+                                detail.AppendChild(error);
+                            }
+
+                            fault.AppendChild(detail);
+                        }
+
+                        body.AppendChild(fault);
+                    }
+
+                    envelope.AppendChild(body);
+                }
+
+                response.AppendChild(envelope);
+
+                return TypedResults.Content(response.OuterXml);
             }
             else
             {
-                var headerValidity = ValidityDatePair.Create(config.Login.SoapHeaderValidityMinutes);
+                var headerValidity = ValidityDatePair.Create(_loginSoapHeaderValidityMinutes);
                 string nonce = GenerateNonce();
 
-                var nextUserTokenValidity = ValidityDatePair.Create(config.Login.UserTokenValidityMinutes);
+                var nextUserTokenValidity = ValidityDatePair.Create(_loginUserTokenValidityMinutes);
                 var nextUserToken = userToken.Data;
-                string nextUserTokenString = JwtUtils.Sign(nextUserToken, config.Login.UserTokenSecretBytes, nextUserTokenValidity);
+                string nextUserTokenString = JwtUtils.Sign(nextUserToken, _cryptoSecrets.LoginUserTokenSecret, nextUserTokenValidity);
 
-                var xboxTokenValidity = ValidityDatePair.Create(config.Login.XboxTokenValidityMinutes);
+                var xboxTokenValidity = ValidityDatePair.Create(_loginXboxTokenValidityMinutes);
                 var xboxToken = new Tokens.Shared.XboxTicketToken(userToken.Data.UserId, userToken.Data.Username);
-                string xboxTokenString = JwtUtils.Sign(xboxToken, config.Login.XboxTokenSecretBytes, xboxTokenValidity);
+                string xboxTokenString = JwtUtils.Sign(xboxToken, _cryptoSecrets.LoginXboxTokenSecret, xboxTokenValidity);
 
-                string nextSessionKey = config.Login.UserTokenSessionKey;
+                string nextSessionKey = _cryptoSecrets.LoginUserTokenSessionKeyBase64; // todo: random?
 
                 var tokenDocument = new XmlDocument();
 
@@ -506,7 +692,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                 tokenDocument.AppendChild(requestSecurityTokenResponseCollection);
                 string tokenDocumentString = tokenDocument.OuterXml;
 
-                string tokenDocumentCipherText = DoAESEncryption(config.Login.UserTokenSessionKeyBytes, nonce, tokenDocumentString);
+                string tokenDocumentCipherText = DoAESEncryption(ImmutableCollectionsMarshal.AsArray(_cryptoSecrets.LoginUserTokenSessionKey)!, nonce, tokenDocumentString);
 
                 var response = new XmlDocument();
                 var envelope = CreateElement(response, "S", "Envelope");
@@ -602,8 +788,6 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        // return TypedResults.Ok();
-
         XmlElement CreateElement(XmlDocument doc, string prefix, string localName)
         {
             return doc.CreateElement(prefix, localName, nsmgr.LookupNamespace(prefix));
@@ -623,16 +807,18 @@ internal sealed partial class LoginController : SolaceControllerBase
         }
     }
 
-    private static LoginResponse CreateLoginResponse(Account account)
+    private LoginResponse CreateLoginResponse(Account account)
     {
-        var tokenValidity = ValidityDatePair.Create(config.Login.UserTokenValidityMinutes);
+        Debug.Assert(account.Username is not null);
+
+        var tokenValidity = ValidityDatePair.Create(_loginUserTokenValidityMinutes);
         var token = new Tokens.Live.UserToken(
             account.Id,
             account.Username,
             Convert.ToBase64String(account.PasswordSalt),
             Convert.ToBase64String(account.PasswordHash)
         );
-        string tokenString = JwtUtils.Sign(token, config.Login.UserTokenSecretBytes, tokenValidity);
+        string tokenString = JwtUtils.Sign(token, _cryptoSecrets.LoginUserTokenSecret, tokenValidity);
 
         return new LoginResponse(
             account.Id,
@@ -642,7 +828,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             tokenString,
             tokenValidity.IssuedStr,
             tokenValidity.ExpiresStr,
-            config.Login.UserTokenSessionKey
+            _cryptoSecrets.LoginUserTokenSessionKeyBase64 // todo: random?
         );
     }
 
@@ -659,25 +845,16 @@ internal sealed partial class LoginController : SolaceControllerBase
         return base64;
     }
 
-    private static string GenerateUserId(string username)
+    private static Guid GenerateAccountId(string username)
     {
-        Span<byte> usernameUTF8 = stackalloc byte[51]; //Encoding.UTF8.GetMaxByteCount(16)
+        Span<byte> usernameUTF8 = stackalloc byte[51]; // Encoding.UTF8.GetMaxByteCount(MaxUsernameLength)
         int usernameUTF8Length = Encoding.UTF8.GetBytes(username, usernameUTF8);
         usernameUTF8 = usernameUTF8[..usernameUTF8Length];
 
         Span<byte> usernameHash = stackalloc byte[32];
         SHA256.HashData(usernameUTF8, usernameHash);
 
-        return Convert.ToHexStringLower(usernameHash[..8]);
-    }
-
-    private static byte[] HashPassword(string password, byte[] salt)
-    {
-        Debug.Assert(password.Length <= 32);
-
-        byte[] passwordUTF8 = Encoding.UTF8.GetBytes(password);
-
-        return Org.BouncyCastle.Crypto.Generators.SCrypt.Generate(passwordUTF8, salt, 16384, 8, 1, 64);
+        return new Guid(usernameHash[..16], false);
     }
 
     private static string DoAESEncryption(byte[] sessionKey, string nonceBase64, string plainText)
@@ -714,6 +891,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             aes.Key = messageKey;
             aes.IV = iv;
 
+#pragma warning disable CA5401 // Do not use CreateEncryptor with non-default IV
             using (var encryptor = aes.CreateEncryptor(messageKey, iv))
             {
                 byte[] cipherData = encryptor.TransformFinalBlock(plainTextBytes, 0, plainTextBytes.Length);
@@ -721,14 +899,24 @@ internal sealed partial class LoginController : SolaceControllerBase
                 iv.AsSpan().CopyTo(cipherText.AsSpan());
                 cipherData.AsSpan().CopyTo(cipherText.AsSpan(iv.Length..));
             }
+#pragma warning restore CA5401 // Do not use CreateEncryptor with non-default IV
         }
 
         return Convert.ToBase64String(cipherText);
     }
 
-    [GeneratedRegex("^[a-z0-9_:]+$")]
-    private partial Regex GetUsernameRegex();
-
     [GeneratedRegex("&da=([^&]*)")]
     private partial Regex GetDeviceDATokenStringRegex();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Login attempt - Username: {Username}")]
+    private partial void LogLoginAttempt(string Username);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Register attempt - Username: {Username}, First name: {FirstName}, Last name: {LastName}")]
+    private partial void LogRegisterAttempt(string Username, string? FirstName, string? LastName);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Account created - Id: {AccountId}, Username: {Username}")]
+    private partial void LogAccountCreated(Guid AccountId, string Username);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Concurrency conflict hit for username {Username}")]
+    private partial void LogConcurrencyConflictHitForUsername(string Username);
 }

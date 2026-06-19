@@ -2,15 +2,19 @@
 
 public static class RandomExtensions
 {
-    public static float NextSingle(this Random random, float min, float max)
+    extension(Random random)
     {
-        if (min >= max)
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA5394:Do not use insecure randomness", Justification = "Extension for random")]
+        public float NextSingle(float min, float max)
         {
-            throw new ArgumentOutOfRangeException(nameof(min), "Minimum value must be less than maximum value.");
-        }
+            if (min >= max)
+            {
+                throw new ArgumentOutOfRangeException(nameof(min), "Minimum value must be less than maximum value.");
+            }
 
-        float range = max - min;
-        float sample = random.NextSingle() * range;
-        return sample + min;
+            float range = max - min;
+            float sample = random.NextSingle() * range;
+            return sample + min;
+        }
     }
 }

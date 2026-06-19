@@ -1,14 +1,15 @@
-﻿using Serilog;
-using System.Buffers;
+﻿using System.Buffers;
 using System.Collections.Concurrent;
 using System.IO.Pipelines;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
+using Solace.Common;
 
 namespace Solace.EventBus.Client;
 
-public sealed class EventBusClient : IAsyncDisposable
+public sealed partial class EventBusClient : IAsyncDisposable
 {
     private readonly TcpClient _tcpClient;
     private readonly NetworkStream _networkStream;
@@ -71,10 +72,22 @@ public sealed class EventBusClient : IAsyncDisposable
         return new EventBusClient(tcpClient);
     }
 
-    public sealed class ConnectException : Exception
+    public sealed class ConnectException : EventBusClientException
     {
-        public ConnectException(string message) : base(message) { }
-        public ConnectException(string message, Exception innerException) : base(message, innerException) { }
+        public ConnectException()
+            : base()
+        {
+        }
+
+        public ConnectException(string message)
+            : base(message)
+        {
+        }
+
+        public ConnectException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -95,17 +108,19 @@ public sealed class EventBusClient : IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _isClosed, 1) == 0)
         {
-            _cts.Cancel();
+            await _cts.CancelAsync();
             _outgoingMessageQueue.Writer.TryComplete();
 
             try
             {
-                _tcpClient.Dispose(); // Closes underlying stream and socket
+                _tcpClient.Dispose();
             }
             catch
             {
-                // empty
             }
+
+            await _networkStream.DisposeAsync();
+            _cts.Dispose();
         }
 
         await Task.CompletedTask;
@@ -183,9 +198,10 @@ public sealed class EventBusClient : IAsyncDisposable
                 }
             }
         }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException or SocketException)
+        catch (Exception exception) when (exception is OperationCanceledException or IOException or SocketException)
         {
-            Log.Error(ex, "EventBusClient error");
+            var logger = GlobalLoggerFactory.CreateLogger<EventBusClient>();
+            LogEventBusClientError(logger, exception);
             SetError();
         }
 
@@ -354,4 +370,7 @@ public sealed class EventBusClient : IAsyncDisposable
             return false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "EventBusClient error")]
+    private static partial void LogEventBusClientError(ILogger logger, Exception exception);
 }

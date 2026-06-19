@@ -1,17 +1,21 @@
 ﻿using Microsoft.IdentityModel.Tokens;
-using Serilog;
 using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.Json;
 using Solace.ApiServer.Models;
 using Solace.Common;
+using System.Collections.Immutable;
+using System.Runtime.InteropServices;
+using BitcoderCZ.Utils;
 
 namespace Solace.ApiServer.Utils;
 
-internal static class JwtUtils
+internal static partial class JwtUtils
 {
     private static readonly JwtSecurityTokenHandler jwtHandler = new JwtSecurityTokenHandler();
+
+    private const string KeyId = "solace-kid-v1";
 
     public static string Sign<TData>(Token<TData> token, byte[] secret)
         where TData : ITokenData<TData>
@@ -21,9 +25,20 @@ internal static class JwtUtils
         where TData : ITokenData<TData>
         => SignInternal<TData>(data, secret, validity);
 
+    public static string Sign<TData>(Token<TData> token, ImmutableArray<byte> secret)
+        where TData : ITokenData<TData>
+        => SignInternal<TData>(token, ImmutableCollectionsMarshal.AsArray(secret)!, new ValidityDatePair(token.Issued, token.Expires));
+
+    public static string Sign<TData>(TData data, ImmutableArray<byte> secret, ValidityDatePair validity)
+        where TData : ITokenData<TData>
+        => SignInternal<TData>(data, ImmutableCollectionsMarshal.AsArray(secret)!, validity);
+
     private static string SignInternal<TData>(object dataOrToken, byte[] secret, ValidityDatePair validity)
         where TData : ITokenData<TData>
     {
+        ThrowHelper.ThrowIfNull(dataOrToken);
+        ThrowHelper.ThrowIfNull(secret);
+
         TData data = dataOrToken switch
         {
             Token<TData> token => token.Data,
@@ -39,26 +54,45 @@ internal static class JwtUtils
             new Claim("data", Json.Serialize(data)),
         ];
 
+        var signingKey = new SymmetricSecurityKey(secret)
+        {
+            KeyId = KeyId,
+        };
+
+        var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
+
         return jwtHandler.WriteToken(new JwtSecurityToken(
-            new JwtHeader(new SigningCredentials(
-                new SymmetricSecurityKey(secret),
-                SecurityAlgorithms.HmacSha256)),
+            new JwtHeader(credentials),
             new JwtPayload(payload)
         ));
     }
 
-    public static Token<TData>? Verify<TData>(string token, byte[] secret, bool allowExpired = false)
+    public static Token<TData>? Verify<TData>(string token, ImmutableArray<byte> secret, ILogger logger, bool allowExpired = false)
+        where TData : ITokenData<TData>
+        => Verify<TData>(token, ImmutableCollectionsMarshal.AsArray(secret)!, logger, allowExpired);
+
+    public static Token<TData>? Verify<TData>(string token, byte[] secret, ILogger logger, bool allowExpired = false)
         where TData : ITokenData<TData>
     {
+        ThrowHelper.ThrowIfNull(token);
+        ThrowHelper.ThrowIfNull(secret);
+
         try
         {
+            var signingKey = new SymmetricSecurityKey(secret)
+            {
+                KeyId = KeyId,
+            };
+
             var claims = jwtHandler.ValidateToken(token, new TokenValidationParameters()
             {
+#pragma warning disable CA5404 // Do not disable token validation checks todo
                 ValidateIssuer = false,
                 ValidateAudience = false,
+#pragma warning restore CA5404 // Do not disable token validation checks
                 ValidateLifetime = !allowExpired,
                 ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(secret),
+                IssuerSigningKey = signingKey,
             }, out _).Claims.ToDictionary(claim => claim.Type, claim => claim.Value);
 
             if (!claims.TryGetValue("iat", out string? iat) || !claims.TryGetValue("exp", out string? exp) || !claims.TryGetValue("data", out string? dataJson))
@@ -81,15 +115,21 @@ internal static class JwtUtils
 
             return new Token<TData>(DateTimeOffset.FromUnixTimeSeconds(issuedSeconds), expires, allowExpired && expires < DateTimeOffset.UtcNow, data);
         }
-        catch (SecurityTokenException ex)
+        catch (SecurityTokenException exception)
         {
-            Log.Debug($"JWT verification failed: {ex.Message}");
+            LogJwtVerificationFail(logger, exception);
             return null;
         }
-        catch (JsonException ex)
+        catch (JsonException exception)
         {
-            Log.Debug($"JWT data deserialization failed: {ex.Message}");
+            LogJwtDataDeserializationFail(logger, exception);
             return null;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "JWT verification failed")]
+    private static partial void LogJwtVerificationFail(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "JWT data deserialization failed")]
+    private static partial void LogJwtDataDeserializationFail(ILogger logger, Exception exception);
 }

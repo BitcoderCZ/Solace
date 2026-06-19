@@ -1,12 +1,12 @@
-﻿using Serilog;
-using SkiaSharp;
+﻿using SkiaSharp;
 using System.Collections.Frozen;
 using System.Text.Json;
 using Solace.TileRenderer.Wkb;
+using Microsoft.Extensions.Logging;
 
 namespace Solace.TileRenderer;
 
-public class TileRenderer
+internal sealed partial class TileRenderer
 {
     // Map layers with their JSON string versions
     private static readonly FrozenDictionary<string, RenderLayer> layerStringMapping = new Dictionary<string, RenderLayer>()
@@ -66,7 +66,7 @@ public class TileRenderer
         List<string> tags = [];
         Dictionary<string, Dictionary<string, RenderLayer>> tagsMap = new(StringComparer.OrdinalIgnoreCase);
 
-        logger.Information("Loading tags");
+        LogLoadingTags(logger);
 
         using (var doc = JsonDocument.Parse(tagMapJson))
         {
@@ -82,7 +82,7 @@ public class TileRenderer
                     string tagValue = valueField.Name;
                     string tagMapping = "_NO_RENDER";
 
-                    if (valueField.Value.ValueKind == JsonValueKind.String)
+                    if (valueField.Value.ValueKind is JsonValueKind.String)
                     {
                         tagMapping = valueField.Value.GetString() ?? "";
                     }
@@ -93,14 +93,14 @@ public class TileRenderer
                     }
                     else
                     {
-                        logger.Warning($"Unknown layer mapping '{tagMapping}'");
+                        LogUnknownLayerMapping(logger, tagMapping);
                         tagsMap[tagName][tagValue] = RenderLayer.LAYER_NONE;
                     }
                 }
             }
         }
 
-        logger.Information("Loaded tags");
+        LogLoadedTags(logger);
 
         return new TileRenderer(tags, tagsMap);
     }
@@ -111,11 +111,11 @@ public class TileRenderer
 
         canvas.Clear(LayerToColor((int)RenderLayer.LAYER_NONE));
 
-        logger.Information("Loading map data");
+        LogLoadingMapData(logger);
 
-        var layers = await dataSource.GetTileAsync(new RenderContext(_tags, _tagsMap), zoom, tileX, tileY, cancellationToken);
+        var layers = await dataSource.GetTileAsync(new RenderContext(_tags, _tagsMap), zoom, tileX, tileY, logger, cancellationToken);
 
-        logger.Information("Rendering image");
+        LogRenderingImage(logger);
         for (int renderLayer = 0; renderLayer < (int)RenderLayer.LAYER_NONE; renderLayer++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -136,4 +136,19 @@ public class TileRenderer
         byte bwColor = (byte)(layerColourMapping[layer] * 255);
         return new SKColor(bwColor, bwColor, bwColor);
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loading tags")]
+    private static partial void LogLoadingTags(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Unknown layer mapping '{TagMapping}'")]
+    private static partial void LogUnknownLayerMapping(ILogger logger, string TagMapping);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loaded tags")]
+    private static partial void LogLoadedTags(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Loading map data")]
+    private static partial void LogLoadingMapData(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Rendering image")]
+    private static partial void LogRenderingImage(ILogger logger);
 }

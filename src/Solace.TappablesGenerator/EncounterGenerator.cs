@@ -1,29 +1,29 @@
-﻿using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Solace.Common.Utils;
 using Solace.StaticData;
 
 namespace Solace.TappablesGenerator;
 
-public class EncounterGenerator
+internal sealed partial class EncounterGenerator
 {
     // TODO: make these configurable
-    private static readonly int CHANCE_PER_TILE = 4;
-    private static readonly long MIN_DELAY = 1 * 60 * 1000;
-    private static readonly long MAX_DELAY = 2 * 60 * 1000;
+    private const int CHANCE_PER_TILE = 4;
+    private const long MIN_DELAY = 1 * 60 * 1000;
+    private const long MAX_DELAY = 2 * 60 * 1000;
 
     private readonly StaticData.StaticData _staticData;
     private readonly int _maxDuration;
 
     private readonly Random _random;
 
-    public EncounterGenerator(StaticData.StaticData staticData)
+    public EncounterGenerator(StaticData.StaticData staticData, ILogger<EncounterGenerator> logger)
     {
         _staticData = staticData;
 
         if (_staticData.EncountersConfig.Encounters.Length == 0)
         {
-            Log.Warning("No encounter configs provided");
+            LogNoEncounterConfigsProvided(logger);
         }
 
         _maxDuration = _staticData.EncountersConfig.Encounters.Select(encounterConfig => encounterConfig.Duration).DefaultIfEmpty().Max() * 1000;
@@ -42,11 +42,13 @@ public class EncounterGenerator
         }
 
         List<Encounter> encounters = [];
+#pragma warning disable CA5394 // Do not use insecure randomness - idc
         if (_random.Next(0, CHANCE_PER_TILE) == 0)
         {
             long spawnDelay = _random.NextInt64(MIN_DELAY, MAX_DELAY + 1);
 
             EncountersConfig.EncounterConfig encounterConfig = _staticData.EncountersConfig.Encounters[_random.Next(0, _staticData.EncountersConfig.Encounters.Length)];
+#pragma warning restore CA5394 // Do not use insecure randomness
 
             Span<float> tileBounds = stackalloc float[4];
             GetTileBounds(tileX, tileY, tileBounds);
@@ -54,13 +56,13 @@ public class EncounterGenerator
             float lon = _random.NextSingle(tileBounds[2], tileBounds[3]);
 
             var encounter = new Encounter(
-                U.RandomUuid().ToString(),
+                Guid.CreateVersion7(),
                 lat,
                 lon,
                 currentTime + spawnDelay,
                 encounterConfig.Duration * 1000,
                 encounterConfig.Icon,
-                Enum.Parse<Encounter.RarityE>(encounterConfig.Rarity.ToString()),
+                Encounter.RarityE.FromStaticData(encounterConfig.Rarity),
                 encounterConfig.EncounterBuildplateId
             );
 
@@ -85,4 +87,7 @@ public class EncounterGenerator
 
     private static float YToLat(float y)
         => (float.Atan(float.Sinh((1.0f - y * 2.0f) * float.Pi))) * (180f / float.Pi);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No encounter configs provided")]
+    private static partial void LogNoEncounterConfigsProvided(ILogger logger);
 }

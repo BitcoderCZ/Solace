@@ -1,14 +1,14 @@
-﻿using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Solace.Common.Utils;
 using Solace.PreviewGenerator.NBT;
 using Solace.PreviewGenerator.Utils;
 
 namespace Solace.PreviewGenerator.Registry;
 
-public static class BedrockBlocks
+public static partial class BedrockBlocks
 {
     private static readonly Dictionary<BlockNameAndState, int> stateToIdMap = [];
     private static readonly Dictionary<int, BlockNameAndState> idToStateMap = [];
@@ -33,7 +33,7 @@ public static class BedrockBlocks
         }
     }
 
-    public static void Initialize(string staticData)
+    public static void Initialize(string staticData, ILogger logger)
     {
         if (!_isInitialized)
         {
@@ -41,16 +41,16 @@ public static class BedrockBlocks
             {
                 if (!_isInitialized)
                 {
-                    InitializeInternal(staticData);
+                    InitializeInternal(staticData, logger);
                     _isInitialized = true;
                 }
             }
         }
     }
 
-    private static void InitializeInternal(string staticData)
+    private static void InitializeInternal(string staticData, ILogger logger)
     {
-        DataFile.Load(Path.Combine(staticData, "registry", "blocks_bedrock.json"), _root =>
+        DataFile.Load(Path.Combine(staticData, "registry", "blocks_bedrock.json"), logger, _root =>
         {
             var root = (JsonArray)_root;
             foreach (var _element in root)
@@ -79,12 +79,12 @@ public static class BedrockBlocks
                 var blockNameAndState = new BlockNameAndState(name, state);
                 if (!stateToIdMap.TryAdd(blockNameAndState, id))
                 {
-                    Log.Warning($"Duplicate Bedrock block name/state {name}", StringComparison.Ordinal);
+                    LogDuplicateBedrockBlockNameState(logger, name);
                 }
 
                 if (!idToStateMap.TryAdd(id, blockNameAndState))
                 {
-                    Log.Warning($"Duplicate Bedrock block ID {id}", StringComparison.Ordinal);
+                    LogDuplicateBedrockBlockId(logger, id);
                 }
             }
         });
@@ -104,14 +104,14 @@ public static class BedrockBlocks
         EnsureInitialized();
 
         var blockNameAndState = new BlockNameAndState(name, state);
-        return stateToIdMap.GetOrDefault(blockNameAndState, -1);
+        return stateToIdMap.GetValueOrDefault(blockNameAndState, -1);
     }
 
     public static string? GetName(int id)
     {
         EnsureInitialized();
 
-        BlockNameAndState? blockNameAndState = idToStateMap.GetOrDefault(id, null);
+        var blockNameAndState = idToStateMap.GetValueOrDefault(id);
         return blockNameAndState?.Name;
     }
 
@@ -119,14 +119,18 @@ public static class BedrockBlocks
     {
         EnsureInitialized();
 
-        BlockNameAndState? blockNameAndState = idToStateMap.GetOrDefault(id, null);
+        var blockNameAndState = idToStateMap.GetValueOrDefault(id);
         if (blockNameAndState is null)
         {
             return null;
         }
 
         Dictionary<string, object> state = [];
-        blockNameAndState.State.ForEach((key, value) => state[key] = value);
+        foreach (var (key, value) in blockNameAndState.State)
+        {
+            state[key] = value;
+        }
+
         return state;
     }
 
@@ -134,14 +138,14 @@ public static class BedrockBlocks
     {
         EnsureInitialized();
 
-        BlockNameAndState? blockNameAndState = idToStateMap.GetOrDefault(id, null);
+        var blockNameAndState = idToStateMap.GetValueOrDefault(id);
         if (blockNameAndState is null)
         {
             return null;
         }
 
         NbtMapBuilder builder = NbtMap.Builder();
-        blockNameAndState.State.ForEach((key, value) =>
+        foreach (var (key, value) in blockNameAndState.State)
         {
             if (value is string s)
             {
@@ -155,7 +159,8 @@ public static class BedrockBlocks
             {
                 throw new InvalidOperationException();
             }
-        });
+        }
+
         return builder.Build();
     }
 
@@ -179,11 +184,17 @@ public static class BedrockBlocks
                 hash.Add(kvp.Key, StringComparer.Ordinal);
                 hash.Add(kvp.Value);
             }
-            
+
             return hash.ToHashCode();
         }
 
         public override bool Equals(object? obj)
             => obj is BlockNameAndState other && Name.Equals(other.Name, StringComparison.Ordinal) && State.SequenceEqual(other.State);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Duplicate Bedrock block name/state '{Name}'")]
+    private static partial void LogDuplicateBedrockBlockNameState(ILogger logger, string Name);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Duplicate Bedrock block ID '{Id}'")]
+    private static partial void LogDuplicateBedrockBlockId(ILogger logger, int Id);
 }

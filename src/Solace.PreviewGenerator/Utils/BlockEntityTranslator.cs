@@ -1,4 +1,4 @@
-﻿using Serilog;
+﻿using Microsoft.Extensions.Logging;
 using SharpNBT;
 using Solace.PreviewGenerator.BlockEntity;
 using Solace.PreviewGenerator.NBT;
@@ -6,9 +6,9 @@ using Solace.PreviewGenerator.Registry;
 
 namespace Solace.PreviewGenerator.Utils;
 
-public static class BlockEntityTranslator
+public static partial class BlockEntityTranslator
 {
-    public static NbtMap? TranslateBlockEntity(JavaBlocks.BedrockMapping.BlockEntityR blockEntityMapping, BlockEntityInfo? javaBlockEntityInfo)
+    public static NbtMap? TranslateBlockEntity(JavaBlocks.BedrockMapping.BlockEntityR blockEntityMapping, BlockEntityInfo? javaBlockEntityInfo, ILogger logger)
     {
         switch (blockEntityMapping.Type)
         {
@@ -58,7 +58,7 @@ public static class BlockEntityTranslator
 
                     if (javaBlockEntityInfo is null)
                     {
-                        Log.Debug("Not sending moving block entity data until server provides data");
+                        LogNotSendingMovingBlockEntityDataUntilServerProvidesData(logger);
                         return null;
                     }
 
@@ -66,7 +66,7 @@ public static class BlockEntityTranslator
 
                     if (!javaNbt.ContainsKey("blockStateId"))
                     {
-                        Log.Warning("Moving block entity data did not contain numeric block state ID");
+                        LogMovingBlockEntityDataDidNotContainNumericBlockStateId(logger);
                         return null;
                     }
 
@@ -74,7 +74,7 @@ public static class BlockEntityTranslator
                     JavaBlocks.BedrockMapping? bedrockMapping = JavaBlocks.GetBedrockMapping(javaBlockId);
                     if (bedrockMapping is null)
                     {
-                        Log.Warning($"Moving block entity contained block with no mapping {JavaBlocks.GetName(javaBlockId)}");
+                        LogMovingBlockEntityContainedBlockWithNoMapping(logger, JavaBlocks.GetName(javaBlockId));
                         return null;
                     }
 
@@ -93,7 +93,7 @@ public static class BlockEntityTranslator
 
                     if (bedrockMapping.BlockEntity is not null)
                     {
-                        NbtMap? blockEntityNbt = BlockEntityTranslator.TranslateBlockEntity(bedrockMapping.BlockEntity, null);
+                        NbtMap? blockEntityNbt = BlockEntityTranslator.TranslateBlockEntity(bedrockMapping.BlockEntity, null, logger);
                         if (blockEntityNbt is not null)
                         {
                             builder.PutCompound("movingEntity", blockEntityNbt.ToBuilder().PutInt("x", javaBlockEntityInfo.X).PutInt("y", javaBlockEntityInfo.Y).PutInt("z", javaBlockEntityInfo.Z).PutBoolean("isMovable", false).Build());
@@ -102,7 +102,7 @@ public static class BlockEntityTranslator
 
                     if (!javaNbt.ContainsKey("basePos"))
                     {
-                        Log.Warning("Moving block entity data did not contain piston base position");
+                        LogMovingBlockEntityDataDidNotContainPistonBasePosition(logger);
                         return null;
                     }
 
@@ -129,4 +129,16 @@ public static class BlockEntityTranslator
                 throw new InvalidOperationException();
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Not sending moving block entity data until server provides data")]
+    private static partial void LogNotSendingMovingBlockEntityDataUntilServerProvidesData(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Moving block entity data did not contain numeric block state ID")]
+    private static partial void LogMovingBlockEntityDataDidNotContainNumericBlockStateId(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Moving block entity contained block with no mapping '{JavaName}'")]
+    private static partial void LogMovingBlockEntityContainedBlockWithNoMapping(ILogger logger, string? JavaName);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Moving block entity data did not contain piston base position")]
+    private static partial void LogMovingBlockEntityDataDidNotContainPistonBasePosition(ILogger logger);
 }

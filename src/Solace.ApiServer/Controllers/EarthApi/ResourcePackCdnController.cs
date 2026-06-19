@@ -1,7 +1,6 @@
 ﻿using Asp.Versioning;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-using Serilog;
 using Solace.ApiServer.Types;
 using Solace.ApiServer.Utils;
 using Solace.Common;
@@ -31,24 +30,38 @@ internal sealed class ResourcePackController : ControllerBase
 
 //Heres the resource pack!
 [Route("cdn/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35")]
-public class ResourcePackCdnController : ControllerBase
+internal sealed partial class ResourcePackCdnController : ControllerBase
 {
-    [HttpGet, HttpHead]
-    public async Task<Results<BadRequest, FileContentHttpResult>> Get()
+    private readonly StaticData.StaticData _staticData;
+    private readonly ILogger<ResourcePackController> _logger;
+
+    public ResourcePackCdnController(StaticData.StaticData staticData, ILogger<ResourcePackController> logger)
     {
-        string resourcePackFilePath = Path.Combine(Program.staticData.Directory, @"resourcepacks/vanilla.zip"); //resource packs are distributed as renamed zip files containing an MCpack
+        _staticData = staticData;
+        _logger = logger;
+    }
+
+    [HttpGet, HttpHead]
+    public async Task<Results<BadRequest, PhysicalFileHttpResult>> Get()
+    {
+        string resourcePackFilePath = Path.Combine(_staticData.Directory, "resourcepacks", "vanilla.zip"); //resource packs are distributed as renamed zip files containing an MCpack
 
         if (!System.IO.File.Exists(resourcePackFilePath))
         {
-            Log.Error("[Resourcepacks] Error! Resource pack file not found.");
+            LogResourcepackNotFound();
             return TypedResults.BadRequest(); //we cannot serve you.
         }
 
-        // TODO: use Stream
-        byte[] fileData = await System.IO.File.ReadAllBytesAsync(resourcePackFilePath); //Namespaces
-        var cd = new System.Net.Mime.ContentDisposition { FileName = "dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35", Inline = true };
-        Response.Headers.Append("Content-Disposition", cd.ToString());
+        string downloadName = "dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35";
 
-        return TypedResults.File(fileData, "application/octet-stream", "dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35");
+        return TypedResults.PhysicalFile(
+            path: resourcePackFilePath,
+            contentType: "application/octet-stream",
+            fileDownloadName: downloadName,
+            enableRangeProcessing: true
+        );
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Resource pack file not found")]
+    private partial void LogResourcepackNotFound();
 }

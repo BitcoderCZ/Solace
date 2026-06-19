@@ -9,6 +9,7 @@ internal sealed class AbController : SolaceControllerBase
 {
     // TODO: try to set sunsetting to 0/false, see what it does
     [HttpGet]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult Get()
 #pragma warning disable CA1825 // Avoid zero-length array allocations
 #pragma warning disable CA1861 // Avoid constant arrays as arguments

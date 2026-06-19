@@ -6,8 +6,13 @@ namespace Solace.ApiServer.Controllers.XboxLive;
 
 [Route("users")]
 [Route("userpresence.xboxlive.com/users")]
-internal sealed partial class UserpresenceController : SolaceControllerBase
+internal sealed partial class UserpresenceController : LoginServerControllerBase
 {
+    public UserpresenceController(CryptoSecrets cryptoSecrets, ILogger<UserpresenceController> logger)
+        : base(cryptoSecrets, logger)
+    {
+    }
+
     [HttpPost("{xuidParam}/devices/current/titles/current")]
     public Results<Ok, UnauthorizedHttpResult, BadRequest> GetTitles(string xuidParam)
     {
@@ -21,9 +26,9 @@ internal sealed partial class UserpresenceController : SolaceControllerBase
 
         Match xuidMatch = GetXuidRegex().Match(xuidParam);
 
-        string? xuid = xuidMatch.Success ? xuidMatch.Groups[1].Value : null;
+        string? xuidString = xuidMatch.Success ? xuidMatch.Groups[1].Value : null;
 
-        if (xuid is null)
+        if (xuidString is null || !Guid.TryParse(xuidString, out var xuid))
         {
             return TypedResults.BadRequest();
         }

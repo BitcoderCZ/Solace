@@ -1,122 +1,65 @@
 #!/usr/bin/env pwsh
-Param (
-    [string] $configuration = 'Release',
-    [string[]] $profiles = @('framework-dependent-win-x64', 'framework-dependent-linux-x64') # 'framework-dependent-osx-arm64'
+param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$Profiles
 )
 
-function Invoke-ProjectPublish {
-    param (
-        [Parameter(Mandatory = $true)] [string]$ProjectPath,
-        [Parameter(Mandatory = $true)] [string]$OutDir,
-        [Parameter(Mandatory = $true)] [string]$Configuration,
-        [Parameter(Mandatory = $true)] [string]$BuildProfile
-    )
-
-    Write-Host "Publishing project $(Split-Path $ProjectPath -Leaf) for profile: $BuildProfile" -ForegroundColor Gray
-
-    if ($BuildProfile -eq 'framework-dependent') {
-        dotnet publish $ProjectPath -o $OutDir --no-self-contained -c $Configuration /p:PublishSingleFile=false
-    }
-    elseif ($BuildProfile -like 'framework-dependent-*') {
-        $rid = $BuildProfile.Replace('framework-dependent-', '')
-        dotnet publish $ProjectPath -o $OutDir --no-self-contained -c $Configuration -r $rid /p:PublishSingleFile=false
-    }
-    else {
-        dotnet publish $ProjectPath -o $OutDir --sc -c $Configuration -r $BuildProfile
-    }
-}
+$ErrorActionPreference = "Stop"
 
 git submodule update --init --recursive
 
-$projects = "Solace.ApiServer", "Solace.Buildplate", "Solace.EventBus.Server", "Solace.ObjectStore.Server", "Solace.TappablesGenerator", "Solace.TileRenderer"
-
-foreach ($buildProfile in $profiles) {
-    $publishDir = "./build/$configuration/$buildProfile"
-
-    Write-Host "Publishing profile $buildProfile"
-    foreach ($name in $projects) {
-        $projectPath = "./src/$name/$name.csproj"
-        $projectDest = "$publishDir/components"
-
-        Invoke-ProjectPublish `
-            -ProjectPath $projectPath `
-            -OutDir $projectDest `
-            -Configuration $configuration `
-            -BuildProfile $buildProfile
+foreach ($PublishProfile in $Profiles) {
+    if ($PublishProfile -notmatch '^(win|linux|osx)-(x64|x86|arm64|arm)$') {
+        Write-Warning "Skipping invalid profile: $PublishProfile. Format should be os-arch (e.g., win-x64)."
+        continue
     }
 
-    Invoke-ProjectPublish `
-        -ProjectPath "./src/Solace.LauncherUI/Solace.LauncherUI.csproj" `
-        -OutDir "$publishDir/launcher" `
-        -Configuration $configuration `
-        -BuildProfile $buildProfile
+    $os, $arch = $PublishProfile.Split('-')
+    $outDir = "publish/$PublishProfile"
 
-    if ($buildProfile -like "*win*") {
-        Invoke-ProjectPublish `
-            -ProjectPath "./src/Solace.KillHelper/Solace.KillHelper.csproj" `
-            -OutDir "$publishDir/components" `
-            -Configuration $configuration `
-            -BuildProfile $buildProfile
-        Invoke-ProjectPublish `
-            -ProjectPath "./src/Solace.KillHelper/Solace.KillHelper.csproj" `
-            -OutDir "$publishDir/launcher" `
-            -Configuration $configuration `
-            -BuildProfile $buildProfile
+    Write-Host "--- Publishing to $outDir ---" -ForegroundColor Cyan
+
+    New-Item -ItemType Directory -Path "$outDir/staticdata" -Force | Out-Null
+    Copy-Item -Path "staticdata/*" -Destination "$outDir/staticdata" -Recurse -Force
+
+    Write-Host "Publishing Launcher (Native AOT)..." -ForegroundColor Yellow
+    dotnet publish src/Solace.Launcher `
+        -c Release `
+        --os $os --arch $arch `
+        -o "$outDir/launcher" `
+        -p:PublishAot=true `
+        -p:StripSymbols=true `
+        -p:PublishTrimmed=true `
+        -p:TrimmerRemoveSymbols=true `
+        -p:DebuggerSupport=false `
+        -p:EnableUnsafeBinaryFormatterSerialization=false `
+        -p:EnableUnsafeUTF7Encoding=false `
+        -p:EventSourceSupport=false `
+        -p:Http3Support=false `
+        -p:InvariantGlobalization=true `
+        -p:DebugType=none `
+        -p:DebugSymbols=false
+        
+    Get-ChildItem -Path "$outDir/launcher" -Include *.dbg, *.pdb -Recurse | Remove-Item -Force
+
+    Copy-Item -Path "$outDir/launcher/appsettings.json" -Destination "$outDir/launcher/DO_NOT_MODIFY_default_apps_settings.json" -Recurse -Force
+
+    $projects = @{
+        "src/Solace.EventBus.Server"    = "components/event-bus"
+        "src/Solace.ObjectStore.Server" = "components/object-store"
+        "src/Solace.Buildplate"         = "components/buildplate-launcher"
+        "src/Solace.ApiServer"          = "components/api-server"
+        "src/Solace.Locator"            = "components/locator"
+        "src/Solace.TappablesGenerator" = "components/tappable-generator"
+        "src/Solace.TileRenderer"       = "components/tile-renderer"
+        "src/Solace.AdminPanel"         = "components/admin-panel"
     }
 
-    Copy-Item -Path "staticdata" -Destination "$publishDir/staticdata" -Recurse -Force
-
-    $startScriptContent = @'
-#!/usr/bin/env pwsh
-$originalPath = Get-Location
-$launcherDir = Join-Path $PSScriptRoot "launcher"
-
-$isWin = if ($null -ne $IsWindows) { $IsWindows } else { [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT }
-$isMac = if ($null -ne $IsMacOS) { $IsMacOS } else { [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX) }
-$isLin = if ($null -ne $IsLinux) { $IsLinux } else { [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Unix -and -not $isMac }
-
-try {
-    Set-Location -Path $launcherDir
-    
-    if ($isWin) {
-        $originalTitle = $Host.UI.RawUI.WindowTitle
-        $Host.UI.RawUI.WindowTitle = "Solace Launcher"
-
-        $fullPath = Join-Path $launcherDir "Launcher.exe"
-        $launcher = Start-Process -FilePath $fullPath -PassThru
-        Wait-Process -Id $launcher.Id
-    } elseif ($isLin -or $isMac) {
-        $originalTitle = $null
-        Write-Host "`e]0;Solace Launcher`a"
-
-        $fullPath = Join-Path $launcherDir "Launcher"
-        if (Test-Path $fullPath) {
-            chmod +x $fullPath
-        }
-        $launcher = Start-Process -FilePath $fullPath -PassThru
-        Wait-Process -Id $launcher.Id
-    } else {
-        Write-Host "Unsupported platform"
+    foreach ($projectPath in $projects.Keys) {
+        $outputFolder = "$outDir/$($projects[$projectPath])"
+        Write-Host "Publishing $projectPath..."
+        dotnet publish $projectPath -c Release --os $os --arch $arch -o $outputFolder -p:UseSharedLibs=true
     }
 }
-catch {
-    Write-Error "Failed to launch: $($_.Exception.Message)"
-}
-finally {
-    Set-Location -Path $originalPath
-    
-    if ($isWin) {
-        $Host.UI.RawUI.WindowTitle = $originalTitle
-    } elseif ($isLin -or $isMac) {
-        Write-Host "`e]0;$originalTitle`a"
-    } else {
-        Write-Host "Unsupported platform"
-    }
-}
-'@
-    $startScriptContent | Out-File -FilePath "$publishDir/run_launcher.ps1" -Encoding utf8
-    
-    if (!$IsWindows) {
-        chmod +x "$publishDir/run_launcher.ps1"
-    }
-}
+
+Write-Host "All publish tasks complete!" -ForegroundColor Green

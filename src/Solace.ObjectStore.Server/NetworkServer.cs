@@ -1,36 +1,39 @@
-﻿using Serilog;
-using System.Buffers;
+﻿using System.Buffers;
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 
 namespace Solace.ObjectStore.Server;
 
-public sealed partial class NetworkServer : IDisposable
+internal sealed partial class NetworkServer : IDisposable
 {
     private readonly Server _server;
     private readonly TcpListener _serverSocket;
     private readonly CancellationTokenSource _cts = new();
 
-    public NetworkServer(Server server, int port)
+    private readonly ILogger<NetworkServer> _logger;
+
+    public NetworkServer(Server server, int port, ILogger<NetworkServer> logger)
     {
         _server = server;
         _serverSocket = new TcpListener(IPAddress.Loopback, port);
+        _logger = logger;
     }
 
     public async Task RunAsync()
     {
         _serverSocket.Start();
-        Log.Information("Server started on port {Port}", ((IPEndPoint)_serverSocket.LocalEndpoint).Port);
+        LogServerStarted(((IPEndPoint)_serverSocket.LocalEndpoint).Port);
 
         try
         {
             while (!_cts.Token.IsCancellationRequested)
             {
-                TcpClient client = await _serverSocket.AcceptTcpClientAsync(_cts.Token);
-                Log.Information("Connection from {RemoteEndPoint}", client.Client.RemoteEndPoint);
+                var client = await _serverSocket.AcceptTcpClientAsync(_cts.Token);
+                LogNewConnection((IPEndPoint)client.Client.RemoteEndPoint!);
 
                 _ = HandleConnectionAsync(client);
             }
@@ -62,13 +65,13 @@ public sealed partial class NetworkServer : IDisposable
             {
                 await ProcessLinesAsync(reader, writer);
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Log.Warning(ex, "Error processing connection");
+                LogErrorProcessingConnection(exception);
             }
         }
 
-        Log.Information("Connection closed");
+        LogConnectionClosed();
     }
 
     private async Task ProcessLinesAsync(PipeReader reader, PipeWriter writer)
@@ -170,7 +173,7 @@ public sealed partial class NetworkServer : IDisposable
 
     private static bool ValidateObjectId(string id)
     {
-        if (!GetRegex1().IsMatch(id))
+        if (!GetObjectIdRegex().IsMatch(id))
         {
             return false;
         }
@@ -179,5 +182,17 @@ public sealed partial class NetworkServer : IDisposable
     }
 
     [GeneratedRegex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
-    private static partial Regex GetRegex1();
+    private static partial Regex GetObjectIdRegex();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Server started on port {Port}")]
+    private partial void LogServerStarted(int Port);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connection from {RemoteEndPoint}")]
+    private partial void LogNewConnection(IPEndPoint RemoteEndPoint);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Error processing connection")]
+    private partial void LogErrorProcessingConnection(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connection closed")]
+    private partial void LogConnectionClosed();
 }

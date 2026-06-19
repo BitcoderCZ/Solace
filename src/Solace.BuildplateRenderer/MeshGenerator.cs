@@ -57,6 +57,7 @@ public sealed class BuildplateMeshGenerator
     public async Task<MeshData> GenerateAsync(WorldData worldData, CancellationToken cancellationToken = default)
     {
         var mesh = new MeshData();
+        var subChunkCache = new Dictionary<int3, CachedSubChunk>();
 
         using (var serverDataStream = new MemoryStream(worldData.ServerData))
         using (var zip = await ZipArchive.CreateAsync(serverDataStream, ZipArchiveMode.Read, false, null, cancellationToken))
@@ -69,50 +70,63 @@ public sealed class BuildplateMeshGenerator
                     byte[] regionData = GC.AllocateUninitializedArray<byte>(checked((int)entry.Length));
                     await entryStream.ReadExactlyAsync(regionData, cancellationToken);
 
-                    ProcessRegion(regionData, RegionUtils.PathToPos(entry.FullName), mesh, new int3(0, -worldData.Offset / 2, 0));
+                    CacheRegion(regionData, RegionUtils.PathToPos(entry.FullName), subChunkCache);
                 }
             }
+        }
+
+        int3 worldOffset = new int3(0, -worldData.Offset / 2, 0);
+
+        foreach (var subChunk in subChunkCache.Values)
+        {
+            ProcessCachedSubChunk(subChunk, subChunkCache, mesh, worldOffset);
         }
 
         return mesh;
     }
 
-    private void ProcessRegion(byte[] regionData, int2 regionPosition, MeshData mesh, int3 offset)
+    private static void CacheRegion(byte[] regionData, int2 regionPosition, Dictionary<int3, CachedSubChunk> cache)
     {
         foreach (var localPosition in RegionUtils.GetChunkPositions(regionData))
         {
             var chunkNBT = RegionUtils.ReadChunkNTB(regionData, localPosition);
+            var chunkPos = RegionUtils.LocalToChunk(localPosition, regionPosition);
 
-            ProcessChunk(chunkNBT, RegionUtils.LocalToChunk(localPosition, regionPosition), mesh, offset);
-        }
-    }
-
-    // https://minecraft.wiki/w/Chunk_format
-    private void ProcessChunk(CompoundTag nbt, int2 chunkPosition, MeshData mesh, int3 offset)
-    {
-        Debug.Assert(((IntTag)nbt["xPos"]).Value == chunkPosition.X);
-        Debug.Assert(((IntTag)nbt["zPos"]).Value == chunkPosition.Y);
-
-        foreach (var item in (ListTag)nbt["sections"])
-        {
-            var subChunkNBT = (CompoundTag)item;
-            if (!subChunkNBT.ContainsKey("block_states"))
+            // https://minecraft.wiki/w/Chunk_format
+            foreach (var item in (ListTag)chunkNBT["sections"])
             {
-                continue;
-            }
+                var subChunkNBT = (CompoundTag)item;
+                if (!subChunkNBT.ContainsKey("block_states"))
+                {
+                    continue;
+                }
 
-            ProcessSubChunk(subChunkNBT, new int3(chunkPosition.X, ((ByteTag)subChunkNBT["Y"]).Value, chunkPosition.Y), mesh, offset);
+                var blockStates = (CompoundTag)subChunkNBT["block_states"];
+                if (!blockStates.ContainsKey("palette"))
+                {
+                    continue;
+                }
+
+                var subChunkCoord = new int3(chunkPos.X, ((ByteTag)subChunkNBT["Y"]).Value, chunkPos.Y);
+
+                var blocks = blockStates.ContainsKey("data")
+                    ? ChunkUtils.ReadBlockData((LongArrayTag)blockStates["data"])
+                    : ChunkUtils.EmptySubChunk;
+
+                cache[subChunkCoord] = new CachedSubChunk
+                {
+                    Palette = (ListTag)blockStates["palette"],
+                    Blocks = blocks,
+                    ChunkPosition = subChunkCoord
+                };
+            }
         }
     }
 
-    private void ProcessSubChunk(CompoundTag nbt, int3 chunkPosition, MeshData mesh, int3 offset)
+    private void ProcessCachedSubChunk(CachedSubChunk subChunk, Dictionary<int3, CachedSubChunk> cache, MeshData mesh, int3 offset)
     {
-        var blockStates = (CompoundTag)nbt["block_states"];
-
-        var palette = (ListTag)blockStates["palette"];
-
         bool foundVisibleBlock = false;
-        foreach (var entry in palette)
+        foreach (var entry in subChunk.Palette)
         {
             if (!ChunkUtils.InvisibleBlocks.Contains(((StringTag)((CompoundTag)entry)["Name"]).Value))
             {
@@ -126,25 +140,15 @@ public sealed class BuildplateMeshGenerator
             return;
         }
 
-        var chunkBlockPosition = chunkPosition * ChunkUtils.SubChunkSize;
-
-        var blocks = blockStates.ContainsKey("data")
-            ? ChunkUtils.ReadBlockData((LongArrayTag)blockStates["data"])
-            : ChunkUtils.EmptySubChunk;
-
+        var chunkBlockPosition = subChunk.ChunkPosition * ChunkUtils.SubChunkSize;
         var blockPosition = int3.Zero;
 
         var propertiesArray = ArrayPool<KeyValuePair<string, string>>.Shared.Rent(64);
         var modelVariants = ArrayPool<VariantModel>.Shared.Rent(64);
 
-        foreach (var blockIndex in blocks)
+        foreach (var blockIndex in subChunk.Blocks)
         {
-            Debug.Assert(blockPosition.X is >= 0 and < ChunkUtils.Width);
-            Debug.Assert(blockPosition.Y is >= 0 and < ChunkUtils.SubChunkSize);
-            Debug.Assert(blockPosition.Z is >= 0 and < ChunkUtils.Width);
-
-            var paletteEntry = (CompoundTag)palette[blockIndex];
-
+            var paletteEntry = (CompoundTag)subChunk.Palette[blockIndex];
             string blockName = ((StringTag)paletteEntry["Name"]).Value;
 
             if (!ChunkUtils.InvisibleBlocks.Contains(blockName))
@@ -171,25 +175,37 @@ public sealed class BuildplateMeshGenerator
                 }
 
                 var blockState = BlockState.CreateNoCopy(blockName, propertiesArray, propertiesArrayLength);
-
                 var modelVariantsLength = _resourcePack.GetModelVariants(blockState, _rng, modelVariants);
+
                 foreach (var modelVariant in modelVariants.AsSpan(0, modelVariantsLength))
                 {
-                    GenerateBlockMesh(modelVariant, chunkBlockPosition + blockPosition + offset, mesh, blockPosition =>
+                    GenerateBlockMesh(modelVariant, chunkBlockPosition + blockPosition + offset, mesh, queryWorldPos =>
                     {
-                        var localPosition = blockPosition - chunkBlockPosition;
+                        int3 rawBlockPos = queryWorldPos - offset;
 
-                        if (!localPosition.InBounds(ChunkUtils.SubChunkSize, ChunkUtils.SubChunkSize, ChunkUtils.SubChunkSize))
+                        var targetSubChunkCoord = new int3(
+                            (int)float.Floor((float)rawBlockPos.X / ChunkUtils.Width),
+                            (int)float.Floor((float)rawBlockPos.Y / ChunkUtils.SubChunkSize),
+                            (int)float.Floor((float)rawBlockPos.Z / ChunkUtils.Width)
+                        );
+
+                        if (!cache.TryGetValue(targetSubChunkCoord, out var targetSubChunk))
                         {
                             return null;
                         }
 
-                        return ChunkUtils.TagToBlockStateVisibleFromPool((CompoundTag)palette[blocks[localPosition.X + localPosition.Z * ChunkUtils.Width + localPosition.Y * ChunkUtils.Width * ChunkUtils.Width]]);
-                    }, blockState => ArrayPool<KeyValuePair<string, string>>.Shared.Return(blockState._properties));
+                        int3 localPos = rawBlockPos - (targetSubChunkCoord * ChunkUtils.SubChunkSize);
+
+                        int targetIndex = localPos.X + localPos.Z * ChunkUtils.Width + localPos.Y * ChunkUtils.Width * ChunkUtils.Width;
+                        int targetBlockIndex = targetSubChunk.Blocks[targetIndex];
+
+                        return ChunkUtils.TagToBlockStateVisibleFromPool((CompoundTag)targetSubChunk.Palette[targetBlockIndex]);
+                    },
+                    blockState => ArrayPool<KeyValuePair<string, string>>.Shared.Return(blockState._properties));
                 }
             }
 
-            incrementPos:
+        incrementPos:
             blockPosition.X++;
             if (blockPosition.X >= ChunkUtils.Width)
             {
@@ -311,10 +327,10 @@ public sealed class BuildplateMeshGenerator
         var r = rot.Value;
         Vector3 origin = r.Origin * BlockModelScale;
 
-        // Convert degrees to radians
-        float radX = r.X * (MathF.PI / 180f);
-        float radY = r.Y * (MathF.PI / 180f);
-        float radZ = r.Z * (MathF.PI / 180f);
+        // deg to rad
+        float radX = r.X * (float.Pi / 180f);
+        float radY = r.Y * (float.Pi / 180f);
+        float radZ = r.Z * (float.Pi / 180f);
 
         Matrix4x4 matrix = Matrix4x4.Identity;
 
@@ -324,12 +340,11 @@ public sealed class BuildplateMeshGenerator
         // Rotate
         matrix *= CreateMinecraftRotation(r.X, r.Y, r.Z);
 
-        // Apply Rescaling (Minecraft scales faces across the block to prevent Z-fighting/clipping)
         if (r.ReScale)
         {
-            float scaleX = r.X != 0 ? 1f / MathF.Cos(radX) : 1f;
-            float scaleY = r.Y != 0 ? 1f / MathF.Cos(radY) : 1f;
-            float scaleZ = r.Z != 0 ? 1f / MathF.Cos(radZ) : 1f;
+            float scaleX = r.X != 0 ? 1f / float.Cos(radX) : 1f;
+            float scaleY = r.Y != 0 ? 1f / float.Cos(radY) : 1f;
+            float scaleZ = r.Z != 0 ? 1f / float.Cos(radZ) : 1f;
             matrix *= Matrix4x4.CreateScale(scaleX, scaleY, scaleZ);
         }
 
@@ -355,12 +370,12 @@ public sealed class BuildplateMeshGenerator
 
     private static Matrix4x4 CreateMinecraftRotation(float degreesX, float degreesY, float degreesZ)
     {
-        float radX = degreesX * (MathF.PI / 180f);
-        float radY = -degreesY * (MathF.PI / 180f); 
-        float radZ = degreesZ * (MathF.PI / 180f);
+        float radX = degreesX * (float.Pi / 180f);
+        float radY = -degreesY * (float.Pi / 180f);
+        float radZ = degreesZ * (float.Pi / 180f);
 
-        return Matrix4x4.CreateRotationY(radY) 
-            * Matrix4x4.CreateRotationX(radX) 
+        return Matrix4x4.CreateRotationY(radY)
+            * Matrix4x4.CreateRotationX(radX)
             * Matrix4x4.CreateRotationZ(radZ);
     }
 
@@ -513,6 +528,15 @@ public sealed class BuildplateMeshGenerator
 
     private bool IsBlockFullAndOpaque(BlockState blockState, Direction faceDirection)
     {
+        if (blockState.BlockId.Contains("glass", StringComparison.Ordinal) ||
+            blockState.BlockId.Contains("leaves", StringComparison.Ordinal) ||
+            blockState.BlockId.Contains("slime", StringComparison.Ordinal) ||
+            blockState.BlockId.Contains("honey", StringComparison.Ordinal) ||
+            blockState.BlockId.Contains("ice", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         var modelVariants = ArrayPool<VariantModel>.Shared.Rent(64);
 
         // todo: the rng doesn't change this... right?
@@ -635,10 +659,10 @@ public sealed class BuildplateMeshGenerator
         }
 
         // Convert normalized (0.0 - 1.0) coordinates to grid indices (0 - 16)
-        int startU = Math.Clamp((int)Math.Round(uMin * 16), 0, 16);
-        int endU = Math.Clamp((int)Math.Round(uMax * 16), 0, 16);
-        int startV = Math.Clamp((int)Math.Round(vMin * 16), 0, 16);
-        int endV = Math.Clamp((int)Math.Round(vMax * 16), 0, 16);
+        int startU = int.Clamp((int)double.Round(uMin * 16), 0, 16);
+        int endU = int.Clamp((int)double.Round(uMax * 16), 0, 16);
+        int startV = int.Clamp((int)double.Round(vMin * 16), 0, 16);
+        int endV = int.Clamp((int)double.Round(vMax * 16), 0, 16);
 
         for (int v = startV; v < endV; v++)
         {
@@ -647,5 +671,12 @@ public sealed class BuildplateMeshGenerator
                 grid[u + v * 16] = true;
             }
         }
+    }
+
+    private sealed class CachedSubChunk
+    {
+        public ListTag Palette { get; init; } = null!;
+        public int[] Blocks { get; init; } = null!;
+        public int3 ChunkPosition { get; init; }
     }
 }

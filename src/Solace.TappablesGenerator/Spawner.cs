@@ -1,18 +1,21 @@
-﻿using Serilog;
+﻿using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.EventBus.Client;
 
 namespace Solace.TappablesGenerator;
 
-public class Spawner
+internal sealed partial class Spawner : IAsyncDisposable
 {
-    private static readonly long SPAWN_INTERVAL = 15 * 1000;
+    private const long SPAWN_INTERVAL = 15 * 1000;
 
     private readonly ActiveTiles _activeTiles;
     private readonly TappableGenerator _tappableGenerator;
     private readonly EncounterGenerator _encounterGenerator;
-    private readonly Publisher _publisher;
+    private Publisher? _publisher;
+
+    private readonly ILogger<Spawner> _logger;
 
     private readonly int _maxTappableLifetimeIntervals;
 
@@ -20,13 +23,14 @@ public class Spawner
     private int _spawnCycleIndex;
     private readonly Dictionary<int, int> _lastSpawnCycleForTile = [];
 
-    public Spawner(ActiveTiles activeTiles, TappableGenerator tappableGenerator, EncounterGenerator encounterGenerator, Publisher publisher)
+    public Spawner(ActiveTiles activeTiles, TappableGenerator tappableGenerator, EncounterGenerator encounterGenerator, ILogger<Spawner> logger)
     {
         _activeTiles = activeTiles;
 
         _tappableGenerator = tappableGenerator;
         _encounterGenerator = encounterGenerator;
-        _publisher = publisher;
+
+        _logger = logger;
 
         _maxTappableLifetimeIntervals = (int)(long.Max(TappableGenerator.GetMaxTappableLifetime(), _encounterGenerator.GetMaxEncounterLifetime()) / SPAWN_INTERVAL + 1);
 
@@ -34,27 +38,15 @@ public class Spawner
         _spawnCycleIndex = _maxTappableLifetimeIntervals;
     }
 
-    public static async Task<Spawner> CreateAsync(EventBusClient eventBusClient, ActiveTiles activeTiles, TappableGenerator tappableGenerator, EncounterGenerator encounterGenerator)
-    {
-        var publisher = await eventBusClient.AddPublisherAsync();
+    internal async Task InitializeAsync(EventBusClient eventBusClient)
+        => _publisher = await eventBusClient.AddPublisherAsync();
 
-        return new Spawner(activeTiles, tappableGenerator, encounterGenerator, publisher);
-    }
-
-    public async Task Run()
+    public async Task RunAsync()
     {
         long nextTime = U.CurrentTimeMillis() + SPAWN_INTERVAL;
         while (true)
         {
-            try
-            {
-                Thread.Sleep(Math.Max(0, (int)(nextTime - U.CurrentTimeMillis())));
-            }
-            catch (ThreadInterruptedException)
-            {
-                Log.Information("Spawn thread was interrupted, exiting");
-                break;
-            }
+            await Task.Delay(Math.Max(0, (int)(nextTime - U.CurrentTimeMillis())));
 
             nextTime += SPAWN_INTERVAL;
 
@@ -99,7 +91,7 @@ public class Spawner
 
         List<Tappable> tappables = [];
         List<Encounter> encounters = [];
-        foreach (ActiveTiles.ActiveTile activeTile in activeTiles)
+        foreach (var activeTile in activeTiles)
         {
             DoSpawnCyclesForTile(activeTile.TileX, activeTile.TileY, spawnCycleTime, spawnCycleIndex, tappables, encounters);
         }
@@ -109,6 +101,14 @@ public class Spawner
         encounters.RemoveAll(encounter => encounter.SpawnTime + encounter.ValidFor < tappableCutoffTime);
 
         await SendSpawnedTappables(tappables, encounters);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_publisher is not null)
+        {
+            await _publisher.DisposeAsync();
+        }
     }
 
     private async Task DoSpawnCycle()
@@ -138,7 +138,7 @@ public class Spawner
 
     private void DoSpawnCyclesForTile(int tileX, int tileY, long spawnCycleTime, int spawnCycleIndex, List<Tappable> tappables, List<Encounter> encounters)
     {
-        int lastSpawnCycle = _lastSpawnCycleForTile.GetOrDefault((tileX << 16) + tileY, 0);
+        int lastSpawnCycle = _lastSpawnCycleForTile.GetValueOrDefault((tileX << 16) + tileY);
         int cyclesToSpawn = Math.Min(spawnCycleIndex - lastSpawnCycle, _maxTappableLifetimeIntervals);
         for (int index = 0; index < cyclesToSpawn; index++)
         {
@@ -156,14 +156,22 @@ public class Spawner
 
     private async Task SendSpawnedTappables(List<Tappable> tappables, List<Encounter> encounters)
     {
+        Debug.Assert(_publisher is not null);
+
         if (!await _publisher.PublishAsync("tappables", "tappableSpawn", Json.Serialize(tappables)))
         {
-            Log.Error("Event bus server rejected tappable spawn event");
+            LogEventBusServerRejectedTappableSpawnEvent();
         }
 
         if (!await _publisher.PublishAsync("tappables", "encounterSpawn", Json.Serialize(encounters)))
         {
-            Log.Error("Event bus server rejected encounter spawn event");
+            LogEventBusServerRejectedEncounterSpawnEvent();
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus server rejected tappable spawn event")]
+    private partial void LogEventBusServerRejectedTappableSpawnEvent();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus server rejected encounter spawn event")]
+    private partial void LogEventBusServerRejectedEncounterSpawnEvent();
 }

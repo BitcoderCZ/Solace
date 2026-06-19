@@ -5,9 +5,9 @@ using Solace.StaticData;
 
 namespace Solace.ApiServer.Utils;
 
-public static class CraftingCalculator
+internal static class CraftingCalculator
 {
-    public static State CalculateState(long currentTime, CraftingSlot.ActiveJobR activeJob, Catalog catalog)
+    public static State CalculateState(long currentTime, CraftingSlotEF.ActiveJobR activeJob, Catalog catalog)
     {
         Catalog.RecipesCatalogR.CraftingRecipe recipe = catalog.RecipesCatalog.Crafting.Where(craftingRecipe => craftingRecipe.Id == activeJob.RecipeId).First();
 
@@ -24,7 +24,7 @@ public static class CraftingCalculator
         for (int index = 0; index < recipe.Ingredients.Length; index++)
         {
             int usedCount = recipe.Ingredients[index].Count * completedRounds;
-            InputItem[] inputItems = activeJob.Input[index];
+            InputItem[] inputItems = activeJob.Input[index].Items;
             foreach (InputItem inputItem in inputItems)
             {
                 if (usedCount == 0)
@@ -44,7 +44,7 @@ public static class CraftingCalculator
                             throw new UnreachableException();
                         }
 
-                        input.AddLast(new InputItem(inputItem.Id, inputItem.Count - usedCount, ArrayExtensions.CopyOfRange(inputItem.Instances, usedCount, inputItem.Instances.Length)));
+                        input.AddLast(new InputItem(inputItem.Id, inputItem.Count - usedCount, inputItem.Instances[usedCount..]));
                     }
                     else
                     {
@@ -68,7 +68,7 @@ public static class CraftingCalculator
         );
     }
 
-    public sealed record State(
+    internal sealed record State(
         int CompletedRounds,
         int AvailableRounds,
         int TotalRounds,
@@ -79,8 +79,8 @@ public static class CraftingCalculator
         bool Completed
     )
     {
-        public sealed record OutputItem(
-            string Id,
+        internal sealed record OutputItem(
+            Guid Id,
             int Count
         );
     }
@@ -106,7 +106,7 @@ public static class CraftingCalculator
         return new FinishPrice(price, validFor);
     }
 
-    public sealed record FinishPrice(
+    internal sealed record FinishPrice(
         int Price,
         int ValidFor
     );

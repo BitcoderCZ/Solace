@@ -1,5 +1,4 @@
-﻿using Serilog;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json.Serialization;
 using Solace.Common;
 using Solace.Common.Utils;
@@ -7,41 +6,39 @@ using Solace.EventBus.Client;
 
 namespace Solace.ApiServer.Utils;
 
-public sealed class TappablesManager
+internal sealed partial class TappablesManager : IAsyncDisposable
 {
-    private static readonly long GRACE_PERIOD = 30000;
+    private const long GRACE_PERIOD = 30000;
 
-    private Subscriber _subscriber = null!;
-    private RequestSender _requestSender = null!;
+    private Subscriber? _subscriber;
+    private RequestSender? _requestSender;
 
-    private readonly Dictionary<string, Dictionary<string, Tappable>> _tappables = [];
-    private readonly Dictionary<string, Dictionary<string, Encounter>> _encounters = [];
+    private readonly ILogger _logger;
+
+    private readonly Dictionary<string, Dictionary<Guid, Tappable>> _tappables = [];
+    private readonly Dictionary<string, Dictionary<Guid, Encounter>> _encounters = [];
     private int _pruneCounter;
 
-    private TappablesManager()
+    public TappablesManager(ILogger<TappablesManager> logger)
     {
+        _logger = logger;
     }
 
-    public static async Task<TappablesManager> CreateAsync(EventBusClient eventBusClient)
+    internal async Task InitializeAsync(EventBusClient eventBusClient)
     {
-        var tappablesManager = new TappablesManager();
-
-        tappablesManager._subscriber = await eventBusClient.AddSubscriberAsync("tappables", new SubscriberListener(
-            tappablesManager.HandleEvent,
+        _subscriber = await eventBusClient.AddSubscriberAsync("tappables", new SubscriberListener(
+            HandleEvent,
             async () =>
             {
-                Log.Fatal("Tappables event bus subscriber error");
-                Log.CloseAndFlush();
+                LogTappablesEventBusSubscriberError();
                 Environment.Exit(1);
             }));
-        tappablesManager._requestSender = await eventBusClient.AddRequestSenderAsync();
-
-        return tappablesManager;
+        _requestSender = await eventBusClient.AddRequestSenderAsync();
     }
 
     public Tappable[] GetTappablesAround(double lat, double lon, double radius)
         => [.. GetTileIdsAround(lat, lon, radius)
-            .Select(tileId => _tappables.GetOrDefault(tileId, null))
+            .Select(tileId => _tappables.GetValueOrDefault(tileId))
             .Where(tappables => tappables is not null)
             .Select(items => items!.Values)
             .SelectMany(stream => stream)
@@ -55,7 +52,7 @@ public sealed class TappablesManager
 
     public Encounter[] GetEncountersAround(double lat, double lon, double radius)
         => [.. GetTileIdsAround(lat, lon, radius)
-            .Select(tileId => _encounters.GetOrDefault(tileId))
+            .Select(tileId => _encounters.GetValueOrDefault(tileId))
             .Where(encounters => encounters is not null)
             .SelectMany(encounters => encounters!.Values)
             .Where(encounter =>
@@ -90,12 +87,12 @@ public sealed class TappablesManager
         return [.. Enumerable.Range(tileX - tileRadius, sideLength).Select(x => Enumerable.Range(tileY - tileRadius, sideLength).Select(y => $"{x}_{y}")).SelectMany(stream => stream)];
     }
 
-    public Tappable? GetTappableWithId(string id, string tileId)
+    public Tappable? GetTappableWithId(Guid id, string tileId)
     {
-        Dictionary<string, Tappable>? tappablesInTile = _tappables.GetOrDefault(tileId, null);
+        var tappablesInTile = _tappables.GetValueOrDefault(tileId);
         if (tappablesInTile is not null)
         {
-            Tappable? tappable = tappablesInTile.GetOrDefault(id, null);
+            var tappable = tappablesInTile.GetValueOrDefault(id);
             if (tappable is not null)
             {
                 return tappable;
@@ -105,12 +102,12 @@ public sealed class TappablesManager
         return null;
     }
 
-    public Encounter? GetEncounterWithId(string id, string tileId)
+    public Encounter? GetEncounterWithId(Guid id, string tileId)
     {
-        var encountersInTile = _encounters.GetOrDefault(tileId);
+        var encountersInTile = _encounters.GetValueOrDefault(tileId);
         if (encountersInTile is not null)
         {
-            var encounter = encountersInTile.GetOrDefault(id);
+            var encounter = encountersInTile.GetValueOrDefault(id);
             if (encounter is not null)
             {
                 return encounter;
@@ -121,7 +118,7 @@ public sealed class TappablesManager
     }
 
 #pragma warning disable IDE0060 // Remove unused parameter
-    public bool IsTappableValidFor(Tappable tappable, long requestTime, float lat, float lon)
+    public static bool IsTappableValidFor(Tappable tappable, long requestTime, float lat, float lon)
 #pragma warning restore IDE0060 // Remove unused parameter
     {
         if (tappable.SpawnTime - GRACE_PERIOD > requestTime || tappable.SpawnTime + tappable.ValidFor + GRACE_PERIOD <= requestTime)
@@ -136,7 +133,9 @@ public sealed class TappablesManager
 
     // TODO: actually use this
 #pragma warning disable IDE0060 // Remove unused parameter
+#pragma warning disable CA1822 // Mark members as static
     public bool IsEncounterValidFor(Encounter encounter, long requestTime, float lat, float lon)
+#pragma warning restore CA1822 // Mark members as static
 #pragma warning restore IDE0060 // Remove unused parameter
     {
         if (encounter.SpawnTime - GRACE_PERIOD > requestTime || encounter.SpawnTime + encounter.ValidFor <= requestTime) // no grace period when checking end time because the buildplate instance shutdown does not include the grace period anyway
@@ -149,14 +148,29 @@ public sealed class TappablesManager
         return true;
     }
 
-    public async Task NotifyTileActiveAsync(string playerId, double lat, double lon)
+    public async Task NotifyTileActiveAsync(Guid accountId, double lat, double lon)
     {
+        Debug.Assert(_requestSender is not null);
+
         int tileX = XToTile(LonToX(lon));
         int tileY = YToTile(LatToY(lat));
-        string? response = await _requestSender.RequestAsync("tappables", "activeTile", Json.Serialize(new ActiveTileNotification(tileX, tileY, playerId)));
+        string? response = await _requestSender.RequestAsync("tappables", "activeTile", Json.Serialize(new ActiveTileNotification(tileX, tileY, accountId.ToString())));
         if (response is null)
         {
-            Log.Warning("Active tile notification event was rejected/ignored");
+            LogActiveTileNotificationEventWasRejectedIgnored();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_subscriber is not null)
+        {
+            await _subscriber.CloseAsync();
+        }
+
+        if (_requestSender is not null)
+        {
+            await _requestSender.DisposeAsync();
         }
     }
 
@@ -177,9 +191,9 @@ public sealed class TappablesManager
                     {
                         tappables = Json.Deserialize<Tappable[]>(@event.Data);
                     }
-                    catch (Exception ex)
+                    catch (Exception exception)
                     {
-                        Log.Error($"Could not deserialise tappable spawn event {ex}");
+                        LogFailedToDeserialiseTappableSpawnEvent(exception);
                         break;
                     }
 
@@ -208,7 +222,7 @@ public sealed class TappablesManager
                     }
                     catch (Exception exception)
                     {
-                        Log.Error($"Could not deserialise encounter spawn event: {exception}");
+                        LogFailedToDeserialiseEncounterSpawnEvent(exception);
                         break;
                     }
 
@@ -248,7 +262,7 @@ public sealed class TappablesManager
     {
         foreach (var tileTappables in _tappables.Values)
         {
-            tileTappables.RemoveIf(entry =>
+            tileTappables.RemoveAll(entry =>
             {
                 Tappable tappable = entry.Value;
                 long expiresAt = tappable.SpawnTime + tappable.ValidFor;
@@ -256,11 +270,11 @@ public sealed class TappablesManager
             });
         }
 
-        _tappables.RemoveIf(entry => entry.Value.IsEmpty());
+        _tappables.RemoveAll(entry => entry.Value.Count is 0);
 
         foreach (var tileEncounters in _encounters.Values)
         {
-            tileEncounters.RemoveIf(entry =>
+            tileEncounters.RemoveAll(entry =>
             {
                 Encounter encounter = entry.Value;
                 long expiresAt = encounter.SpawnTime + encounter.ValidFor;
@@ -268,7 +282,7 @@ public sealed class TappablesManager
             });
         }
 
-        _encounters.RemoveIf(entry => entry.Value.Count == 0);
+        _encounters.RemoveAll(entry => entry.Value.Count is 0);
     }
 
     public static string LocationToTileId(float lat, float lon)
@@ -286,8 +300,8 @@ public sealed class TappablesManager
     private static int YToTile(double y)
         => (int)Math.Floor(y * (1 << 16));
 
-    public sealed record Tappable(
-        string Id,
+    internal sealed record Tappable(
+        Guid Id,
         float Lat,
         float Lon,
         long SpawnTime,
@@ -298,7 +312,7 @@ public sealed class TappablesManager
     )
     {
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public enum RarityE
+        internal enum RarityE
         {
             COMMON,
             UNCOMMON,
@@ -307,25 +321,25 @@ public sealed class TappablesManager
             LEGENDARY
         }
 
-        public sealed record Item(
-            string Id,
+        internal sealed record Item(
+            Guid Id,
             int Count
         );
     }
 
-    public sealed record Encounter(
-        string Id,
+    internal sealed record Encounter(
+        Guid Id,
         float Lat,
         float Lon,
         long SpawnTime,
         long ValidFor,
         string Icon,
         Encounter.RarityE Rarity,
-        string EncounterBuildplateId
+        Guid EncounterBuildplateId
     )
     {
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public enum RarityE
+        internal enum RarityE
         {
             COMMON,
             UNCOMMON,
@@ -334,4 +348,16 @@ public sealed class TappablesManager
             LEGENDARY
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Critical, Message = "Tappables event bus subscriber error")]
+    private partial void LogTappablesEventBusSubscriberError();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Active tile notification event was rejected/ignored")]
+    private partial void LogActiveTileNotificationEventWasRejectedIgnored();
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to deserialise tappable spawn event")]
+    private partial void LogFailedToDeserialiseTappableSpawnEvent(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to deserialise encounter spawn event")]
+    private partial void LogFailedToDeserialiseEncounterSpawnEvent(Exception exception);
 }

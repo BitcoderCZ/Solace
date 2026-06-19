@@ -3,8 +3,8 @@ namespace Solace.Buildplate.Connector.Model;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 
 public sealed record InventoryUpdateItemWearMessage(
-    string PlayerId,
-    string ItemId,
-    string InstanceId,
+    Guid PlayerId,
+    Guid ItemId,
+    Guid InstanceId,
     int Wear
 );

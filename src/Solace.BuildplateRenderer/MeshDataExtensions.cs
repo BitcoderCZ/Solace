@@ -1,6 +1,5 @@
 using System.Collections.Frozen;
 using System.Numerics;
-using Serilog;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;

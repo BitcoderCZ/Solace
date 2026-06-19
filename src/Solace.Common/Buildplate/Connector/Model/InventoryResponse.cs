@@ -8,15 +8,15 @@ public sealed record InventoryResponse(
 )
 {
     public sealed record Item(
-        string Id,
+        Guid Id,
         int Count,
-        string? InstanceId,
+        Guid? InstanceId,
         int Wear
     );
 
     public sealed record HotbarItem(
-        string Id,
+        Guid Id,
         int Count,
-        string? InstanceId
+        Guid? InstanceId
     );
 }

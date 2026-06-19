@@ -35,6 +35,7 @@ internal static partial class Program
         }
     }
 
+#pragma warning disable CA5392 // Use DefaultDllImportSearchPaths attribute for P/Invokes
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool AttachConsole(uint dwProcessId);
@@ -52,7 +53,7 @@ internal static partial class Program
     private static partial bool SetConsoleCtrlHandler(ConsoleCtrlDelegate? handler, [MarshalAs(UnmanagedType.Bool)] bool add);
 
     private delegate bool ConsoleCtrlDelegate(uint ctrlType);
+#pragma warning restore CA5392 // Use DefaultDllImportSearchPaths attribute for P/Invokes
 
     private const uint CTRL_C_EVENT = 0;
-    private const uint ATTACH_PARENT_PROCESS = 0xFFFFFFFF;
 }

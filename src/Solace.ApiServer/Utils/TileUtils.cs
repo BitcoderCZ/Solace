@@ -1,4 +1,4 @@
-﻿using Serilog;
+﻿using Microsoft.EntityFrameworkCore;
 using Solace.Common;
 using Solace.DB;
 using Solace.EventBus.Client;
@@ -6,54 +6,51 @@ using Solace.ObjectStore.Client;
 
 namespace Solace.ApiServer.Utils;
 
-internal static class TileUtils
+internal static partial class TileUtils
 {
-    private static EarthDB db => Program.DB;
-
-    private static RequestSender? _requestSender;
-
-    public static async Task<bool> TryWriteTile(int tileX, int tileY, Stream dest, CancellationToken cancellationToken)
+    public static async Task<bool> TryWriteTile(int tileX, int tileY, Stream dest, EarthDbContext earthDb, EventBusClient eventBus, ObjectStoreClient objectStore, ILogger logger, CancellationToken cancellationToken)
     {
         ulong dbPos = ToDbPos(tileX, tileY);
 
-        var results = await new EarthDB.ObjectQuery(false)
-            .GetTile(dbPos)
-            .ExecuteAsync(db, cancellationToken);
+        var tile = await earthDb.Tiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(tile => tile.Id == dbPos, cancellationToken: cancellationToken);
 
-        string? tileObjectId = results.GetTile(dbPos);
-
-        await using var objectStoreClient = await Program.GetObjectStoreClient();
-
-        if (!string.IsNullOrEmpty(tileObjectId))
+        if (tile is not null)
         {
-            return await TryWriteTileFromObject(tileObjectId, dest, objectStoreClient, cancellationToken);
+            return await TryWriteTileFromObject(tile.ObjectStoreId, dest, objectStore, cancellationToken);
         }
 
-        Log.Information("Rendering tile");
-        _requestSender ??= await Program.eventBus.AddRequestSenderAsync();
-        string? tilePng64 = await _requestSender.RequestAsync("tile", "renderTile", Json.Serialize(new RenderTileRequest(tileX, tileY, 16)));
+LogRenderingTile(logger);
+        await using var requestSender = await eventBus.AddRequestSenderAsync();
+        string? tilePng64 = await requestSender.RequestAsync("tile", "renderTile", Json.Serialize(new RenderTileRequest(tileX, tileY, 16)));
 
         if (tilePng64 is null)
         {
-            Log.Warning("Could not get tile (tile renderer did not respond to event bus request)");
+            LogTileRetreiveFail(logger);
             return false;
         }
 
         byte[] tilePng = Convert.FromBase64String(tilePng64);
 
-        tileObjectId = await objectStoreClient.StoreAsync(tilePng);
+        var tileObjectId = await objectStore.StoreAsync(tilePng);
 
         if (string.IsNullOrEmpty(tileObjectId))
         {
-            Log.Warning("Failed to store tile to object store");
+            LogTileStoreFail(logger);
             return false;
         }
 
-        Log.Debug($"Stored tile ({tileX}, {tileY}) to object store under id {tileObjectId}");
+        tile = new DB.Models.Global.Tile()
+        {
+            Id = dbPos,
+            ObjectStoreId = tileObjectId,
+        };
 
-        _ = await new EarthDB.ObjectQuery(true)
-            .UpdateTile(dbPos, tileObjectId)
-            .ExecuteAsync(db, cancellationToken);
+        earthDb.Tiles.Add(tile);
+        await earthDb.SaveChangesAsync(cancellationToken);
+
+        LogTileStored(logger, tileX, tileY, tileObjectId);
 
         await dest.WriteAsync(tilePng, cancellationToken);
 
@@ -78,4 +75,16 @@ internal static class TileUtils
         => unchecked((ulong)((long)tileX | ((long)tileY << 32)));
 
     private sealed record RenderTileRequest(int TileX, int TileY, int Zoom);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Rendering tile")]
+    private static partial void LogRenderingTile(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not get tile (tile renderer did not respond to event bus request)")]
+    private static partial void LogTileRetreiveFail(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to store tile to object store")]
+    private static partial void LogTileStoreFail(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Stored tile ({TileX}, {TileY}) to object store under id {TileObjectId}")]
+    private static partial void LogTileStored(ILogger logger, int TileX, int TileY, string TileObjectId);
 }

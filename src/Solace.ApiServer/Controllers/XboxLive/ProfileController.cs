@@ -4,16 +4,19 @@ using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 using Solace.ApiServer.Models;
 using Solace.Common.Utils;
+using Solace.DB.Models;
+using Solace.DB;
 
 namespace Solace.ApiServer.Controllers.XboxLive;
 
 [Route("users")]
 [Route("profile.xboxlive.com/users")]
-internal sealed partial class ProfileController : SolaceControllerBase
+internal sealed partial class ProfileController : LoginServerControllerBase
 {
-    private readonly LiveDbContext _dbContext;
+    private readonly EarthDbContext _dbContext;
 
-    public ProfileController(LiveDbContext context)
+    public ProfileController(EarthDbContext context, CryptoSecrets cryptoSecrets, ILogger<ProfileController> logger)
+        : base(cryptoSecrets, logger)
     {
         _dbContext = context;
     }
@@ -23,15 +26,15 @@ internal sealed partial class ProfileController : SolaceControllerBase
     );
 
     private sealed record ProfileUser(
-        string Id,
-        string HostId,
+        Guid Id,
+        Guid HostId,
         IEnumerable<ProfileSetting> Settings,
         bool IsSponsoredUser
     );
 
     internal sealed record BatchProfileSettingsRequest(
         string[] Settings,
-        string[] UserIds
+        Guid[] UserIds
     );
 
     [HttpPost("batch/profile/settings")]
@@ -54,7 +57,7 @@ internal sealed partial class ProfileController : SolaceControllerBase
 
         var token = authUnion.A;
 
-        foreach (string userId in request.UserIds)
+        foreach (var userId in request.UserIds)
         {
             if (userId != token.UserId)
             {
@@ -135,13 +138,13 @@ internal sealed partial class ProfileController : SolaceControllerBase
         ]));
     }
 
-    private Dictionary<string, string> GetProfile(Account account)
-        => new Dictionary<string, string>()
+    private Dictionary<string, string?> GetProfile(Account account)
+        => new Dictionary<string, string?>()
         {
             ["AppDisplayName"] = account.Username,
-            ["AppDisplayPicRaw"] = $"{(Request.IsHttps ? "https://" : "http://")}{Request.Host.Value}/{account.ProfilePictureUrl}",
+            ["AppDisplayPicRaw"] = $"{(Request.IsHttps ? "https://" : "http://")}{Request.Host.Value}/{account.ProfilePictureUrl ?? Account.DefaultPictureUrl}",
             ["GameDisplayName"] = account.Username,
-            ["GameDisplayPicRaw"] = $"{(Request.IsHttps ? "https://" : "http://")}{Request.Host.Value}/{account.ProfilePictureUrl}",
+            ["GameDisplayPicRaw"] = $"{(Request.IsHttps ? "https://" : "http://")}{Request.Host.Value}/{account.ProfilePictureUrl ?? Account.DefaultPictureUrl}",
             ["Gamertag"] = account.Username,
             ["Gamerscore"] = "69",
             ["FirstName"] = account.FirstName ?? account.Username,
@@ -163,6 +166,6 @@ internal sealed partial class ProfileController : SolaceControllerBase
 
     private sealed record ProfileSetting(
         string Id,
-        string Value
+        string? Value
     );
 }

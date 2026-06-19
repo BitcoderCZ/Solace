@@ -1,24 +1,27 @@
-﻿using Serilog;
-using System.Buffers;
+﻿using System.Buffers;
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 using Solace.Common.Utils;
 
 namespace Solace.EventBus.Server;
 
-public sealed class NetworkServer : IDisposable
+internal sealed partial class NetworkServer : IDisposable
 {
     private readonly Server _server;
     private readonly TcpListener _serverSocket;
     private readonly CancellationTokenSource _cts = new();
 
-    public NetworkServer(Server server, int port)
+    private readonly ILogger<NetworkServer> _logger;
+
+    public NetworkServer(Server server, int port, ILogger<NetworkServer> logger)
     {
         _server = server;
         _serverSocket = new TcpListener(IPAddress.Loopback, port);
+        _logger = logger;
     }
 
     public void Dispose()
@@ -26,21 +29,22 @@ public sealed class NetworkServer : IDisposable
         Stop();
         _serverSocket.Dispose();
         _server.Dispose();
+        _cts.Dispose();
     }
 
     public async Task RunAsync()
     {
         _serverSocket.Start();
-        Log.Information($"Created server on port {((IPEndPoint)_serverSocket.LocalEndpoint).Port}");
+        LogCreatedServer(((IPEndPoint)_serverSocket.LocalEndpoint).Port);
 
         try
         {
             while (!_cts.Token.IsCancellationRequested)
             {
-                Socket socket = await _serverSocket.AcceptSocketAsync(_cts.Token);
-                Log.Information($"Connection from {socket.RemoteEndPoint}");
+                var socket = await _serverSocket.AcceptSocketAsync(_cts.Token);
+                LogNewConnection((IPEndPoint)socket.RemoteEndPoint!);
 
-                var connection = new Connection(this, socket, _server);
+                var connection = new Connection(this, socket, _server, _logger);
                 _ = connection.RunAsync();
             }
         }
@@ -48,16 +52,16 @@ public sealed class NetworkServer : IDisposable
         {
             // Server shutting down
         }
-        catch (SocketException ex)
+        catch (SocketException exception)
         {
-            Log.Warning($"Exception while accepting connection: {ex}");
+            LogExceptionWhileAcceptingConnection(exception);
         }
     }
 
     public void Stop()
         => _cts.Cancel();
 
-    private sealed class Connection
+    private sealed partial class Connection
     {
         private readonly NetworkServer _networkServer;
         private readonly Socket _socket;
@@ -65,7 +69,9 @@ public sealed class NetworkServer : IDisposable
         private readonly Channel<string> _sendChannel;
         private readonly Dictionary<int, ChannelHandler> _channels = [];
 
-        public Connection(NetworkServer networkServer, Socket socket, Server server)
+        private readonly ILogger _logger;
+
+        public Connection(NetworkServer networkServer, Socket socket, Server server, ILogger logger)
         {
             _networkServer = networkServer;
             _socket = socket;
@@ -76,6 +82,7 @@ public sealed class NetworkServer : IDisposable
                 SingleReader = true, // Only the SendLoop reads
                 SingleWriter = false
             });
+            _logger = logger;
         }
 
         public async Task RunAsync()
@@ -110,9 +117,9 @@ public sealed class NetworkServer : IDisposable
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Log.Warning($"Connection error: {ex.Message}");
+                LogConnectionError(exception);
             }
             finally
             {
@@ -149,9 +156,9 @@ public sealed class NetworkServer : IDisposable
 
                 await writer.CompleteAsync();
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Log.Warning($"SendLoop exception: {ex.Message}");
+                LogSendLoopError(exception);
             }
         }
 
@@ -171,7 +178,7 @@ public sealed class NetworkServer : IDisposable
                 return false;
             }
 
-            ChannelHandler? channel = _channels.GetOrDefault(channelId, null);
+            var channel = _channels.GetValueOrDefault(channelId);
             if (channel is not null)
             {
                 if (parts[1] is "CLOSE")
@@ -210,7 +217,7 @@ public sealed class NetworkServer : IDisposable
 
         private void HandleClose()
         {
-            Log.Information("Connection closed");
+            LogConnectionClosed();
 
             foreach (var channel in _channels)
             {
@@ -271,6 +278,15 @@ public sealed class NetworkServer : IDisposable
                     return null;
             }
         }
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Connection error")]
+        private partial void LogConnectionError(Exception exception);
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "SendLoop error")]
+        private partial void LogSendLoopError(Exception exception);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "Connection closed")]
+        private partial void LogConnectionClosed();
     }
 
     private abstract class ChannelHandler
@@ -398,7 +414,6 @@ public sealed class NetworkServer : IDisposable
     private sealed class RequestSenderChannel : ChannelHandler
     {
         private readonly Server.RequestSender _requestSender;
-        // TODO: should they be volatile?
         private volatile Task<string?>? _currentPendingResponse;
         private volatile bool _error;
 
@@ -464,7 +479,7 @@ public sealed class NetworkServer : IDisposable
                                 SendMessage("NREP");
                             }
                         }
-                    });
+                    }).Forget();
                 }
                 else
                 {
@@ -552,8 +567,7 @@ public sealed class NetworkServer : IDisposable
                     return;
                 }
 
-                TaskCompletionSource<string?>? responseCompletableFuture = _pendingResponses.JavaRemove(requestId);
-                if (responseCompletableFuture is not null)
+                if (_pendingResponses.Remove(requestId, out var responseCompletableFuture))
                 {
                     responseCompletableFuture.SetResult(null);
                 }
@@ -613,4 +627,13 @@ public sealed class NetworkServer : IDisposable
             SendMessage("ERR");
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Created server on port {Port}")]
+    private partial void LogCreatedServer(int Port);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Connection from {EndPoint}")]
+    private partial void LogNewConnection(IPEndPoint EndPoint);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Exception while accepting connection")]
+    private partial void LogExceptionWhileAcceptingConnection(Exception exception);
 }

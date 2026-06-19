@@ -1,28 +1,32 @@
-﻿using Serilog;
+﻿using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Solace.Common;
 using Solace.Common.Utils;
 using Solace.EventBus.Client;
 
 namespace Solace.TappablesGenerator;
 
-public sealed class ActiveTiles
+internal sealed partial class ActiveTiles : IAsyncDisposable
 {
-    private static readonly int ACTIVE_TILE_RADIUS = 3;
-    private static readonly long ACTIVE_TILE_EXPIRY_TIME = 2 * 60 * 1000;
+    private const int ACTIVE_TILE_RADIUS = 3;
+    private const long ACTIVE_TILE_EXPIRY_TIME = 2 * 60 * 1000;
 
     private readonly Dictionary<int, ActiveTile> _activeTiles = [];
-    private readonly IActiveTileListener _activeTileListener;
+    private IActiveTileListener? _activeTileListener;
+    private RequestHandler? _requestHandler;
 
-    private ActiveTiles(IActiveTileListener activeTileListener)
+    private readonly ILogger<ActiveTiles> _logger;
+
+    public ActiveTiles(ILogger<ActiveTiles> logger)
     {
-        _activeTileListener = activeTileListener;
+        _logger = logger;
     }
 
-    public static async Task<ActiveTiles> CreateAsync(EventBusClient eventBusClient, IActiveTileListener activeTileListener)
+    internal async Task InitializeAsync(EventBusClient eventBusClient, IActiveTileListener activeTileListener)
     {
-        var tiles = new ActiveTiles(activeTileListener);
+        _activeTileListener = activeTileListener;
 
-        await eventBusClient.AddRequestHandlerAsync("tappables", new RequestHandlerLister(async request =>
+        _requestHandler = await eventBusClient.AddRequestHandlerAsync("tappables", new RequestHandlerLister(async request =>
         {
             if (request.Type == "activeTile")
             {
@@ -31,25 +35,26 @@ public sealed class ActiveTiles
                 {
                     activeTileNotification = Json.Deserialize<ActiveTileNotification>(request.Data)!;
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    Log.Error($"Could not deserialise active tile notification event: {ex}");
+                    LogCouldNotDeserialiseActiveTileNotificationEvent(exception);
                     return null;
                 }
 
                 long currentTime = U.CurrentTimeMillis();
-                tiles.PruneActiveTiles(currentTime);
+                PruneActiveTiles(currentTime);
 
-                LinkedList<ActiveTile> newActiveTiles = [];
+                int sideLength = (ACTIVE_TILE_RADIUS * 2) + 1;
+                var newActiveTiles = new List<ActiveTile>(sideLength * sideLength);
                 for (int tileX = activeTileNotification.X - ACTIVE_TILE_RADIUS; tileX < activeTileNotification.X + ACTIVE_TILE_RADIUS + 1; tileX++)
                 {
                     for (int tileY = activeTileNotification.Y - ACTIVE_TILE_RADIUS; tileY < activeTileNotification.Y + ACTIVE_TILE_RADIUS + 1; tileY++)
                     {
-                        ActiveTile activeTile = tiles.MarkTileActive(tileX, tileY, currentTime);
+                        ActiveTile activeTile = MarkTileActive(tileX, tileY, currentTime);
 
                         if (activeTile.LatestActiveTime == activeTile.FirstActiveTime) // indicating that the tile is newly-active
                         {
-                            newActiveTiles.AddLast(activeTile);
+                            newActiveTiles.Add(activeTile);
                         }
                     }
                 }
@@ -68,23 +73,28 @@ public sealed class ActiveTiles
         },
         async () =>
         {
-            Log.Error("Event bus subscriber error");
-            Log.CloseAndFlush();
-            Environment.Exit(1);
+            LogEventBusSubscriberError();
+            Environment.Exit(333);
         }));
-
-        return tiles;
     }
 
     public IEnumerable<ActiveTile> GetActiveTiles(long currentTime)
         => _activeTiles.Values.Where(activeTile => currentTime < activeTile.LatestActiveTime + ACTIVE_TILE_EXPIRY_TIME);
 
+    public async ValueTask DisposeAsync()
+    {
+        if (_requestHandler is not null)
+        {
+            await _requestHandler.CloseAsync();
+        }
+    }
+
     private ActiveTile MarkTileActive(int tileX, int tileY, long currentTime)
     {
-        ActiveTile? activeTile = _activeTiles.GetOrDefault((tileX << 16) + tileY, null);
+        var activeTile = _activeTiles.GetValueOrDefault((tileX << 16) + tileY);
         if (activeTile is null)
         {
-            Log.Information($"Tile {tileX},{tileY} is becoming active");
+            LogTileIsBecomingActive(tileX, tileY);
             activeTile = new ActiveTile(tileX, tileY, currentTime, currentTime);
         }
         else
@@ -106,7 +116,7 @@ public sealed class ActiveTiles
             ActiveTile activeTile = item.Value;
             if (activeTile.LatestActiveTime + ACTIVE_TILE_EXPIRY_TIME <= currentTime)
             {
-                Log.Information($"Tile {activeTile.TileX},{activeTile.TileY} is inactive");
+                LogTileIsInactive(activeTile.TileX, activeTile.TileY);
                 entriesToRemove.Add(item);
             }
         }
@@ -116,10 +126,12 @@ public sealed class ActiveTiles
             _activeTiles.Remove(item.Key);
         }
 
+        Debug.Assert(_activeTileListener is not null);
+
         _activeTileListener.Inactive(entriesToRemove.Select(item => item.Value));
     }
 
-    public record ActiveTile(
+    internal sealed record ActiveTile(
         int TileX,
         int TileY,
         long FirstActiveTime,
@@ -132,14 +144,14 @@ public sealed class ActiveTiles
         string PlayerId
     );
 
-    public interface IActiveTileListener
+    internal interface IActiveTileListener
     {
         Task Active(IEnumerable<ActiveTile> activeTiles);
 
         Task Inactive(IEnumerable<ActiveTile> activeTiles);
     }
 
-    public class ActiveTileListener : IActiveTileListener
+    internal sealed class ActiveTileListener : IActiveTileListener
     {
         public Func<IEnumerable<ActiveTile>, Task>? OnActive;
         public Func<IEnumerable<ActiveTile>, Task>? OnInactive;
@@ -156,4 +168,17 @@ public sealed class ActiveTiles
         public Task Inactive(IEnumerable<ActiveTile> activeTiles)
             => OnInactive?.Invoke(activeTiles) ?? Task.CompletedTask;
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not deserialise active tile notification event")]
+    private partial void LogCouldNotDeserialiseActiveTileNotificationEvent(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Event bus subscriber error")]
+    private partial void LogEventBusSubscriberError();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tile ({PosX}, {PosY}) is becoming active")]
+    private partial void LogTileIsBecomingActive(int PosX, int PosY);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tile ({PosX}, {PosY}) is inactive")]
+    private partial void LogTileIsInactive(int PosX, int PosY);
 }
+

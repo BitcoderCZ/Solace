@@ -6,6 +6,7 @@ using Solace.ApiServer.Models;
 using Solace.ApiServer.Models.Playfab;
 using Solace.ApiServer.Utils;
 using Solace.Common.Utils;
+using Solace.DB;
 
 namespace Solace.ApiServer.Controllers.PlayfabApi;
 
@@ -13,13 +14,23 @@ namespace Solace.ApiServer.Controllers.PlayfabApi;
 [Route("20CA2.playfabapi.com/Client")]
 internal sealed partial class LoginController : SolaceControllerBase
 {
-    private static Config config => Program.config;
+    private readonly EarthDbContext _dbContext;
+    private readonly CryptoSecrets _cryptoSecrets;
 
-    private readonly LiveDbContext _dbContext;
+    private readonly int _playfabApiSessionTicketValidityMinutes;
+    private readonly int _playfabApiEntityTokenValidityMinutes;
 
-    public LoginController(LiveDbContext context)
+    private readonly ILogger<LoginController> _logger;
+
+    public LoginController(EarthDbContext context, CryptoSecrets cryptoSecrets, IConfiguration configuration, ILogger<LoginController> logger)
     {
         _dbContext = context;
+        _cryptoSecrets = cryptoSecrets;
+
+        _playfabApiSessionTicketValidityMinutes = configuration.GetValue<int>("Authentication:PlayfabApi:SessionTicketValidityMinutes");
+        _playfabApiEntityTokenValidityMinutes = configuration.GetValue<int>("Authentication:PlayfabApi:EntityTokenValidityMinutes");
+
+        _logger = logger;
     }
 
     private sealed record LoginWithCustomIDRequest(
@@ -79,7 +90,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        var xboxToken = JwtUtils.Verify<Tokens.Shared.PlayfabXboxToken>(authValue.TokenString, config.XboxLive.PlayfabTokenSecretBytes);
+        var xboxToken = JwtUtils.Verify<Tokens.Shared.PlayfabXboxToken>(authValue.TokenString, _cryptoSecrets.LivePlayfabTokenSecret, _logger);
 
         if (xboxToken is null || xboxToken.Data.UserId != authValue.UserId)
         {
@@ -87,7 +98,7 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.Forbid();
         }
 
-        string userId = xboxToken.Data.UserId;
+        var userId = xboxToken.Data.UserId;
 
         var account = await _dbContext.Accounts
             .FirstOrDefaultAsync(account => account.Id == userId, cancellationToken);
@@ -97,20 +108,20 @@ internal sealed partial class LoginController : SolaceControllerBase
             return TypedResults.NotFound();
         }
 
-        var sessionTicketValidity = ValidityDatePair.Create(config.PlayfabApi.SessionTicketValidityMinutes);
+        var sessionTicketValidity = ValidityDatePair.Create(_playfabApiSessionTicketValidityMinutes);
         var sessionTicket = new Tokens.Shared.PlayfabSessionTicket(userId);
-        string sessionTicketString = JwtUtils.Sign(sessionTicket, config.PlayfabApi.SessionTicketSecretBytes, sessionTicketValidity);
+        string sessionTicketString = JwtUtils.Sign(sessionTicket, _cryptoSecrets.PlayfabSessionTicketSecret, sessionTicketValidity);
 
-        var entityTokenValidity = ValidityDatePair.Create(config.PlayfabApi.EntityTokenValidityMinutes);
+        var entityTokenValidity = ValidityDatePair.Create(_playfabApiEntityTokenValidityMinutes);
         var entityToken = new Tokens.Playfab.EntityToken(userId, "title_player_account");
-        string entityTokenString = JwtUtils.Sign(entityToken, config.PlayfabApi.EntityTokenSecretBytes, entityTokenValidity);
+        string entityTokenString = JwtUtils.Sign(entityToken, _cryptoSecrets.PlayfabEntityTokenSecret, entityTokenValidity);
 
         return JsonPascalCase(new PlayfabOkResponse(
             200,
             "OK",
             new Dictionary<string, object>()
             {
-                ["SessionTicket"] = $"{userId.ToUpperInvariant()}-{sessionTicketString}",
+                ["SessionTicket"] = $"{userId.ToString().ToUpperInvariant()}-{sessionTicketString}",
                 ["PlayFabId"] = userId,
                 ["NewlyCreated"] = false,
                 ["SettingsForUser"] = new Dictionary<string, bool>()
@@ -124,7 +135,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                 {
                     ["AccountInfo"] = new Dictionary<string, object>()
                     {
-                        ["PlayFabId"] = userId,
+                        ["PlayFabId"] = userId.ToString(),
                         ["Created"] = DateTimeOffset.FromUnixTimeSeconds(account.CreatedDate).UtcDateTime,
                         ["TitleInfo"] = new Dictionary<string, object>()
                         {
@@ -135,7 +146,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                             ["isBanned"] = false,
                             ["TitlePlayerAccount"] = new Dictionary<string, string>()
                             {
-                                ["Id"] = userId,
+                                ["Id"] = userId.ToString(),
                                 ["Type"] = "title_player_account",
                                 ["TypeString"] = "title_player_account",
                             },
@@ -143,7 +154,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                         ["PrivateInfo"] = new object(),
                         ["XboxInfo"] = new Dictionary<string, string>()
                         {
-                            ["XboxUserId"] = userId,
+                            ["XboxUserId"] = userId.ToString(),
                             ["XboxUserSandbox"] = "RETAIL",
                         },
                     },
@@ -155,7 +166,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                     {
                         ["PublisherId"] = "B63A0803D3653643",
                         ["TitleId"] = request.TitleId,
-                        ["PlayerId"] = userId,
+                        ["PlayerId"] = userId.ToString(),
                     },
                 },
                 ["EntityToken"] = new Dictionary<string, object>()
@@ -164,7 +175,7 @@ internal sealed partial class LoginController : SolaceControllerBase
                     ["TokenExpiration"] = entityTokenValidity.ExpiresDT,
                     ["Entity"] = new Dictionary<string, string>()
                     {
-                        ["Id"] = entityToken.Id,
+                        ["Id"] = entityToken.Id.ToString(),
                         ["Type"] = entityToken.Type,
                         ["TypeString"] = entityToken.Type,
                     },
@@ -179,6 +190,7 @@ internal sealed partial class LoginController : SolaceControllerBase
     }
 
     [HttpPost("LinkXboxAccount")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult LinkXboxAccount()
         => JsonCamelCase(new PlayfabErrorResponse(
             401,

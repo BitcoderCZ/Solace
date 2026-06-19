@@ -12,7 +12,14 @@ namespace Solace.ApiServer.Controllers.PlayfabApi;
 [Route("20CA2.playfabapi.com/Client")]
 internal sealed partial class ClientController : SolaceControllerBase
 {
-    private static Config config => Program.config;
+    private readonly CryptoSecrets _cryptoSecrets;
+    private readonly ILogger<ClientController> _logger;
+
+    public ClientController(CryptoSecrets cryptoSecrets, ILogger<ClientController> logger)
+    {
+        _cryptoSecrets = cryptoSecrets;
+        _logger = logger;
+    }
 
     private sealed record GetUserPublisherDataRequest(
         GetUserPublisherDataRequest.EntityR Entity,
@@ -51,7 +58,7 @@ internal sealed partial class ClientController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(tokenString, config.PlayfabApi.SessionTicketSecretBytes);
+        var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(tokenString, _cryptoSecrets.PlayfabSessionTicketSecret, _logger);
         if (token is null)
         {
             return TypedResults.Forbid();
@@ -120,7 +127,7 @@ internal sealed partial class ClientController : SolaceControllerBase
             return TypedResults.BadRequest();
         }
 
-        var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(tokenString, config.PlayfabApi.SessionTicketSecretBytes);
+        var token = JwtUtils.Verify<Tokens.Shared.PlayfabSessionTicket>(tokenString, _cryptoSecrets.PlayfabSessionTicketSecret, _logger);
         if (token is null)
         {
             return TypedResults.Forbid();
@@ -161,6 +168,7 @@ internal sealed partial class ClientController : SolaceControllerBase
     }
 
     [HttpPost("WritePlayerEvent")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Endpoints cannot be static")]
     public ContentHttpResult WritePlayerEvent()
         => JsonPascalCase(new PlayfabOkResponse(
             200,
@@ -171,6 +179,6 @@ internal sealed partial class ClientController : SolaceControllerBase
             }
         ));
 
-    [GeneratedRegex("^[0-9A-F]{16}-(.*)$")]
+    [GeneratedRegex("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}-(.*)$")]
     private static partial Regex GetAuthRegex();
 }

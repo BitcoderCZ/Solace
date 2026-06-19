@@ -9,7 +9,16 @@ namespace Solace.ApiServer.Controllers.XboxLive.Auth;
 [Route("device.auth.xboxlive.com/device/authenticate")]
 internal sealed class DeviceController : SolaceControllerBase
 {
-    private static Config config => Program.config;
+    private readonly CryptoSecrets _cryptoSecrets;
+
+    private readonly int _xboxLiveTokenValidityMinutes;
+
+    public DeviceController(CryptoSecrets cryptoSecrets, IConfiguration configuration)
+    {
+        _cryptoSecrets = cryptoSecrets;
+
+        _xboxLiveTokenValidityMinutes = configuration.GetValue<int>("Authentication:XboxLive:TokenValidityMinutes");
+    }
 
     internal sealed record AuthenticateRequest(
         AuthenticateRequest.PropertiesR Properties,
@@ -36,7 +45,7 @@ internal sealed class DeviceController : SolaceControllerBase
     public ContentHttpResult Authenticate([FromBody] AuthenticateRequest request)
 #pragma warning restore IDE0060 // Remove unused parameter
     {
-        var tokenValidity = ValidityDatePair.Create(config.XboxLive.TokenValidityMinutes);
+        var tokenValidity = ValidityDatePair.Create(_xboxLiveTokenValidityMinutes);
         var token = new Tokens.Xbox.DeviceToken()
         {
             Did = "F700F376F3793B3A", // TODO
@@ -45,7 +54,7 @@ internal sealed class DeviceController : SolaceControllerBase
         return JsonPascalCase(new AuthenticateResponse(
               tokenValidity.IssuedStr,
               tokenValidity.ExpiresStr,
-              JwtUtils.Sign<Tokens.Xbox.AuthToken>(token, config.XboxLive.AuthTokenSecretBytes, tokenValidity),
+              JwtUtils.Sign<Tokens.Xbox.AuthToken>(token, _cryptoSecrets.LiveAuthTokenSecret, tokenValidity),
               new()
               {
                   ["xdi"] = new()

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Solace.PreviewGenerator.NBT;
 
 #pragma warning disable CA1010 // Generic interface should also be implemented
-public sealed class NbtList : IList
+public sealed class NbtList : IList, IList<object?>
 #pragma warning restore CA1010 // Generic interface should also be implemented
 {
     public static readonly NbtList EMPTY = new NbtList(NbtType.End);
@@ -13,14 +13,6 @@ public sealed class NbtList : IList
     public readonly NbtType _type;
     [JsonInclude, JsonPropertyName("array")]
     public readonly Array _array;
-#pragma warning disable IDE0044 // Add readonly modifier
-#pragma warning disable CS0169
-    [JsonIgnore]
-    private bool hashCodeGenerated;
-    [JsonIgnore]
-    private int hashCode;
-#pragma warning restore CS0169
-#pragma warning restore IDE0044 // Add readonly modifier
 
     public bool IsFixedSize => true;
 
@@ -32,7 +24,11 @@ public sealed class NbtList : IList
 
     public object SyncRoot => null!;
 
-    public object? this[int index] { get => Get(index); set => throw new InvalidOperationException(); }
+    public object? this[int index]
+    {
+        get => Get(index);
+        set => throw new InvalidOperationException();
+    }
 
     public NbtList(NbtType type, ICollection collection)
     {
@@ -91,4 +87,16 @@ public sealed class NbtList : IList
 
     public IEnumerator GetEnumerator()
         => _array.GetEnumerator();
+
+    void ICollection<object?>.Add(object? item)
+        => throw new InvalidOperationException();
+
+    public void CopyTo(object?[] array, int arrayIndex)
+        => _array.CopyTo(array, arrayIndex);
+
+    bool ICollection<object?>.Remove(object? item)
+        => throw new InvalidOperationException();
+
+    IEnumerator<object> IEnumerable<object?>.GetEnumerator()
+        => _array.Cast<object>().GetEnumerator();
 }
