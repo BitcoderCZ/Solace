@@ -161,7 +161,7 @@ grep -q COMPlus_gcServer ~/.bashrc || {
 }
 
 echo "[5] Installing .NET Aspire..."
-curl -sSL https://aspire.dev/install.sh | bash
+$HOME/.dotnet/dotnet tool install -g Aspire.Cli
 
 mkdir -p ~/Solace
 
@@ -219,8 +219,6 @@ EOF
 cat << EOF > $PREFIX/bin/earth
 #!/bin/bash
 (
-    cd "$EARTH_TARGET_DIR" || exit 13
-
     STATICDATA_PATH="$STATICDATA_PATH"
 
     SERVER_JAR_NAME="fabric-server-mc.1.20.4-loader.0.15.10-launcher.1.0.1.jar"
@@ -234,6 +232,8 @@ cat << EOF > $PREFIX/bin/earth
     proot-distro login ubuntu -- env SERVER_JAR_NAME="\$SERVER_JAR_NAME" RESOURCENAME="\$RESOURCENAME" RESOURCE_DIR="\$RESOURCE_DIR" TEMPLATE_DIR="\$TEMPLATE_DIR" MODS_DIR="\$MODS_DIR" EULA_PATH="\$EULA_PATH" RESOURCEPACK_PATH="\$RESOURCEPACK_PATH" bash << 'DASHBOARD'
 #!/bin/bash
 (
+    cd "$EARTH_TARGET_DIR" || exit 13
+
     # 1. Resource Pack Check
     if [ ! -f "\\\$RESOURCEPACK_PATH" ]; then
         echo "ERROR: Resourcepack file '\\\$RESOURCEPACK_PATH' is missing."
