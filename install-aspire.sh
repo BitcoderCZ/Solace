@@ -243,16 +243,16 @@ cat << EOF > $PREFIX/bin/earth
     cd $EARTH_TARGET_DIR || exit 13
 
     # 1. Resource Pack Check
-    if [ ! -f "\$RESOURCEPACK_PATH" ]; then
+    if [ ! -f \$RESOURCEPACK_PATH ]; then
         echo "ERROR: Resourcepack file '\$RESOURCEPACK_PATH' is missing."
         echo "Download it from: https://cdn.mceserv.net/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35" - using e.g. https://archive.org
         echo "Rename it to \$RESOURCENAME and move it to: \$RESOURCE_DIR"
         exit 1
     fi
 
-    FILE_SIZE=\$(stat -c%s "\$RESOURCEPACK_PATH" 2>/dev/null || echo 0)
+    FILE_SIZE=\$(stat -c%s \$RESOURCEPACK_PATH 2>/dev/null || echo 0)
 
-    if [ "\$FILE_SIZE" -lt 100000000 ]; then
+    if [ \$FILE_SIZE -lt 100000000 ]; then
         echo "ERROR: Resourcepack file '\$RESOURCEPACK_PATH' is too small or invalid."
         echo "Download it from: https://cdn.mceserv.net/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35" - using e.g. https://archive.org
         echo "Rename it to \$RESOURCENAME and move it to: \$RESOURCE_DIR"
@@ -260,45 +260,45 @@ cat << EOF > $PREFIX/bin/earth
     fi
 
     # 2. Fabric API Check
-    if ! ls "\$MODS_DIR"/fabric-api-*.jar 1> /dev/null 2>&1; then
+    if ! ls \$MODS_DIR/fabric-api-*.jar 1> /dev/null 2>&1; then
         echo "Fabric API not found, downloading..."
-        mkdir -p "\$MODS_DIR"
-        curl -o "\$MODS_DIR/fabric-api-0.97.0+1.20.4.jar" -L "https://cdn.modrinth.com/data/P7dR8mSH/versions/xklQBMta/fabric-api-0.97.0%2B1.20.4.jar"
+        mkdir -p \$MODS_DIR
+        curl -o \$MODS_DIR/fabric-api-0.97.0+1.20.4.jar -L "https://cdn.modrinth.com/data/P7dR8mSH/versions/xklQBMta/fabric-api-0.97.0%2B1.20.4.jar"
         echo "Downloaded fabric api."
     fi
 
     # 3. Fabric Server Jar Check
-    if [ ! -f "\$TEMPLATE_DIR/\$SERVER_JAR_NAME" ]; then
+    if [ ! -f \$TEMPLATE_DIR/\$SERVER_JAR_NAME ]; then
         echo "Fabric server not found, downloading..."
-        mkdir -p "\$TEMPLATE_DIR"
-        curl -o "\$TEMPLATE_DIR/\$SERVER_JAR_NAME" -L "https://meta.fabricmc.net/v2/versions/loader/1.20.4/0.15.10/1.0.1/server/jar"
+        mkdir -p \$TEMPLATE_DIR
+        curl -o \$TEMPLATE_DIR/\$SERVER_JAR_NAME -L "https://meta.fabricmc.net/v2/versions/loader/1.20.4/0.15.10/1.0.1/server/jar"
         echo "Downloaded fabric server."
     fi
 
     run_server() {
         echo "Running server..."
-        cd "\$TEMPLATE_DIR" || exit
-        java -jar "\$SERVER_JAR_NAME" -nogui
+        cd \$TEMPLATE_DIR || exit
+        java -jar \$SERVER_JAR_NAME -nogui
         local exit_code=$?
         echo "Server process exited with code \$exit_code"
         return \$exit_code
     }
 
     # 4. EULA Setup
-    if [ ! -f "\$EULA_PATH" ]; then
+    if [ ! -f \$EULA_PATH ]; then
         run_server
         if [ $? -ne 0 ]; then exit 1; fi
     fi
 
     # 5. EULA Verification Loop
-    if grep -iq "eula=false" "\$EULA_PATH" || ! grep -iq "eula=true" "\$EULA_PATH"; then
+    if grep -iq "eula=false" \$EULA_PATH || ! grep -iq "eula=true" \$EULA_PATH; then
         echo "===================================================="
         echo " Minecraft End User License Agreement (EULA)"
         echo "===================================================="
         echo ""
         
-        if [ -f "\$EULA_PATH" ]; then
-            grep "^#" "\$EULA_PATH"
+        if [ -f \$EULA_PATH ]; then
+            grep "^#" \$EULA_PATH
         else
             echo "#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA)."
         fi
