@@ -221,8 +221,8 @@ EOF
     print_step "4. CREATING EARTH COMMAND"
     mkdir -p "$PREFIX/bin"
     
-    EARTH_TARGET_DIR="~/Solace/launcher"
-    STATICDATA_PATH="~/Solace/staticdata"
+    EARTH_TARGET_DIR=~/Solace/launcher
+    STATICDATA_PATH=~/Solace/staticdata
 
 cat << EOF > $PREFIX/bin/earth
 #!/bin/bash
