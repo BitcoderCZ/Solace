@@ -240,7 +240,7 @@ cat << EOF > $PREFIX/bin/earth
     proot-distro login ubuntu -- env SERVER_JAR_NAME="\$SERVER_JAR_NAME" RESOURCENAME="\$RESOURCENAME" RESOURCE_DIR="\$RESOURCE_DIR" TEMPLATE_DIR="\$TEMPLATE_DIR" MODS_DIR="\$MODS_DIR" EULA_PATH="\$EULA_PATH" RESOURCEPACK_PATH="\$RESOURCEPACK_PATH" bash << 'DASHBOARD'
 #!/bin/bash
 (
-    cd "$EARTH_TARGET_DIR" || exit 13
+    cd $EARTH_TARGET_DIR || exit 13
 
     # 1. Resource Pack Check
     if [ ! -f "\$RESOURCEPACK_PATH" ]; then
@@ -325,7 +325,7 @@ cat << EOF > $PREFIX/bin/earth
         if [ $? -ne 0 ]; then exit 1; fi
     fi
 
-    cd "$EARTH_TARGET_DIR" || exit 13
+    cd $EARTH_TARGET_DIR || exit 13
 
     ./Launcher
 )
