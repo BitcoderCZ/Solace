@@ -66,8 +66,294 @@ banner
 #  TERMUX
 # ─────────────────────────────────────────
 if [ -n "$TERMUX_VERSION" ] || echo "$PREFIX" | grep -q "com.termux"; then
-    echo "termux"
-    exit
+    export DEBIAN_FRONTEND=noninteractive
+    dpkg --configure -a >/dev/null 2>&1 || true
+
+    print_step "1. CHECKING PROOT-DISTRO"
+    if ! command -v proot-distro >/dev/null 2>&1; then
+        pkg update -y
+        pkg install -y -o Dpkg::Options::="--force-confnew" proot-distro || {
+            dpkg --configure -a
+            pkg install -y -o Dpkg::Options::="--force-confnew" proot-distro
+        }
+        hash -r
+        command -v proot-distro >/dev/null || err "proot-distro install failed"
+        ok "Installed proot-distro"
+    else
+        skip "Already installed"
+    fi
+
+    print_step "2. CHECKING UBUNTU"
+    if proot-distro login ubuntu -- true 2>/dev/null; then
+        skip "Ubuntu already installed"
+    else
+        proot-distro install ubuntu
+        ok "Ubuntu installed"
+    fi
+
+    clear && banner
+    print_step "SELECT BRANCH"
+    echo ""
+    echo -e "${CYN}Select branch:${RST}"
+    echo ""
+    echo -e "  ${GRN}[1] Main (stable - recommended)${RST}"
+    echo -e "  ${YLW}[2] Dev (unstable - may break)${RST}"
+    echo ""
+    printf "Choice [1/2] > "
+    read -r BRANCH_CHOICE < /dev/tty
+    BRANCH_CHOICE="$(echo "$BRANCH_CHOICE" | tr -d '\r\n')"
+
+    ARTIFACT_PREFIX="Solace"
+    INSTALL_BRANCH="main"
+    SELECTED_TAG=""
+    case "$BRANCH_CHOICE" in
+        2|dev|Dev)
+            ARTIFACT_PREFIX="Solace-Dev"
+            INSTALL_BRANCH="dev"
+            SELECTED_TAG="dev-build"
+            echo -e "${YLW}[INFO] Using Dev build${RST}"
+            ;;
+        *)
+            echo "[INFO] Fetching releases..."
+            RELEASE_JSON=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases?per_page=100")
+            SELECTED_TAG=$(echo "$RELEASE_JSON" | grep -o '"tag_name": *"[^"]*"' | sed 's/"tag_name": *"//;s/"//' | grep -v "^dev-build$" | head -n1)
+            [ -z "$SELECTED_TAG" ] && err "No releases found."
+            echo "[INFO] Latest main release: $SELECTED_TAG"
+            ;;
+    esac
+
+    ZIP_NAME="${ARTIFACT_PREFIX}-linux-arm64.zip"
+    URL="https://github.com/$GITHUB_REPO/releases/download/${SELECTED_TAG}/${ZIP_NAME}"
+
+    print_step "3. CONFIGURING UBUNTU"
+    proot-distro login ubuntu -- bash << EOF 2>/dev/null
+echo "[1] System update"
+apt update -y
+
+echo "[2] Installing dependencies"
+apt install -y wget fzf curl unzip gnupg software-properties-common \
+    apt-transport-https ca-certificates openjdk-21-jre libicu-dev
+
+if ! command -v pwsh >/dev/null 2>&1; then
+    echo "[3] Installing PowerShell"
+    mkdir -p /opt/microsoft/powershell/7
+    cd /opt/microsoft/powershell/7
+    wget -q https://github.com/PowerShell/PowerShell/releases/download/v7.6.1/powershell-7.6.1-linux-arm64.tar.gz
+    tar zxf powershell-7.6.1-linux-arm64.tar.gz
+    chmod +x pwsh
+    ln -sf /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh
+fi
+
+if [ ! -d "$HOME/.dotnet" ] || ! "$HOME/.dotnet/dotnet" --list-sdks 2>/dev/null | grep -q "^10\."; then
+    echo "[4] Installing .NET 10"
+    cd ~
+    wget -q https://dot.net/v1/dotnet-install.sh
+    chmod +x dotnet-install.sh
+    ./dotnet-install.sh --channel 10.0
+fi
+
+grep -q DOTNET_ROOT ~/.bashrc || echo 'export DOTNET_ROOT=$HOME/.dotnet' >> ~/.bashrc
+grep -q ".dotnet/tools" ~/.bashrc || echo 'export PATH=$PATH:$HOME/.dotnet:$HOME/.dotnet/tools' >> ~/.bashrc
+grep -q COMPlus_gcServer ~/.bashrc || {
+    echo 'export COMPlus_gcServer=0'         >> ~/.bashrc
+    echo 'export COMPlus_gcConcurrent=1'     >> ~/.bashrc
+    echo 'export DOTNET_GCHeapHardLimit=268435456' >> ~/.bashrc
+}
+
+echo "[5] Installing .NET Aspire..."
+curl -sSL https://aspire.dev/install.sh | bash
+
+mkdir -p ~/Solace
+
+echo "[6] Downloading pre-compiled server"
+cd ~
+
+if [ -z "$SELECTED_TAG" ]; then
+    echo "[ERROR] No release tag found"
+    exit 1
+fi
+
+echo "[INFO] Downloading ${SELECTED_TAG}..."
+curl -L --progress-bar -o "$ZIP_NAME" "$URL" || { echo "[ERROR] Download failed"; exit 1; }
+echo -e "  ${GRN}✔${RST} Download complete"
+echo -ne "  ${BLU}>${RST} Extracting... "
+unzip -o "$ZIP_NAME" >/dev/null 2>&1 && echo -e "${GRN}done${RST}" || { echo -e "${RED}failed${RST}"; exit 1; }
+rm -rf ~/Solace/*
+echo "$SELECTED_TAG" > ~/Solace/version.txt
+
+if [ -d Solace-linux-arm64 ]; then
+    mv Solace-linux-arm64/* ~/Solace/
+    rm -rf Solace-linux-arm64
+else
+    mv components       ~/Solace/ 2>/dev/null || true
+    mv launcher         ~/Solace/ 2>/dev/null || true
+    mv staticdata       ~/Solace/ 2>/dev/null || true
+fi
+
+chmod -R +x ~/Solace/components/ 2>/dev/null || true
+
+cat > ~/Solace/settings.json << JSONEOF
+{
+  "installMode": "prebuilt",
+  "branch": "$INSTALL_BRANCH",
+  "version": "$SELECTED_TAG",
+  "updatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+JSONEOF
+
+echo "[6] Cleaning installer leftovers"
+rm -f ~/dotnet-install.sh
+rm -f ~/Solace-linux-arm64.zip
+
+echo "[DONE]"
+EOF
+
+    ok "Ubuntu configured"
+
+    print_step "4. CREATING EARTH COMMAND"
+    mkdir -p "$PREFIX/bin"
+    
+    EARTH_TARGET_DIR="~/Solace/launcher"
+    STATICDATA_PATH="~/Solace/staticdata"
+
+cat << EOF > $PREFIX/bin/earth
+#!/bin/bash
+(
+    cd "$EARTH_TARGET_DIR" || exit 13
+
+    STATICDATA_PATH="$STATICDATA_PATH"
+
+    SERVER_JAR_NAME="fabric-server-mc.1.20.4-loader.0.15.10-launcher.1.0.1.jar"
+    RESOURCENAME="vanilla.zip"
+    RESOURCE_DIR="\$STATICDATA_PATH/resourcepacks"
+    TEMPLATE_DIR="\$STATICDATA_PATH/server_template_dir"
+    MODS_DIR="\$TEMPLATE_DIR/mods"
+    EULA_PATH="\$TEMPLATE_DIR/eula.txt"
+    RESOURCEPACK_PATH="\$RESOURCE_DIR/\$RESOURCENAME"
+
+    proot-distro login ubuntu -- env SERVER_JAR_NAME="\$SERVER_JAR_NAME" RESOURCENAME="\$RESOURCENAME" RESOURCE_DIR="\$RESOURCE_DIR" TEMPLATE_DIR="\$TEMPLATE_DIR" MODS_DIR="\$MODS_DIR" EULA_PATH="\$EULA_PATH" RESOURCEPACK_PATH="\$RESOURCEPACK_PATH" bash << 'DASHBOARD'
+#!/bin/bash
+(
+    # 1. Resource Pack Check
+    if [ ! -f "\\\$RESOURCEPACK_PATH" ]; then
+        echo "ERROR: Resourcepack file '\\\$RESOURCEPACK_PATH' is missing."
+        echo "Download it from: https://cdn.mceserv.net/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35" - using e.g. https://archive.org
+        echo "Rename it to \\\$RESOURCENAME and move it to: \\\$RESOURCE_DIR"
+        exit 1
+    fi
+
+    FILE_SIZE=\\\$(stat -c%s "\$RESOURCEPACK_PATH" 2>/dev/null || echo 0)
+
+    if [ "\\\$FILE_SIZE" -lt 100000000 ]; then
+        echo "ERROR: Resourcepack file '\\\$RESOURCEPACK_PATH' is too small or invalid."
+        echo "Download it from: https://cdn.mceserv.net/availableresourcepack/resourcepacks/dba38e59-091a-4826-b76a-a08d7de5a9e2-1301b0c257a311678123b9e7325d0d6c61db3c35" - using e.g. https://archive.org
+        echo "Rename it to \\\$RESOURCENAME and move it to: \\\$RESOURCE_DIR"
+        exit 1
+    fi
+
+    # 2. Fabric API Check
+    if ! ls "\\\$MODS_DIR"/fabric-api-*.jar 1> /dev/null 2>&1; then
+        echo "Fabric API not found, downloading..."
+        mkdir -p "\\\$MODS_DIR"
+        curl -o "\\\$MODS_DIR/fabric-api-0.97.0+1.20.4.jar" -L "https://cdn.modrinth.com/data/P7dR8mSH/versions/xklQBMta/fabric-api-0.97.0%2B1.20.4.jar"
+        echo "Downloaded fabric api."
+    fi
+
+    # 3. Fabric Server Jar Check
+    if [ ! -f "\\\$TEMPLATE_DIR/\\\$SERVER_JAR_NAME" ]; then
+        echo "Fabric server not found, downloading..."
+        mkdir -p "\\\$TEMPLATE_DIR"
+        curl -o "\\\$TEMPLATE_DIR/\\\$SERVER_JAR_NAME" -L "https://meta.fabricmc.net/v2/versions/loader/1.20.4/0.15.10/1.0.1/server/jar"
+        echo "Downloaded fabric server."
+    fi
+
+    run_server() {
+        echo "Running server..."
+        cd "\\\$TEMPLATE_DIR" || exit
+        java -jar "\\\$SERVER_JAR_NAME" -nogui
+        local exit_code=$?
+        echo "Server process exited with code \\\$exit_code"
+        return \\\$exit_code
+    }
+
+    # 4. EULA Setup
+    if [ ! -f "\\\$EULA_PATH" ]; then
+        run_server
+        if [ $? -ne 0 ]; then exit 1; fi
+    fi
+
+    # 5. EULA Verification Loop
+    if grep -iq "eula=false" "\\\$EULA_PATH" || ! grep -iq "eula=true" "\\\$EULA_PATH"; then
+        echo "===================================================="
+        echo " Minecraft End User License Agreement (EULA)"
+        echo "===================================================="
+        echo ""
+        
+        if [ -f "\\\$EULA_PATH" ]; then
+            grep "^#" "\\\$EULA_PATH"
+        else
+            echo "#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA)."
+        fi
+        
+        echo "===================================================="
+        
+        while true; do
+            read -p "Type 'accept' to accept the EULA and continue: " user_input
+            if [ "\\\${user_input,,}" = "accept" ]; then
+                if grep -q "eula=" "\\\$EULA_PATH"; then
+                    sed -i 's/eula=.*/eula=true/I' "\\\$EULA_PATH"
+                else
+                    echo "eula=true" >> "\\\$EULA_PATH"
+                fi
+                echo "EULA accepted successfully."
+                break
+            else
+                echo "Invalid input. You must type 'accept' to proceed."
+            fi
+        done
+        
+        echo "Running server to generate remaining files..."
+        run_server
+        if [ $? -ne 0 ]; then exit 1; fi
+    fi
+
+    cd "$EARTH_TARGET_DIR" || exit 13
+
+    ./Launcher
+)
+DASHBOARD
+)
+EOF
+    
+    chmod +x "$PREFIX/bin/earth"
+    ok "earth command installed"
+
+    echo ""
+    echo -e "${GRN}========================================${RST}"
+    echo -e "${ORG}           INSTALL COMPLETE             ${RST}"
+    echo -e "${GRN}========================================${RST}"
+    echo ""
+    echo -e "  ${CYN}User:${RST}    $(whoami)"
+    echo -e "  ${CYN}OS:${RST}      Termux (proot-distro ubuntu)"
+    echo -e "  ${CYN}Arch:${RST}    $(uname -m)"
+    echo -e "  ${CYN}Mode:${RST}    prebuilt"
+    echo -e "  ${CYN}Branch:${RST}  $INSTALL_BRANCH"
+    echo -e "  ${CYN}Server:${RST}  ~/Solace"
+    echo ""
+    echo -e "${CYN}Next steps:${RST}"
+    echo "  1. Download the resource packs (refer to Discord for the commands)"
+    echo "  2. Run: earth"
+    echo "  3. Open http://127.0.0.1:5000 and create your admin account"
+    echo "  4. Under 'Server Options', set Network/IPv4 Address to your PC's IP"
+    echo "  5. Get a MapTiler API key: https://cloud.maptiler.com/account/keys/"
+    echo "  6. Under 'Server Status', click Start"
+    echo "  7. Accept the Minecraft EULA when prompted in the logs"
+    echo ""
+    echo -e "${CYN}Useful commands:${RST}"
+    echo "  earth              TUI menu"
+    echo "  earth uninstall    remove Solace completely"
+    echo ""
+    exit 0
 fi
 
 if [ -n "$SUDO_USER" ]; then
